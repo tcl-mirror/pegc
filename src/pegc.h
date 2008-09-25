@@ -1,15 +1,15 @@
-#ifndef WANDERINGHORSE_NET_ACP_H_INCLUDED
-#define WANDERINGHORSE_NET_ACP_H_INCLUDED
+#ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
+#define WANDERINGHORSE_NET_PEGC_H_INCLUDED
 /************************************************************************
-ACP (A C Parser [toolkit]) is an experimental toolkit for writing
-parsers in C using something similar to functional composition,
-conceptually similar to C++ parsing toolkits like Boost.Spirit
-and parsepp (http://wanderinghorse.net/cgi-bin/parsepp.cgi).
+pegc is an experimental toolkit for writing parsers in C using
+something similar to functional composition, conceptually similar to
+C++ parsing toolkits like Boost.Spirit and parsepp
+(http://wanderinghorse.net/cgi-bin/parsepp.cgi).
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 License: Public Domain
 
-ACP attempts to implement a model of parser which has become quite
+pegc attempts to implement a model of parser which has become quite
 popular in C++, but within the limitations of C (e.g. lack of type
 safety in many places, and no safe casts).
 
@@ -30,8 +30,8 @@ Those rules can then be processed in an RD fashion.
 
 My theory is that once the basic set of rules are in place, it will be
 relatively easy to implement a self-hosted code generator which can
-read a lex/yacc/lemon-like grammar and generate ACP-based parsers. That
-is, an ACP-parsed grammar which in turn generates ACP parsers code.
+read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
+is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
 
 ************************************************************************/
 #ifdef __cplusplus
@@ -266,6 +266,29 @@ extern "C" {
     */
     pegc_const_iterator pegc_latin1(int ch);
 
+    /**
+       Associates data with the given parser. This library places no
+       significance on the data with one exception:
+
+       If the dtor parameter is non-null then when
+       pegc_destroy_parser(st) is called, the dtor function will be
+       called and passed the client data.
+
+       Client-specific data can be used to hold, e.g., parser state
+       information specific to the client's parser.
+
+       If this function is called multiple times, the client is responsible
+       for calling the dtor function (or similar) on the data if needed.
+       This API only uses the dtor in pegc_destroy_parser(), and only if
+       it is not NULL.
+    */
+    void pegc_set_client_data( pegc_parser * st, void * data, void (*dtor)(void*) );
+
+    /**
+       Returns the data associated with st via pegc_set_client_data(), or 0
+       if no data has been associated or st is null.
+    */
+    void * pegc_get_client_data( pegc_parser * st );
 
     /**
        If r(st) returns true then pegc_set_match() will contain the
@@ -575,4 +598,4 @@ extern "C" {
 } // extern "C"
 #endif
 
-#endif // WANDERINGHORSE_NET_ACP_H_INCLUDED
+#endif // WANDERINGHORSE_NET_PEGC_H_INCLUDED

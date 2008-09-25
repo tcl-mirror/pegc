@@ -23,6 +23,7 @@ struct pegc_parser
     {
 	unsigned int flags;
 	void * data;
+	void (*dtor)(void*);
     } client;
 };
 
@@ -118,9 +119,24 @@ pegc_parser_init = { 0, /* name */
 		    },
 		    { /* client data */
 		    0, /* flags */
-		    0 /* data */
+		    0, /* data */
+		    0 /* dtor */
 		    }
 };
+
+
+void pegc_set_client_data( pegc_parser * st, void * data, void (*dtor)(void*) )
+{
+    if( st )
+    {
+	st->client.data = data;
+	st->client.dtor = dtor;
+    }
+}
+void * pegc_get_client_data( pegc_parser * st )
+{
+    return st ? st->client.data : NULL;
+}
 
 bool pegc_r_failure( pegc_parser * st )
 {
@@ -874,6 +890,12 @@ bool pegc_create_parser( pegc_parser ** st, char const * inp, long len )
 bool pegc_destroy_parser( pegc_parser * st )
 {
     if( ! st ) return false;
+    if( st->client.data && st->client.dtor )
+    {
+	st->client.dtor( st->client.data );
+	st->client.data = NULL;
+    }
+
 #define HDESTROY(H) \
     if( st->hashes.H ) {hashtable_destroy( st->hashes.H ); st->hashes.H = 0; }
     HDESTROY(actions);
