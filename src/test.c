@@ -14,9 +14,9 @@ void my_pegc_action( pegc_parser * st )
 }
 
 
-int main( int argc, char ** argv )
+int test_one()
 {
-    char const * src = "hi \t world";
+    char const * src = "hihi \t world";
     pegc_parser * st;
     pegc_create_parser( &st, src, -1 );
     const unsigned int rulecount = 50;
@@ -25,20 +25,17 @@ int main( int argc, char ** argv )
 
     unsigned int atRule = 0;
 #define NR Rules[atRule++]
-#define ACPMF(F,V) NR = pegc_r( F, V )
-
     NR = pegc_r_oneof("abcxyz",false);
     PegcRule rH = pegc_r_char( 'h', true );
     PegcRule rI = pegc_r_char( 'i', true );
     PegcRule rHI = pegc_r_or( st, &rI, &rH );
     NR = pegc_r_plus(&rHI);
-    //NR = rH; NR = rI;
     NR = pegc_r_star( &PegcRule_blank );
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
+    NR = pegc_r_notat(&PegcRule_digit);
     NR = pegc_r_action( st, &starAlpha, my_pegc_action );
     NR = pegc_r_string("world",false); // will fail
-    ACPMF(0,0); // end of list
-
+    NR = pegc_r(0,0); // end of list
 #undef ACPMF
 #undef NR
 
@@ -52,7 +49,7 @@ int main( int argc, char ** argv )
 	printf("Trying PegcRule[#%d, rule=%p, data=[%p]]\n",
 	       i,
 	       (void const *)R->rule,
-	       (char const *)R->data );
+	       (void const *)R->data );
 	rc = R->rule( R, st );
 	at = pegc_pos(st);
 	printf("\trc == %d, current pos=", rc );
@@ -66,6 +63,47 @@ int main( int argc, char ** argv )
 	}
     }
     pegc_destroy_parser(st);
-    printf("Done. rc==%d\n",rc);
     return 0;
+}
+
+int test_two()
+{
+    char const * src = "hiaF!";
+    char const * x = src;
+    for( ; *x; ++x )
+    {
+	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
+    }
+    src = "+3492. asa";
+    pegc_parser * P;
+    pegc_create_parser( &P, src, -1 );
+    int rc = 1;
+#if 0
+    //PegcRule sign = pegc_r_oneof("+-",true);
+    PegcRule R = pegc_r_notat( &PegcRule_alpha );
+#else
+    const PegcRule R = PegcRule_int_dec;
+#endif
+    printf("Source string = [%s]\n", src );
+    if( pegc_parse(P, &R) )
+    {
+	rc = 0;
+	char * m  = pegc_get_match_string(P);
+	printf("Got match on [%s]: [%s]\n",src, m?m:"<EMPTY>");
+	free(m);
+    }
+    else
+    {
+	printf("int_dec failed to match [%s]\n",src);
+    }
+    printf("pos = %s\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
+    pegc_destroy_parser(P);
+    return rc;
+}
+int main( int argc, char ** argv )
+{
+    int rc = test_one();
+    if(!rc) rc = test_two();
+    printf("Done rc=%d.\n",rc);
+    return rc;
 }

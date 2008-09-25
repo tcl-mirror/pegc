@@ -34,6 +34,7 @@ read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
 is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
 
 ************************************************************************/
+#include <stdarg.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -88,6 +89,7 @@ extern "C" {
 
     struct pegc_parser;
     typedef struct pegc_parser pegc_parser;
+
 
     typedef bool (*pegc_rule_f)( pegc_parser * state );
 
@@ -210,10 +212,10 @@ extern "C" {
        relevant in this context, but is set to the value of 'begin'
        for the sake of consistency.
 
-       Note that all rules which do not consume are supposed to update
-       the matched string, so this value may be updated arbitrarily
-       often during a parse run. Its value only applies to the last
-       rule which set the match point (via pegc_set_match()).
+       Note that all rules which consume are supposed to update the
+       matched string, so this value may be updated arbitrarily often
+       during a parse run. Its value only applies to the last rule
+       which set the match point (via pegc_set_match()).
     */
     pegc_cursor pegc_get_match_cursor( pegc_parser * st );
 
@@ -416,6 +418,7 @@ extern "C" {
     };
     typedef struct PegcRule PegcRule;
 
+    bool pegc_parse( pegc_parser * st, PegcRule const * r );
     /**
        This object can (should) be used as an initializer to ensure a
        clean slate for the pointer members of PegcRule objects. Simply
@@ -449,6 +452,14 @@ extern "C" {
     PegcRule pegc_r_plus( PegcRule const * proxy );
 
     /**
+       Always returns true but only consumes if
+       proxy does.
+
+       Equivalent expression: (RULE)?
+    */
+    PegcRule pegc_r_opt( PegcRule const * proxy );
+
+    /**
        Creates a rule which will match the given string
        case-sensitively. The string must outlive the rule,
        as it is not copied.
@@ -461,12 +472,20 @@ extern "C" {
     */
     PegcRule pegc_r_char( pegc_char_t ch, bool caseSensitive );
 
+
     /**
        Creates a rule which matches if proxy matches, but
        does not consume. proxy must not be 0 and must outlive
        the returned object.
     */
     PegcRule pegc_r_at( PegcRule const * proxy );
+
+    /**
+       The converse of pegc_r_at(), this returns true only
+       if the input does not match the given proxy rule.
+       This rule never consumes.
+    */
+    PegcRule pegc_r_notat( PegcRule const * proxy );
 
     /**
        Creates a rule which performs either an OR (if orOp is true) or
@@ -479,8 +498,26 @@ extern "C" {
 
        This allocates resources for the returned rule which belong to
        this API and are freed when st is destroyed.
+
+       Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
     */
-    PegcRule pegc_r_list( pegc_parser * st, bool orOp, PegcRule const ** li );
+    PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
+
+    /**
+       Works like pegc_r_list_a() but requires a NULL-terminated list of
+       (PegcRule const *).
+
+       Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
+    */
+    PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... );
+
+    /**
+       Works like pegc_r_list_a() but requires a NULL-terminated list of
+       (PegcRule const *).
+
+       Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
+    */
+    PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap );
 
     /**
        Convenience form of pegc_r_list( st, true, ... ).
@@ -488,9 +525,19 @@ extern "C" {
     PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
 
     /**
+       Like pegc_r_or(), but requires a null-terminated list of (PegcRule const *).
+    */
+    PegcRule pegc_r_or_e( pegc_parser * st, ... );
+
+    /**
        Convenience form of pegc_r_list( st, false, ... ).
     */
     PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
+
+    /**
+       Like pegc_r_and(), but requires a null-terminated list of (PegcRule const *).
+    */
+    PegcRule pegc_r_and_e( pegc_parser * st, ... );
 
     /**
        Typedef for Action functions. Actions are run in response to
@@ -592,6 +639,17 @@ extern "C" {
        C-standard isxdigit().
     */
     extern const PegcRule PegcRule_xdigit;
+
+    extern const PegcRule PegcRule_digits;
+    /**
+       NYI.
+    */
+    extern const PegcRule PegcRule_int_dec;
+
+    /**
+       A rule which matches only at EOF and never consumes.
+    */
+    extern const PegcRule PegcRule_eof;
 
 
 #ifdef __cplusplus

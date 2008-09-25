@@ -3,8 +3,13 @@
 #include <string.h>
 #include <ctype.h>
 
-#define MARKER printf("MARKER: %s:%s:%d:\n",__FUNCTION__,__FILE__,__LINE__);
+#if 1
+#define MARKER printf("MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__FUNCTION__);
+#else
+#define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
+#endif
 
+#define DUMPPOS(P) MARKER; printf("pos = %s\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
 #include "pegc.h"
 #include "hashtable.h"
 
@@ -53,6 +58,7 @@ static int pegc_hash_cmp_void_ptr( void const * k1, void const * k2 )
 
 
 
+
 #define HASH_INIT(P,H,DK,DV) \
     if( ! P->hashes.H ) { P->hashes.H = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr ); \
 	hashtable_set_dtors( P->hashes.H, DK, DV ); }
@@ -85,6 +91,13 @@ static PegcRule const ** pegc_rulelists_search( pegc_parser * st, void const * k
     return r ? (PegcRule const **)r : 0;
 }
 #undef HASH_INIT
+
+
+bool pegc_parse( pegc_parser * st, PegcRule const * r )
+{
+    if( ! st || !r ) return false;
+    return r->rule( r, st );
+}
 
 pegc_const_iterator pegc_latin1(int ch)
 {
@@ -225,7 +238,8 @@ pegc_iterator pegc_get_match_string( pegc_parser * st )
     pegc_cursor cur = pegc_get_match_cursor(st);
     if( !cur.begin
 	|| !*cur.begin
-	|| (cur.begin==cur.end)
+	|| (cur.begin>cur.end)
+	|| (cur.begin==cur.end-1)
 	)
     {
 	return 0;
@@ -450,6 +464,7 @@ bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
+#if 0
 bool PegcRule_mf_int_decimal( PegcRule const * self, pegc_parser * st )
 {
     MARKER;printf("This rule is untested!\n");
@@ -463,6 +478,7 @@ bool PegcRule_mf_int_decimal( PegcRule const * self, pegc_parser * st )
     *v = myv;
     return true;
 }
+#endif
 
 static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, bool caseSensitive )
 {
@@ -478,6 +494,7 @@ static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, boo
 	    ? (*p == str[i])
 	    : (tolower(*p) == tolower(str[i])) )
 	{
+	    MARKER;
 	    pegc_set_match( st, p, p+1, true );
 	    return true;
 	}
@@ -502,7 +519,7 @@ PegcRule pegc_r_oneof( char const * list, bool caseSensitive )
     return pegc_r( caseSensitive
 		  ? PegcRule_mf_oneof
 		  : PegcRule_mf_oneofi,
-		  0 );
+		  list );
 }
 
 
@@ -632,11 +649,27 @@ PegcRule pegc_r_at( PegcRule const * proxy )
     return r;
 }
 
+static bool PegcRule_mf_notat( PegcRule const * self, pegc_parser * st )
+{
+    pegc_const_iterator orig = pegc_pos(st);
+    bool ret = ! PegcRule_mf_at(self,st);
+    pegc_set_pos(st,orig);
+    return ret;
+}
+
+PegcRule pegc_r_notat( PegcRule const * proxy )
+{
+    PegcRule r = pegc_r( PegcRule_mf_notat, 0 );
+    r.proxy = proxy;
+    return r;
+}
+
+
 static bool PegcRule_mf_or( PegcRule const * self, pegc_parser * st )
 {
     pegc_const_iterator orig = pegc_pos(st);
-    PegcRule const ** li = pegc_rulelists_search( st, self->data );
-    for( ; li && *li; ++li )
+    PegcRule const ** li = pegc_rulelists_search( st, self->_internal.key );
+    for( ; li && *li && (*li)->rule; ++li )
     {
 	if( (*li)->rule( *li, st ) ) return true;
     }
@@ -647,9 +680,9 @@ static bool PegcRule_mf_or( PegcRule const * self, pegc_parser * st )
 static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
 {
     pegc_const_iterator orig = pegc_pos(st);
-    PegcRule const ** li = pegc_rulelists_search( st, self->data );
+    PegcRule const ** li = pegc_rulelists_search( st, self->_internal.key );
     if(!li) return false;
-    for( ; li && *li; ++li )
+    for( ; li && *li && (*li)->rule; ++li )
     {
 	if( ! (*li)->rule( *li, st ) )
 	{
@@ -660,7 +693,7 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
-PegcRule pegc_r_list( pegc_parser * st,  bool orOp, PegcRule const ** li )
+PegcRule pegc_r_list_a( pegc_parser * st,  bool orOp, PegcRule const ** li )
 {
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, 0 );
     int count = 0;
@@ -674,12 +707,12 @@ PegcRule pegc_r_list( pegc_parser * st,  bool orOp, PegcRule const ** li )
     }
     if( ! count ) return r;
     void * key = pegc_next_hash_key();
-    r.data = key;
+    r._internal.key = key;
     PegcRule  const** list = (PegcRule  const**)(calloc( count+1, sizeof(PegcRule*) ));
     if( ! list )
     {
 	fprintf(stderr,
-		"%s:%d:pegc_r_list() serious error: calloc() of %d (PegcRule*) failed!\n",
+		"%s:%d:pegc_r_list_a() serious error: calloc() of %d (PegcRule*) failed!\n",
 		__FILE__,__LINE__,count);
 	return r;
     }
@@ -694,23 +727,65 @@ PegcRule pegc_r_list( pegc_parser * st,  bool orOp, PegcRule const ** li )
     return r;
 }
 
+PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
+{
+    const unsigned int max = 50; // FIXME
+    PegcRule const * li[max];
+    memset( li, 0, sizeof(PegcRule*) * max );
+    unsigned int pos = 0;
+    while( true )
+    {
+	PegcRule const * r = va_arg(ap,PegcRule const *);
+	if( ! r ) break;
+	li[pos++] = r;
+    }
+    return pegc_r_list_a( st, orOp, li );
+}
+
+
+PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... )
+{
+    va_list vargs;
+    va_start( vargs, orOp );
+    PegcRule ret = pegc_r_list_v( st, orOp, vargs );
+    va_end(vargs);
+    return ret;
+}
+
 PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs )
 {
     if( ! lhs || ! rhs )
     {
 	return pegc_r( PegcRule_mf_failure, 0 );
     }
-    PegcRule const *tmp[3] = {lhs,rhs,0};
-    return pegc_r_list( st, true, tmp );
+    return pegc_r_list_e( st, true, lhs, rhs, 0 );
 }
+
+PegcRule pegc_r_or_e( pegc_parser * st, ... )
+{
+    va_list vargs;
+    va_start( vargs, st );
+    PegcRule ret = pegc_r_list_v( st, true, vargs );
+    va_end(vargs);
+    return ret;
+}
+
 PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs )
 {
     if( ! lhs || ! rhs )
     {
 	return pegc_r( PegcRule_mf_failure, 0 );
     }
-    PegcRule const *tmp[3] = {lhs,rhs,0};
-    return pegc_r_list( st, false, tmp );
+    return pegc_r_list_e( st, false, lhs, rhs, 0 );
+}
+
+PegcRule pegc_r_and_e( pegc_parser * st, ... )
+{
+    va_list vargs;
+    va_start( vargs, st );
+    PegcRule ret = pegc_r_list_v( st, false, vargs );
+    va_end(vargs);
+    return ret;
 }
 
 static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
@@ -800,15 +875,14 @@ PegcRule pegc_r_char( pegc_char_t input, bool caseSensitive )
     return pegc_r( caseSensitive
 		  ? PegcRule_mf_char
 		  : PegcRule_mf_chari,
-		  input ? pegc_latin1(input) : NULL);
+		   pegc_latin1(input));
 }
 
 
-/* Generate the PegcRule_isXXX routines.
-
-  F is the name of one of C's standard isXXX(int) funcs,
-  without the 'is' prefix
- */
+/*
+  Generate some PegcRule_XXX routines. F is the name of one of C's
+  standard isXXX(int) funcs, without the 'is' prefix
+*/
 #define ACPRULE_ISA(F) \
 static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
 { \
@@ -839,6 +913,72 @@ ACPRULE_ISA(xdigit);
 #define ACPRULE_ISA(F, string) const PegcRule PegcRule_ ## F = {PegcRule_mf_oneof, string}
 ACPRULE_ISA(blank," \t");
 #undef ACPRULE_ISA
+
+static bool PegcRule_mf_opt( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self->proxy ) return false;
+    self->proxy->rule( self->proxy, st );
+    return true;
+}
+
+PegcRule pegc_r_opt( PegcRule const * proxy )
+{
+    PegcRule r = pegc_r( PegcRule_mf_opt, 0 );
+    r.proxy = proxy;
+    return r;
+}
+
+static bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st )
+{
+    return pegc_eof(st);
+}
+const PegcRule PegcRule_eof = {PegcRule_mf_eof, 0};
+
+static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
+{
+    pegc_const_iterator orig = pegc_pos(st);
+    PegcRule digs = pegc_r_plus( &PegcRule_digit );
+    if( digs.rule( &digs, st ) )
+    {
+	MARKER;
+	pegc_set_match( st, orig, pegc_pos(st), true );
+	return true;
+    }
+	MARKER;
+    pegc_set_pos(st,orig);
+    return false;
+}
+const PegcRule PegcRule_digits = {PegcRule_mf_digits,0};
+
+#if 1
+static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
+{
+    MARKER;
+    // FIXME: cache these st-dependent rules in a hashtable:
+    pegc_const_iterator orig = pegc_pos(st);
+    const PegcRule sign = pegc_r_oneof("+-",true);
+    const PegcRule prefix = pegc_r_opt( &sign );
+    const PegcRule integer = pegc_r_and_e( st, &prefix, &PegcRule_digits, 0 ); //, &end, 0 );
+    if( integer.rule( &integer, st ) )
+    {
+	pegc_const_iterator numend = pegc_pos(st);
+	const PegcRule uscore = pegc_r_oneof("._",true);
+	const PegcRule illegaltail = pegc_r_or_e( st, &PegcRule_alpha, &uscore, 0 );
+	const PegcRule next = pegc_r_notat( &illegaltail );
+	const PegcRule end = pegc_r_or_e( st, &PegcRule_eof, &next, 0 );
+	if( end.rule( &end, st ) )
+	{
+	    DUMPPOS(st);
+	    pegc_set_match( st, orig, numend, true );
+	    return true;
+	}
+    }
+    MARKER;
+    pegc_set_pos(st,orig);
+    return false;
+}
+const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
+#endif
 
 static bool PegcRule_mf_ascii( PegcRule const * self, pegc_parser * st )
 {
