@@ -74,15 +74,16 @@ int test_two()
     {
 	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
     }
-    src = "+3492. asa";
+    src = "-3492xyz . asa";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
     int rc = 1;
-#if 0
+#if 1
     //PegcRule sign = pegc_r_oneof("+-",true);
-    PegcRule R = pegc_r_notat( &PegcRule_alpha );
-#else
+    //PegcRule R = pegc_r_notat( &PegcRule_alpha );
     const PegcRule R = PegcRule_int_dec;
+#else
+    const PegcRule R = pegc_r_int_dec_strict(P);
 #endif
     printf("Source string = [%s]\n", src );
     if( pegc_parse(P, &R) )
@@ -96,7 +97,7 @@ int test_two()
     {
 	printf("int_dec failed to match [%s]\n",src);
     }
-    printf("pos = %s\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
+    printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
     pegc_destroy_parser(P);
     return rc;
 }

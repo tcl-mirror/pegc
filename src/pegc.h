@@ -1,7 +1,7 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
 /************************************************************************
-pegc is an experimental toolkit for writing parsers in C using
+pegc is an EXPERIMENTAL toolkit for writing parsers in C using
 something similar to functional composition, conceptually similar to
 C++ parsing toolkits like Boost.Spirit and parsepp
 (http://wanderinghorse.net/cgi-bin/parsepp.cgi).
@@ -11,7 +11,12 @@ License: Public Domain
 
 pegc attempts to implement a model of parser which has become quite
 popular in C++, but within the limitations of C (e.g. lack of type
-safety in many places, and no safe casts).
+safety in many places, and no safe casts). As far as i am aware,
+pegc is the first C code of its type. The peg/leg project
+(http://piumarta.com/software/peg/) is similar but solves the problem
+from the exact opposite direction - it uses a custom PEG grammar as
+input to a code generator, whereas pegc is not a generator (but
+could be used to implement one).
 
 The basic idea is that one defines a grammar as a list of Rule
 objects. A grammar starts with a top rule, and that rule may then
@@ -33,6 +38,71 @@ relatively easy to implement a self-hosted code generator which can
 read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
 is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
 
+
+API Notes and Conventions:
+
+Parsers are created using pegc_create_parser() and destroyed using
+pegc_destroy_parser().
+
+Rules are modelled using PegcRule objects, which conceptually hold
+a function pointer (the rule implementation), rule-specific static
+data (e.g. a list of characters to match against), an optional
+client-provided data pointer, and (in some cases) "hidden" dynamically
+allocated data (some rules cannot be implemented using only static
+data). Rule objects are created either by using the pegc_r_XXX() family of
+functions or providing customized PegcRule objects.
+
+Note that many pegc_r_XXX() functions can be created without having a
+parser object, but some require a parser object so that they have a
+place to "attach" dynamically allocated resources and avoid memory
+leaks. This API inconsistency wouldn't be necessary in a language with
+destructors (because rules could free their own resources), but this
+approach would seem to be the only feasible solution in C (unless a
+full-fledged garbage collector was built in to this library). An
+important consideration when building parsers which use such rules is
+that one only needs to create each rule one time for any given
+parser. For example, if you need a certain list of rules in several
+places in your grammar, it is wise to create that list only once and
+reference it throughout the grammar, instead of calling
+pegc_r_list_a() (or similar) each time an identical rule is needed.
+Failing to follow this guideline will result in significantly larger
+memory costs for the parser.
+
+
+Rules can be composed to form parsers of arbitrary complexity, starting
+with a single root/top/start rule, which then delegates as necessary
+for the specific grammar.
+
+Some examples of pegc rules:
+
+\code
+//matches a single 'a', case-sensitively:
+PegcRule a = pegc_r_char('a',true);
+
+// matches ([aA]):
+PegcRule aA = pegc_r_char('a',false);
+// same meaning, but different approach:
+PegcRule aA = pegc_r_oneof("aA",false);
+
+// matches the literal string "foo", case-sensitively:
+PegcRule foo = pegc_r_string("foo", true);
+
+// matches ((foo)?):
+PegcRule optFoo = pegc_r_opt(&foo);
+\endcode
+
+The API provides routines for creating rule lists, but care must be
+taken to always terminate such lists with a NULL entry so that this
+API can avoid overrunning the bounds of a rule list.
+
+
+Thread safety:
+
+It is never legal to use the same instance of a parser in multiple threads
+at one time, as the parsing process continually updates the parser state.
+No routines in this library (currenly) rely on shared data in a
+manner which prohibits multiple threads from running different parsers
+at the same time.
 ************************************************************************/
 #include <stdarg.h>
 #ifdef __cplusplus
@@ -40,17 +110,24 @@ extern "C" {
 #endif
 
 #ifndef __cplusplus
-#if 0
+#ifndef PEGC_HAVE_STDBOOL
+#define PEGC_HAVE_STDBOOL 0
+#endif
+#if defined(PEGC_HAVE_STDBOOL) && !(PEGC_HAVE_STDBOOL)
 /* i still can't fucking believe that C has no bool. */
 #  if !defined(bool)
 #    define bool char
+#  endif
+#  if !defined(true)
 #    define true 1
+#  endif
+#  if !defined(false)
 #    define false 0
 #  endif
-#else /* aha! stdboo.h! */
-#include <stdbool.h>
-#endif
-#endif
+#else /* aha! stdbool.h! C99. */
+#  include <stdbool.h>
+#endif /* PEGC_HAVE_STDBOOL */
+#endif /* __cplusplus */
 
     typedef char pegc_char_t;
     typedef pegc_char_t const * pegc_const_iterator;
@@ -75,7 +152,7 @@ extern "C" {
     };
     typedef struct pegc_cursor pegc_cursor;
     /**
-       Copy this object to get an pegc_cursor with
+       Copy this object to get a pegc_cursor with
        its pointers properly initialized to 0.
     */
     extern const pegc_cursor pegc_cursor_init;
@@ -434,6 +511,22 @@ extern "C" {
     PegcRule pegc_r( PegcRule_mf func, void const * data );
 
     /**
+       Identical to pegc_r() but allocates a new object on the heap.
+       If st is not NULL true then the new object is owned by st
+       parser and will be destroyed when pegc_destroy_parser(st) is
+       called, otherwise the caller owns it.
+
+       Returns 0 if it cannot allocate a new object.
+    */
+    PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf func, void const * data );
+
+    /**
+       Like pegc_alloc_r() (with the same ownership conventions),
+       but copies all data from r.
+    */
+    PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const r );
+
+    /**
        Requires that self->data be a pegc_const_iterator. Matches if any
        character in that string matches the next char of st.
     */
@@ -499,6 +592,13 @@ extern "C" {
        This allocates resources for the returned rule which belong to
        this API and are freed when st is destroyed.
 
+       The null-termination approach was chosen over the client
+       explicitly providing the length of the list because when
+       editing rule lists (which happens a lot during development) it
+       is more problematic to verify and change that number than it is
+       to add a trailing 0 to the list (which only has to be done
+       once).
+
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
     */
     PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
@@ -530,7 +630,7 @@ extern "C" {
     PegcRule pegc_r_or_e( pegc_parser * st, ... );
 
     /**
-       Convenience form of pegc_r_list( st, false, ... ).
+       Convenience form of pegc_r_list_e( st, false, ... ).
     */
     PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
 
@@ -559,8 +659,8 @@ extern "C" {
 
      */
     PegcRule pegc_r_action( pegc_parser * st,
-			  PegcRule const * rule,
-			  pegc_action onMatch );
+			    PegcRule const * rule,
+			    pegc_action onMatch );
 
     /**
        An object implementing functionality identical to the
@@ -641,8 +741,40 @@ extern "C" {
     extern const PegcRule PegcRule_xdigit;
 
     extern const PegcRule PegcRule_digits;
+
     /**
-       NYI.
+       Creates a rule which matches a decimal integer
+       (optionally signed), but only if the integer part
+       is not followed by an "illegal" character, namely:
+
+       [._a-zA-Z]
+
+       Any other trailing characters (including EOF)
+       are considered legal.
+
+       This rule requires a "relatively" large amount
+       of dynamic resources (for several sub-rules),
+       so it is highly recommended that only one
+       instance is created per pegc_parser instance,
+       and then shared throughout the parser.
+    */
+    PegcRule pegc_r_int_dec_strict( pegc_parser * st );
+
+    /**
+       Similar to pegc_r_int_dec_strict(), but does not
+       do "tail checking" and does not allocate any
+       extra parser-specific resources. By "tail checking"
+       we mean that it will consume until the end of an
+       integer (optionally signed), but doesn't care if
+       the character after the last digit can be part of
+       a number. For example, when parsing "12345doh", it
+       will parse up to the 'd' and then stop, and match
+       "12345".
+
+       Limitation: this type cannot parse numbers larger
+       than can be represented in a long int.
+
+       FIXME: use (long long) if C99 mode is enabled.
     */
     extern const PegcRule PegcRule_int_dec;
 

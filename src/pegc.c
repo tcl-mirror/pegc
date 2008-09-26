@@ -9,40 +9,65 @@
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-#define DUMPPOS(P) MARKER; printf("pos = %s\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
+#define DUMPPOS(P) MARKER; printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
 #include "pegc.h"
 #include "hashtable.h"
 
+
+const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
 
 struct pegc_parser
 {
     char const * name; /* for debugging + error reporting purposes */
     long id;
     pegc_cursor cursor;
+    /**
+       Set via pegc_set_match().
+    */
     pegc_cursor match;
+    /**
+       These hashtables are used to pass private data between routines
+       and for garbage collection.
+    */
     struct {
+	hashtable * hashes; // GC for the following hashtables...
 	hashtable * actions;
 	hashtable * rulelists;
+	hashtable * rules;
     } hashes;
     struct
     {
-	unsigned int flags;
 	void * data;
 	void (*dtor)(void*);
     } client;
 };
 
-
-typedef short pegc_action_key;
-typedef pegc_action_key * pegc_action_key_p;
-struct pegc_hashes
-{
-    hashtable * actions;
-    hashtable * rulelists;
+static const pegc_parser
+pegc_parser_init = { 0, /* name */
+		    0, /* id */
+		    {0,0,0}, /* cursor */
+		    {0,0,0}, /* match */
+		    { /* hashes */
+		    0, /* hashes */
+		    0, /* actions */
+		    0, /* rulelists */
+		    0 /* rules */
+		    },
+		    { /* client data */
+		    0, /* data */
+		    0 /* dtor */
+		    }
 };
+
 
 static void * pegc_next_hash_key()
 {
+    /**
+       Fixme: use a hashtable of blocks of 1k (or so), and dole
+       out the next sequential address at each call, creating new
+       blocks as needed. That might require adding a pegc_parser
+       argument so we can clean up the blocks properly.
+    */
     return malloc(1);
 }
 
@@ -57,12 +82,34 @@ static int pegc_hash_cmp_void_ptr( void const * k1, void const * k2 )
 }
 
 
+static void pegc_free_hashtable( void * k )
+{
+    MARKER; printf("Freeing hashtable %p\n",k);
+    hashtable_destroy( (hashtable*)k );
+}
+
+
+/**
+   Registers h with the garbage collector, such that pegc_destroy_parser(st)
+   will destroy h.
+*/
+static void pegc_register_hashtable( pegc_parser * st, hashtable * h )
+{
+    if( ! st->hashes.hashes )
+    {
+	st->hashes.hashes = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr );
+	hashtable_set_dtors( st->hashes.hashes, pegc_free_hashtable, 0 );
+    }
+    hashtable_insert(st->hashes.hashes, h, h);
+}
 
 
 #define HASH_INIT(P,H,DK,DV) \
-    if( ! P->hashes.H ) { P->hashes.H = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr ); \
-	hashtable_set_dtors( P->hashes.H, DK, DV ); }
-
+    if( ! P->hashes.H ) { \
+	P->hashes.H = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr ); \
+	hashtable_set_dtors( P->hashes.H, DK, DV ); \
+	pegc_register_hashtable(P,P->hashes.H); \
+    }
 static void pegc_actions_insert( pegc_parser * st, void * key, pegc_action a )
 {
     HASH_INIT(st,actions,free,0);
@@ -71,9 +118,9 @@ static void pegc_actions_insert( pegc_parser * st, void * key, pegc_action a )
 
 static pegc_action pegc_actions_search( pegc_parser * st, void const * key )
 {
-    HASH_INIT(st,rulelists,free,free);
+    HASH_INIT(st,actions,free,free);
     void * r = hashtable_search( st->hashes.actions, key );
-    //MARKER; printf("h=%p, key=%p/%lxd, val=%p\n", h, key, *((long *)key), r );
+    //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
     return r ? (pegc_action)r : 0;
 }
 
@@ -87,9 +134,24 @@ static PegcRule const ** pegc_rulelists_search( pegc_parser * st, void const * k
 {
     HASH_INIT(st,rulelists,free,free);
     void * r = hashtable_search( st->hashes.rulelists, key );
-    //MARKER; printf("h=%p, key=%p/%lxd, val=%p\n", h, key, *((long *)key), r );
+    //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
     return r ? (PegcRule const **)r : 0;
 }
+
+static void pegc_rules_insert( pegc_parser * st, void * key, PegcRule * a )
+{
+    HASH_INIT(st,rules,free,free);
+    hashtable_insert( st->hashes.rules, key, a);
+}
+
+static PegcRule const * pegc_rules_search( pegc_parser * st, void const * key )
+{
+    HASH_INIT(st,rules,free,free);
+    void * r = hashtable_search( st->hashes.rules, key );
+    //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
+    return r ? (PegcRule const *)r : 0;
+}
+
 #undef HASH_INIT
 
 
@@ -120,22 +182,6 @@ pegc_const_iterator pegc_latin1(int ch)
     return r;
 }
 
-const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
-const pegc_parser
-pegc_parser_init = { 0, /* name */
-		    0, /* id */
-		    {0,0,0}, /* cursor */
-		    {0,0,0}, /* match */
-		    { /* hashes */
-		    0, /* actions */
-		    0 /* rulelists */
-		    },
-		    { /* client data */
-		    0, /* flags */
-		    0, /* data */
-		    0 /* dtor */
-		    }
-};
 
 
 void pegc_set_client_data( pegc_parser * st, void * data, void (*dtor)(void*) )
@@ -454,6 +500,30 @@ PegcRule pegc_r( PegcRule_mf rule, void const * data )
     return r;
 }
 
+PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf func, void const * data )
+{
+    PegcRule r1 = pegc_r(func,data);
+    PegcRule * r = (PegcRule*) malloc(sizeof(PegcRule));
+    if( ! r ) return 0;
+    /**
+       FIXME? Allocate these in blocks, to avoid a large number
+       of mallocs()?
+    */
+    *r = r1;
+    if( st )
+    {
+	pegc_rules_insert( st, (r->_internal.key = pegc_next_hash_key()), r );
+    }
+    return r;
+}
+PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const src )
+{
+    PegcRule * r = pegc_alloc_r( st, 0, 0 );
+    if( ! r ) return 0;
+    *r = src;
+    return r;
+}
+
 bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
     return false;
@@ -464,21 +534,6 @@ bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
-#if 0
-bool PegcRule_mf_int_decimal( PegcRule const * self, pegc_parser * st )
-{
-    MARKER;printf("This rule is untested!\n");
-    int * v = (int *)self->data;
-    if( ! v ) return false;
-    int myv = 0;
-    int len = 0;
-    int rc = sscanf(pegc_pos(st), "%d%n",&myv,&len);
-    if( (EOF == rc) || (0 == len) ) return false;
-    if( ! pegc_advance(st,len) ) return false;
-    *v = myv;
-    return true;
-}
-#endif
 
 static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, bool caseSensitive )
 {
@@ -494,7 +549,7 @@ static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, boo
 	    ? (*p == str[i])
 	    : (tolower(*p) == tolower(str[i])) )
 	{
-	    MARKER;
+	    //MARKER;
 	    pegc_set_match( st, p, p+1, true );
 	    return true;
 	}
@@ -940,11 +995,11 @@ static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
     PegcRule digs = pegc_r_plus( &PegcRule_digit );
     if( digs.rule( &digs, st ) )
     {
-	MARKER;
+	//MARKER;
 	pegc_set_match( st, orig, pegc_pos(st), true );
 	return true;
     }
-	MARKER;
+    //MARKER;
     pegc_set_pos(st,orig);
     return false;
 }
@@ -953,32 +1008,63 @@ const PegcRule PegcRule_digits = {PegcRule_mf_digits,0};
 #if 1
 static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
 {
-    MARKER;
-    // FIXME: cache these st-dependent rules in a hashtable:
+    //MARKER;printf("This rule is untested!\n");
     pegc_const_iterator orig = pegc_pos(st);
-    const PegcRule sign = pegc_r_oneof("+-",true);
-    const PegcRule prefix = pegc_r_opt( &sign );
-    const PegcRule integer = pegc_r_and_e( st, &prefix, &PegcRule_digits, 0 ); //, &end, 0 );
-    if( integer.rule( &integer, st ) )
-    {
-	pegc_const_iterator numend = pegc_pos(st);
-	const PegcRule uscore = pegc_r_oneof("._",true);
-	const PegcRule illegaltail = pegc_r_or_e( st, &PegcRule_alpha, &uscore, 0 );
-	const PegcRule next = pegc_r_notat( &illegaltail );
-	const PegcRule end = pegc_r_or_e( st, &PegcRule_eof, &next, 0 );
-	if( end.rule( &end, st ) )
-	{
-	    DUMPPOS(st);
-	    pegc_set_match( st, orig, numend, true );
-	    return true;
-	}
-    }
-    MARKER;
-    pegc_set_pos(st,orig);
-    return false;
+    long myv = 0;
+    int len = 0;
+    int rc = sscanf(pegc_pos(st), "%ld%n",&myv,&len);
+    if( (EOF == rc) || (0 == len) ) return false;
+    if( ! pegc_advance(st,len) ) return false;
+    pegc_set_match( st, orig, pegc_pos(st), true );
+    return true;
 }
 const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
 #endif
+
+static bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
+{
+    pegc_const_iterator orig = pegc_pos(st);
+    if( self->proxy && self->proxy->rule( self->proxy, st ) )
+    {
+	//DUMPPOS(st);
+	pegc_set_match( st, orig, pegc_pos(st), true );
+	return true;
+    }
+    //MARKER;
+    pegc_set_pos(st,orig);
+    return false;
+}
+static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
+
+PegcRule pegc_r_int_dec_strict( pegc_parser * st )
+{
+    /**
+       Fixme: use a hashtable to find out if st already has an
+       instance of this rule, and re-use it if it does.  The problem
+       is where to put the key, unless we add a list of such keys to
+       pegc_parser and search through them. i don't like that idea,
+       though.
+
+       Reminder we have to copy the rules here because we need the
+       sub-rules to be valid pointers after this routine returns.
+    */
+    PegcRule r = PegcRule_int_dec_strict;
+    PegcRule * sign = pegc_copy_r( st, pegc_r_oneof("+-",true) );
+    PegcRule * prefix = pegc_copy_r( st, pegc_r_opt( sign ) );
+    PegcRule * integer = pegc_copy_r( st, pegc_r_and_e( st, prefix, &PegcRule_digits, 0 ) );
+
+    /**
+       After we've matched digits we need to ensure that the next
+       character is not illegal.
+    */
+    PegcRule * uscore = pegc_copy_r( st, pegc_r_oneof("._",true) );
+    PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, uscore, 0 ) );
+    PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
+    PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
+    r.proxy = pegc_copy_r( st, pegc_r_and( st, integer, end ) );
+    return r;
+}
+
 
 static bool PegcRule_mf_ascii( PegcRule const * self, pegc_parser * st )
 {
@@ -1036,11 +1122,11 @@ bool pegc_destroy_parser( pegc_parser * st )
 	st->client.data = NULL;
     }
 
-#define HDESTROY(H) \
-    if( st->hashes.H ) {hashtable_destroy( st->hashes.H ); st->hashes.H = 0; }
-    HDESTROY(actions);
-    HDESTROY(rulelists);
-#undef HDESTROY
+    if( st->hashes.hashes )
+    {
+	hashtable_destroy( st->hashes.hashes );
+	st->hashes.hashes = 0;
+    }
     free(st);
     return true;
 }
