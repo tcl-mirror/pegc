@@ -29,15 +29,19 @@ struct hashtable {
 typedef struct hashtable  hashtable;
 
 /*****************************************************************************/
+/**
+   Returns h->hashfn(k), or hashval_t_err if either h or k are 0.
+*/
 hashval_t
 hash(hashtable *h, void const *k);
 
 /*****************************************************************************/
-/* indexFor */
-static inline size_t
-indexFor(size_t tablelength, size_t hashvalue) {
-    return (hashvalue % tablelength);
-};
+/* Returns (hashvalue % tablelength) */
+#if 1
+size_t hashtable_index(size_t tablelength, size_t hashvalue);
+#else
+#define hashtable_index(LEN,HV) (HV % LEN)
+#endif
 
 /**
    Cleans up key using h->freeKey(key).
@@ -47,18 +51,6 @@ void hashtable_free_key(hashtable const * h, void * key );
    Cleans up val using h->freeVal(val).
 */
 void hashtable_free_val(hashtable const * h, void * val );
-
-/* Only works if tablelength == 2^N */
-/*static inline size_t
-indexFor(size_t tablelength, size_t hashvalue)
-{
-    return (hashvalue & (tablelength - 1u));
-}
-*/
-
-/*****************************************************************************/
-/*#define freekey(X) free(X)*/
-/*define freekey(X) ; */
 
 
 /*****************************************************************************/

@@ -26,6 +26,13 @@ static const hashval_t primes[] = {
 const hashval_t prime_table_length = sizeof(primes)/sizeof(primes[0]);
 const float max_load_factor = 0.65;
 
+#if 1
+size_t hashtable_index(size_t tablelength, size_t hashvalue)
+{
+    return (hashvalue % tablelength);
+};
+#endif
+
 /*****************************************************************************/
 hashtable *
 hashtable_create(hashval_t minsize,
@@ -78,6 +85,7 @@ void hashtable_free_val(hashtable const * h, void * val )
 hashval_t
 hash(hashtable *h, void const *k)
 {
+    if( !h || !k ) return hashval_t_err;
     /* Aim to protect against poor hash functions by adding logic here
      * - logic taken from java 1.4 hashtable source */
     hashval_t i = h->hashfn(k);
@@ -110,7 +118,7 @@ hashtable_expand(hashtable *h)
         for (i = 0; i < h->tablelength; i++) {
             while (NULL != (e = h->table[i])) {
                 h->table[i] = e->next;
-                index = indexFor(newsize,e->h);
+                index = hashtable_index(newsize,e->h);
                 e->next = newtable[index];
                 newtable[index] = e;
             }
@@ -128,7 +136,7 @@ hashtable_expand(hashtable *h)
         memset(newtable[h->tablelength], 0, newsize - h->tablelength);
         for (i = 0; i < h->tablelength; i++) {
             for (pE = &(newtable[i]), e = *pE; e != NULL; e = *pE) {
-                index = indexFor(newsize,e->h);
+                index = hashtable_index(newsize,e->h);
                 if (index == i)
                 {
                     pE = &(e->next);
@@ -180,7 +188,7 @@ hashtable_insert(hashtable *h, void *k, void *v)
     else
     {
       e->h = hash(h,k);
-      index = indexFor(h->tablelength,e->h);
+      index = hashtable_index(h->tablelength,e->h);
       e->k = k;
       e->v = v;
       e->next = h->table[index];
@@ -196,7 +204,7 @@ hashtable_search(hashtable *h, void const *k)
     hashtable_entry *e;
     hashval_t hashvalue, index;
     hashvalue = hash(h,k);
-    index = indexFor(h->tablelength,hashvalue);
+    index = hashtable_index(h->tablelength,hashvalue);
     e = h->table[index];
     while (NULL != e)
     {
@@ -220,7 +228,7 @@ hashtable_take(hashtable *h, void const *k)
     hashval_t hashvalue, index;
 
     hashvalue = hash(h,k);
-    index = indexFor(h->tablelength,hash(h,k));
+    index = hashtable_index(h->tablelength,hash(h,k));
     pE = &(h->table[index]);
     e = *pE;
     while (NULL != e)

@@ -21,7 +21,7 @@ hashtable_change(hashtable *h, void *k, void *v)
     hashtable_entry *e;
     hashval_t hashvalue, index;
     hashvalue = hash(h,k);
-    index = indexFor(h->tablelength,hashvalue);
+    index = hashtable_index(h->tablelength,hashvalue);
     e = h->table[index];
     while (NULL != e)
     {

@@ -137,7 +137,7 @@ hashtable_iterator_search(hashtable_itr *itr,
     unsigned int hashvalue, index;
 
     hashvalue = hash(h,k);
-    index = indexFor(h->tablelength,hashvalue);
+    index = hashtable_index(h->tablelength,hashvalue);
 
     e = h->table[index];
     parent = NULL;

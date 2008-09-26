@@ -268,7 +268,8 @@ extern "C" {
     bool pegc_bump( pegc_parser * st );
 
     /**
-       Return (e-pegc_pos(st)). It does no bounds checking.
+       Return (e-pegc_pos(st)). It does no bounds checking.  If either
+       st or e are 0, then 0 is returned (you reap what you sow!).
     */
     long pegc_distance( pegc_parser * st, pegc_const_iterator e );
 
@@ -368,15 +369,6 @@ extern "C" {
     */
     void * pegc_get_client_data( pegc_parser * st );
 
-
-    /**
-       Always returns false and does nothing.
-    */
-    bool pegc_r_failure( pegc_parser * st );
-    /**
-       Always returns true and does nothing.
-    */
-    bool pegc_r_success( pegc_parser * st );
 
     struct PegcRule;
     /**
@@ -755,6 +747,16 @@ extern "C" {
        A rule which matches only at EOF and never consumes.
     */
     extern const PegcRule PegcRule_eof;
+
+    /**
+       A rule which always matches and never consumes.
+    */
+    extern const PegcRule PegcRule_success;
+
+    /**
+       A rule which never matches and never consumes.
+    */
+    extern const PegcRule PegcRule_failure;
 
 
 #ifdef __cplusplus

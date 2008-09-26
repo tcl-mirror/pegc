@@ -257,7 +257,7 @@ int hashtable_cmp_cstring( void const * k1, void const * k2 );
 
 /**
   A comparison function for use with hashtable_create().
-  It essentially performs (*((long*)k1) == ((long*)k2)).
+  It essentially performs (*((long*)k1) == (*((long*)k2))).
 
   Trying to compare numbers of different-sized types (e.g. long and
   short) won't work (well, probably won't). Results are undefined.
@@ -283,7 +283,7 @@ hashval_t hash_cstring_sdbm( void const * str );
 /**
    An int/long hashing function for use with hashtable_create().  It
    requires that n point to a long integer, and it simply returns the
-   value of n, or hashval_t_err on error.
+   value of n, or hashval_t_err on error (n is NULL).
  */
 hashval_t hash_long( void const * n );
 
