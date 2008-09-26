@@ -4,12 +4,16 @@
 #include <ctype.h>
 #include "pegc.h"
 
-#define MARKER printf("MARKER: %s:%s:%d:\n",__FUNCTION__,__FILE__,__LINE__);
+#if 1
+#define MARKER printf("MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
+#else
+#define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
+#endif
 
 void my_pegc_action( pegc_parser * st )
 {
     char * c = pegc_get_match_string(st);
-    MARKER; printf( "We got a match: [%s]\n", c ? c : "<EMPTY>");
+    MARKER; printf( "my_pegc_action got a match: [%s]\n", c ? c : "<EMPTY>");
     free(c);
 }
 
@@ -29,7 +33,8 @@ int test_one()
     PegcRule rH = pegc_r_char( 'h', true );
     PegcRule rI = pegc_r_char( 'i', true );
     PegcRule rHI = pegc_r_or( st, &rI, &rH );
-    NR = pegc_r_plus(&rHI);
+    PegcRule rHIPlus = pegc_r_plus(&rHI);
+    NR = pegc_r_action( st, &rHIPlus, my_pegc_action );
     NR = pegc_r_star( &PegcRule_blank );
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
     NR = pegc_r_notat(&PegcRule_digit);

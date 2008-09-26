@@ -168,7 +168,6 @@ extern "C" {
     typedef struct pegc_parser pegc_parser;
 
 
-    typedef bool (*pegc_rule_f)( pegc_parser * state );
 
     /**
        Creates a new parser, assigns it to st, and sets it up to point
@@ -369,32 +368,6 @@ extern "C" {
     */
     void * pegc_get_client_data( pegc_parser * st );
 
-    /**
-       If r(st) returns true then pegc_set_match() will contain the
-       matched string, otherwise no input is consumed.
-    */
-    bool pegc_try_rule( pegc_parser * st, pegc_rule_f r );
-    /**
-       Don't use this.
-
-       Requires that r is an array of pegc_rule_fs which is at least n entries
-       long. For each rule in r, rule(st) is called. If it returns true,
-       that result is returned.
-
-       If and_op is true then this routine only returns true if all rules
-       match.  If and_op is false then this routine returns true at the
-       first match (i.e. an "or" operation).
-
-       If no rules match, false is returned and no input is consumed.
-    */
-    bool pegc_try_rulesn( pegc_parser * st, pegc_rule_f *r, unsigned int n, bool and_op );
-
-    /**
-       Requires that r be a NULL-termined array of pegc_rule_fs. This routine
-       walks the array to the first NULL then calls
-       pegc_try_rules(r,rSize,st,and_op).
-    */
-    bool pegc_try_rules( pegc_parser * st, pegc_rule_f *r, bool and_op );
 
     /**
        Always returns false and does nothing.
@@ -512,13 +485,13 @@ extern "C" {
 
     /**
        Identical to pegc_r() but allocates a new object on the heap.
-       If st is not NULL true then the new object is owned by st
-       parser and will be destroyed when pegc_destroy_parser(st) is
-       called, otherwise the caller owns it.
+       If st is not NULL true then the new object is owned by st and
+       will be destroyed when pegc_destroy_parser(st) is called,
+       otherwise the caller owns it.
 
        Returns 0 if it cannot allocate a new object.
     */
-    PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf func, void const * data );
+    PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * data );
 
     /**
        Like pegc_alloc_r() (with the same ownership conventions),

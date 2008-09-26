@@ -4,7 +4,7 @@
 #include <ctype.h>
 
 #if 1
-#define MARKER printf("MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__FUNCTION__);
+#define MARKER printf("MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
 #else
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
@@ -369,50 +369,6 @@ void pegc_clear_match( pegc_parser * st )
     pegc_set_match(st, 0, 0, false);
 }
 
-bool pegc_try_rule( pegc_parser * st, pegc_rule_f r )
-{
-    pegc_const_iterator orig = pegc_pos(st);
-    if( r(st) )
-    {
-	pegc_set_match( st, orig, pegc_pos(st), true );
-	return true;
-    }
-    pegc_set_pos(st,orig);
-    return false;
-}
-
-bool pegc_try_rulesn( pegc_parser * st, pegc_rule_f *r, unsigned int n, bool and_op )
-{
-    pegc_rule_f R = 0;
-    unsigned int i = 0;
-    pegc_const_iterator orig = pegc_pos(st);
-    bool ret = false;
-    for(; i < n; ++i, r++ )
-    {
-	if( ! (R = *r) ) break;
-	ret = pegc_try_rule( st, R );
-	if( ret && !and_op ) break;
-	else if( and_op && !ret ) break;
-    }
-    if( ! ret )
-    {
-	pegc_set_pos( st, orig );
-    }
-    else
-    {
-	pegc_set_match( st, orig, pegc_pos(st), false );
-    }
-    return ret;
-}
-
-bool pegc_try_rules( pegc_parser * st, pegc_rule_f *r, bool and_op )
-{
-    pegc_rule_f * R = r;
-    unsigned int i = 0;
-    for( ; R && *R; ++i, ++R ){}
-    return pegc_try_rulesn( st, r, i, and_op );
-}
-
 /**
    Always returns false and does nothing.
 */
@@ -500,7 +456,7 @@ PegcRule pegc_r( PegcRule_mf rule, void const * data )
     return r;
 }
 
-PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf func, void const * data )
+PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * data )
 {
     PegcRule r1 = pegc_r(func,data);
     PegcRule * r = (PegcRule*) malloc(sizeof(PegcRule));
@@ -809,7 +765,7 @@ PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... )
 
 PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs )
 {
-    if( ! lhs || ! rhs )
+    if( !st || !lhs || ! rhs )
     {
 	return pegc_r( PegcRule_mf_failure, 0 );
     }
@@ -1005,10 +961,8 @@ static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
 }
 const PegcRule PegcRule_digits = {PegcRule_mf_digits,0};
 
-#if 1
 static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
 {
-    //MARKER;printf("This rule is untested!\n");
     pegc_const_iterator orig = pegc_pos(st);
     long myv = 0;
     int len = 0;
@@ -1019,7 +973,6 @@ static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
     return true;
 }
 const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
-#endif
 
 static bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
 {
@@ -1038,6 +991,7 @@ static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
 
 PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 {
+    if( ! st ) return pegc_r( PegcRule_mf_failure, 0 );
     /**
        Fixme: use a hashtable to find out if st already has an
        instance of this rule, and re-use it if it does.  The problem
