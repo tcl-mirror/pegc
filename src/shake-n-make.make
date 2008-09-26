@@ -1,6 +1,18 @@
 #!/usr/bin/make -f
 all:
 SHELL=/bin/bash
+MAKE_REQUIRED_VERSION := 380# MAKE_VERSION stripped of any dots
+VERSION_CHECK := \
+	$(shell \
+	test $$(echo $(MAKE_VERSION) | sed -e 's/\.//g') -ge \
+	"$(MAKE_REQUIRED_VERSION)" 2>/dev/null \
+	&& echo 1 || echo 0)
+
+ifneq (1,$(VERSION_CHECK))
+$(error Your version of Make ($(MAKE_VERSION)) is too old to use this code!)
+endif
+
+
 ########################################################################
 # This file defines a set of basic targets for single-dir C++ projects
 # trees, designed for GNU make and gcc. The code in this file is
