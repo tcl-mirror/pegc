@@ -8,6 +8,17 @@
 #include <string.h>
 #include <math.h>
 
+static const hashtable
+hashtable_init = { 0, /*tablelength*/
+		   0, /* table */
+		   0, /* entrycount */
+		   0, /* loadlimit */
+		   0, /* primeindex */
+		   0, /* hashfn */
+		   0, /* eqfn */
+		   free, /* freeKey */
+		   0 /* freeVal */
+};
 const hashval_t hashval_t_err = (hashval_t)-1;
 /*
 Credit for primes table: Aaron Krowne
@@ -50,6 +61,7 @@ hashtable_create(hashval_t minsize,
     }
     h = (hashtable *)malloc(sizeof(hashtable));
     if (NULL == h) return NULL; /*oom*/
+    *h = hashtable_init;
     h->freeKey = free;
     h->freeVal = 0;
     h->table = (hashtable_entry **)malloc(sizeof(hashtable_entry*) * size);

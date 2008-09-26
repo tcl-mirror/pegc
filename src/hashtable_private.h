@@ -28,6 +28,7 @@ struct hashtable {
 };
 typedef struct hashtable  hashtable;
 
+
 /*****************************************************************************/
 /**
    Returns h->hashfn(k), or hashval_t_err if either h or k are 0.

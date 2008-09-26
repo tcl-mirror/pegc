@@ -38,15 +38,30 @@ const PegcRule PegcRule_init = {PegcRule_mf_failure, /* rule */
 			      } 
 };
 
+/**
+   Internal holder for "match listener" data. Match listeners get
+   notified any time pegc_set_match() is set.
+*/
+struct pegc_match_listener_data
+{
+    pegc_match_listener func;
+    void * data;
+    struct pegc_match_listener_data * next;
+};
+typedef struct pegc_match_listener_data pegc_match_listener_data;
+
+const static pegc_match_listener_data
+pegc_match_listener_data_init = {0,0,0};
+
 struct pegc_parser
 {
     char const * name; /* for debugging + error reporting purposes */
-    long id;
     pegc_cursor cursor;
     /**
        Set via pegc_set_match().
     */
     pegc_cursor match;
+    pegc_match_listener_data * listeners;
     /**
        These hashtables are used to pass private data between routines
        and for garbage collection.
@@ -73,9 +88,9 @@ struct pegc_parser
 
 static const pegc_parser
 pegc_parser_init = { 0, /* name */
-		    0, /* id */
 		    {0,0,0}, /* cursor */
 		    {0,0,0}, /* match */
+		     0, /* listeners */
 		    { /* hashes */
 		    0, /* hashes */
 		    0, /* actions */
@@ -95,9 +110,37 @@ pegc_parser_init = { 0, /* name */
 		    }
 };
 
+void pegc_add_match_listener( pegc_parser * st,
+			      pegc_match_listener f,
+			      void * cdata )
+{
+    if( ! st || !f ) return;
+    pegc_match_listener_data * d = (pegc_match_listener_data*) malloc(sizeof(pegc_match_listener_data));
+    if( ! d ) return;
+    d->func = f;
+    d->data = cdata;
+    pegc_match_listener_data * x = st->listeners;
+    if( x )
+    {
+	while( x->next ) x = x->next;
+	x->next = d;
+    }
+    else
+    {
+	st->listeners = d;
+    }
+}
+
 
 static void * pegc_next_hash_key(pegc_parser * st)
 {
+    /**
+       Note to self: We use a newly-malloc'ed value as a lookup key so
+       we can avoid the question of "is this ID already in use". This
+       solves several problems involved with using a numeric key and
+       allows us to easily guaranty a unique key without having to
+       check for dupes, overflows, and such.
+    */
     if( ! st ) return NULL;
 #if 0
     /* we can't do this b/c realloc() can move our pointers, which are our keys. */
@@ -324,7 +367,7 @@ void * pegc_get_client_data( pegc_parser * st )
     return st ? st->client.data : NULL;
 }
 
-bool pegc_eof( pegc_parser * st )
+bool pegc_eof( pegc_parser const * st )
 {
     return !st
 	    || !st->cursor.pos
@@ -338,26 +381,26 @@ pegc_cursor * pegc_iter( pegc_parser * st )
     return st ? &st->cursor : 0;
 }
 
-pegc_const_iterator pegc_begin( pegc_parser * st )
+pegc_const_iterator pegc_begin( pegc_parser const * st )
 {
-    return pegc_iter(st)->begin;
+    return st ? st->cursor.begin : 0;
 }
 
-pegc_const_iterator pegc_end( pegc_parser * st )
+pegc_const_iterator pegc_end( pegc_parser const * st )
 {
-    return st ? pegc_iter(st)->end : 0;
+    return st ? st->cursor.end : 0;
 }
 
 
-bool pegc_in_bounds( pegc_parser * st, pegc_const_iterator p )
+bool pegc_in_bounds( pegc_parser const * st, pegc_const_iterator p )
 {
     return st && p && *p && (p>=pegc_begin(st)) && (p<pegc_end(st));
 }
 
 
-pegc_const_iterator pegc_pos( pegc_parser * st )
+pegc_const_iterator pegc_pos( pegc_parser const * st )
 {
-    return st ? pegc_iter(st)->pos : 0;
+    return st ? st->cursor.pos : 0;
 }
 
 bool pegc_set_pos( pegc_parser * st, pegc_const_iterator p )
@@ -384,12 +427,12 @@ bool pegc_bump( pegc_parser * st )
     return st ? pegc_advance(st, 1) : false;
 }
 
-long pegc_distance( pegc_parser * st, pegc_const_iterator e )
+long pegc_distance( pegc_parser const * st, pegc_const_iterator e )
 {
     return (st&&e) ? (e - pegc_pos(st)) : 0;
 }
 
-pegc_cursor pegc_get_match_cursor( pegc_parser * st )
+pegc_cursor pegc_get_match_cursor( pegc_parser const * st )
 {
     pegc_cursor cur = pegc_cursor_init;
     if( st )
@@ -400,7 +443,7 @@ pegc_cursor pegc_get_match_cursor( pegc_parser * st )
     return cur;
 }
 
-pegc_iterator pegc_get_match_string( pegc_parser * st )
+pegc_iterator pegc_get_match_string( pegc_parser const * st )
 {
     pegc_cursor cur = pegc_get_match_cursor(st);
     if( !st
@@ -441,17 +484,24 @@ bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_ite
     {
 	pegc_set_pos( st, end );
     }
+
+    pegc_match_listener_data * x = st->listeners;
+    while( x )
+    {
+	x->func( st, x->data );
+	x = x->next;
+    }
     return true;
 }
 
-bool pegc_matches_char( pegc_parser * st, int ch )
+bool pegc_matches_char( pegc_parser const * st, int ch )
 {
     return st
 	? (pegc_eof(st) ? false : (*pegc_pos(st) == ch))
 	: false;
 }
 
-bool pegc_matches_chari( pegc_parser * st, int ch )
+bool pegc_matches_chari( pegc_parser const * st, int ch )
 {
     if( pegc_eof(st) ) return false;
     pegc_const_iterator p = pegc_pos(st);
@@ -460,7 +510,7 @@ bool pegc_matches_chari( pegc_parser * st, int ch )
 	&& (tolower(*p) == tolower(ch));
 }
 
-bool pegc_matches_string( pegc_parser * st, pegc_const_iterator str, long strLen, bool caseSensitive )
+bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long strLen, bool caseSensitive )
 {
     if( pegc_eof(st) ) return false;
     if( strLen < 0 ) strLen = strlen(str);
@@ -485,7 +535,6 @@ bool pegc_matches_string( pegc_parser * st, pegc_const_iterator str, long strLen
     }
     //MARKER; printf("matched string? == %d, i=%ld, strLen=%ld, str=[%s]\n", (i == strLen), i, strLen, str);
     if( i != strLen ) return false;
-    pegc_set_match( st, orig, p, true );
     return true;
 }
 
@@ -947,13 +996,6 @@ PegcRule pegc_r_action( pegc_parser * st, PegcRule const * rule, pegc_action onM
     PegcRule r = PegcRule_init;
     r.proxy = rule;
     if( ! st || !rule ) return r;
-    /**
-       Note to self: We use a newly-malloc'ed value as a lookup key so we
-       can avoid the question of "is this ID already in use". This solves
-       several problems involved with using a numeric key and allows us to
-       easily guaranty a unique key without having to check for dupes,
-       overflows, and such.
-    */
     r.rule = PegcRule_mf_action;
     if( onMatch )
     {
@@ -1186,6 +1228,14 @@ bool pegc_destroy_parser( pegc_parser * st )
     {
 	hashtable_destroy( st->hashes.hashes );
 	st->hashes.hashes = 0;
+    }
+
+    pegc_match_listener_data * x = st->listeners;
+    while( x )
+    {
+	pegc_match_listener_data * X = x->next;
+	free(x);
+	x = X;
     }
     free(st);
     return true;

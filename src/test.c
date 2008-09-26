@@ -10,19 +10,28 @@
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-void my_pegc_action( pegc_parser * st )
+void my_pegc_action( pegc_parser const * st )
 {
     char * c = pegc_get_match_string(st);
     MARKER; printf( "my_pegc_action got a match: [%s]\n", c ? c : "<EMPTY>");
     free(c);
 }
 
+void my_match_listener( pegc_parser const * st, void * d )
+{
+    char * c = pegc_get_match_string(st);
+    MARKER; printf( "my_match_listener got a match: [%s]\ndata=%p\n",
+		    c ? c : "<EMPTY>",
+		    d );
+    free(c);
+}
 
 int test_one()
 {
     char const * src = "hihi \t world";
     pegc_parser * st;
     pegc_create_parser( &st, src, -1 );
+    //pegc_add_match_listener( st, my_match_listener, st );
     const unsigned int rulecount = 50;
     PegcRule Rules[rulecount];
     memset( Rules, 0, rulecount * sizeof(PegcRule) );
@@ -71,8 +80,11 @@ int test_one()
     return 0;
 }
 
+
+
 int test_two()
 {
+    MARKER; printf("test two...\n");
     char const * src = "hiaF!";
     char const * x = src;
     for( ; *x; ++x )
@@ -82,6 +94,7 @@ int test_two()
     src = "-3492xyz . asa";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
+    //pegc_add_match_listener( P, my_match_listener, P );
     int rc = 1;
 #if 1
     //PegcRule sign = pegc_r_oneof("+-",true);

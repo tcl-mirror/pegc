@@ -218,7 +218,7 @@ extern "C" {
 
        Rules should check this value before doing any comparisons.
     */
-    bool pegc_eof( pegc_parser * st );
+    bool pegc_eof( pegc_parser const * st );
 
     /**
        Returns st's cursor.
@@ -228,22 +228,22 @@ extern "C" {
     /**
        Returns st's starting position.
     */
-    pegc_const_iterator pegc_begin( pegc_parser * st );
+    pegc_const_iterator pegc_begin( pegc_parser const * st );
 
     /**
        Returns st's ending position. This uses the one-after-the-end
        idiom, so the pointed-to value is considered invalid and should
        never be dereferenced.
     */
-    pegc_const_iterator pegc_end( pegc_parser * st );
+    pegc_const_iterator pegc_end( pegc_parser const * st );
     /**
        Returns true only if (p>=pegc_begin(st)) and (p<pegc_end(st)).
     */
-    bool pegc_in_bounds( pegc_parser * st, pegc_const_iterator p );
+    bool pegc_in_bounds( pegc_parser const * st, pegc_const_iterator p );
     /**
        Returns the current position in the parser.
     */
-    pegc_const_iterator pegc_pos( pegc_parser * st );
+    pegc_const_iterator pegc_pos( pegc_parser const * st );
 
     /**
        Sets the current position of the parser. If p
@@ -271,7 +271,27 @@ extern "C" {
        Return (e-pegc_pos(st)). It does no bounds checking.  If either
        st or e are 0, then 0 is returned (you reap what you sow!).
     */
-    long pegc_distance( pegc_parser * st, pegc_const_iterator e );
+    long pegc_distance( pegc_parser const * st, pegc_const_iterator e );
+
+    /**
+       Typedef for callback routines called when pegc_set_match() is
+       called. See pegc_add_match_listener().
+    */
+    typedef void (*pegc_match_listener)( pegc_parser const * st, void * clientData );
+
+    /**
+       Registers a callback function which will be called every time
+       pegc_set_match(st,...) is called. While that may sound very useful,
+       it's not quite as useful as it initially sounds because it's called
+       *every* time pegc_set_match() is called, and that can happen an arbitrary
+       number of times during the matching process, and can reveal tokens which
+       are currently parsing but will end up part of a non-match. It's best reserved
+       for debug purposes.
+
+       The clientData parameter is an arbitrary client pointer. This
+       API does nothing with it but pass it along to the callback.
+    */
+    void pegc_add_match_listener( pegc_parser * st, pegc_match_listener f, void * clientData );
 
     /**
        Sets the current match string to the range [begin,end). If
@@ -294,25 +314,25 @@ extern "C" {
        during a parse run. Its value only applies to the last rule
        which set the match point (via pegc_set_match()).
     */
-    pegc_cursor pegc_get_match_cursor( pegc_parser * st );
+    pegc_cursor pegc_get_match_cursor( pegc_parser const * st );
 
     /**
        Returns a copy of the current match string, or 0 if there
        is no match or there is a length-zero match. The caller
        is responsible for deallocating it using free().
     */
-    pegc_iterator pegc_get_match_string( pegc_parser * st );
+    pegc_iterator pegc_get_match_string( pegc_parser const * st );
 
     /**
        Returns true if ch matches the character at pegc_pos(st). It only
        compares, it does not consume input.
     */
-    bool pegc_matches_char( pegc_parser * st, int ch );
+    bool pegc_matches_char( pegc_parser const * st, int ch );
 
     /**
        Case-insensitive form of pegc_matches_char.
     */
-    bool pegc_matches_chari( pegc_parser * st, int ch );
+    bool pegc_matches_chari( pegc_parser const * st, int ch );
 
     /**
        If the next strLen characters of st match str then true is
@@ -322,7 +342,7 @@ extern "C" {
        using tolower() on each char of each string. It only compares,
        it does not consume input.
     */
-    bool pegc_matches_string( pegc_parser * st, pegc_const_iterator str, long strLen, bool caseSensitive );
+    bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long strLen, bool caseSensitive );
 
     /**
        Clears the parser's match string.
@@ -401,9 +421,9 @@ extern "C" {
 
        Each object holds an PegcRule_mf "member function" and a void
        data pointer. The data pointer holds information used by the
-       member function. Most rules hold a (char const *) here and
+       member function. Some rules hold a (char const *) here and
        match against a string or the characters in the string.
-       Non-string rules will have other uses for that data pointer.
+       Non-string rules may have other uses for the data pointer.
 
        Some rules also need a proxy rule, on whos behalf they run
        (normally providing some other processing if the proxy rule
@@ -447,23 +467,31 @@ extern "C" {
 	/**
 	   This _internal object reserved for internal use by the
 	   library. It's structure may change with any revision of
-	   this code - don't rely on it.
+	   this code - don't rely on it. Don't even look at it.
+	   Not even the docs for it.
 	*/
 	struct
 	{
 	     /*
 	       A unique lookup key for some mappings (e.g. actions and
-	       rule lists).
+	       rule lists). This library assigns and owns the keys.
 	     */
 	    void * key;
 	} _internal;
     };
     typedef struct PegcRule PegcRule;
 
+    /**
+       If either st or r are null then this function returns false,
+       otherwise it returns r->rule(r,st). It is simply a front-end
+       and does no management of st's state (e.g. does not set the
+       match string - that is up to the rule to do).
+    */
     bool pegc_parse( pegc_parser * st, PegcRule const * r );
+
     /**
        This object can (should) be used as an initializer to ensure a
-       clean slate for the pointer members of PegcRule objects. Simply
+       clean slate for the internal members of PegcRule objects. Simply
        copy this over the object. Its default rule is a rule which
        never matches (always returns false) and does not consume.
     */
@@ -492,26 +520,34 @@ extern "C" {
     PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const r );
 
     /**
-       Requires that self->data be a pegc_const_iterator. Matches if any
-       character in that string matches the next char of st.
+       Requires that self->data be a pegc_const_iterator. Matches if
+       any character in that string matches the next char of st.
     */
     PegcRule pegc_r_oneof( char const * list, bool caseSensitive );
 
     /**
-       Creates a 'star' rule for the given proxy
-       rule. See PegcRule_mf_star().
+       Creates a 'star' rule for the given proxy rule.
+
+       This rule acts like a the regular expression (Rule)*. Always
+       matches but may or may not consume input. It is "greedy",
+       matching as long as it can UNLESS the proxy rule does not
+       consume input, in which case this routine stops at the first
+       match to avoid an endless loop.
     */
     PegcRule pegc_r_star( PegcRule const * proxy );
 
     /**
-       Creates a 'plus' rule for the given proxy
-       rule. See PegcRule_mf_plus().
+       Creates a 'plus' rule for the given proxy rule.
+
+       Works like pegc_r_star(), but matches 1 or more times.  This
+       routine is "greedy", matching as long as it can UNLESS the
+       proxy rule does not consume input, in which case this routine
+       stops at the first match to avoid an endless loop.
     */
     PegcRule pegc_r_plus( PegcRule const * proxy );
 
     /**
-       Always returns true but only consumes if
-       proxy does.
+       Always returns true but only consumes if proxy does.
 
        Equivalent expression: (RULE)?
     */
@@ -519,38 +555,38 @@ extern "C" {
 
     /**
        Creates a rule which will match the given string
-       case-sensitively. The string must outlive the rule,
-       as it is not copied.
+       case-sensitively. The string must outlive the rule, as it is
+       not copied.
     */
     PegcRule pegc_r_string( pegc_const_iterator input, bool caseSensitive );
 
     /**
        Creates a rule which matches the given character, which must
-       be in the range [0,127].
+       be in the range [0,255].
     */
     PegcRule pegc_r_char( pegc_char_t ch, bool caseSensitive );
 
 
     /**
-       Creates a rule which matches if proxy matches, but
-       does not consume. proxy must not be 0 and must outlive
-       the returned object.
+       Creates a rule which matches if proxy matches, but does not
+       consume. proxy must not be 0 and must outlive the returned
+       object.
     */
     PegcRule pegc_r_at( PegcRule const * proxy );
 
     /**
-       The converse of pegc_r_at(), this returns true only
-       if the input does not match the given proxy rule.
-       This rule never consumes.
+       The converse of pegc_r_at(), this returns true only if the
+       input does not match the given proxy rule. This rule never
+       consumes.
     */
     PegcRule pegc_r_notat( PegcRule const * proxy );
 
     /**
        Creates a rule which performs either an OR (if orOp is true) or
-       an AND (if orOp is false) on the given list of
-       rules. The list MUST be terminated with either NULL, or an entry
-       where entry->rule is 0, or results are undefined (almost certainly
-       an overflow).
+       an AND (if orOp is false) on the given list of rules. The list
+       MUST be terminated with either NULL, or an entry where
+       entry->rule is 0, or results are undefined (almost certainly an
+       overflow).
 
        All rules in li must outlive the returned object.
 
@@ -611,7 +647,7 @@ extern "C" {
        Actions can act on client-side data by setting st->client.data
        and accessing it from the action.
     */
-    typedef void (*pegc_action)( pegc_parser * st );
+    typedef void (*pegc_action)( pegc_parser const * st );
 
     /*
       Creates a new Action. If rule matches then onMatch(pegc_parser*)
