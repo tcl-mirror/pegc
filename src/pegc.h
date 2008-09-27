@@ -664,6 +664,30 @@ extern "C" {
 			    pegc_action onMatch );
 
     /**
+       Creates a rule which matches between min and max
+       times.
+
+       This routine may perform optimizations for specific
+       combinations of min and max:
+
+       (min==1, max==1): returns *rule
+
+       (min==1, max ==1): returns pegc_r_opt(rule)
+
+       For those specific cases, the st parameter may be 0, as they do
+       not allocate any extra resources. For all other cases, st must
+       be valid so that we can allocate the resources needed for the
+       rule mapping.
+
+       On error ((max<min), st or rule are null, or eof),
+       an invalid rule is returned.
+    */
+    PegcRule pegc_r_repeat( pegc_parser * st,
+			    PegcRule const * rule,
+			    unsigned int min,
+			    unsigned int max );
+
+    /**
        An object implementing functionality identical to the
        C-standard isalnum().
     */
@@ -741,6 +765,9 @@ extern "C" {
     */
     extern const PegcRule PegcRule_xdigit;
 
+    /**
+       A rule matching one or more consecutive digits.
+    */
     extern const PegcRule PegcRule_digits;
 
     /**
@@ -793,6 +820,11 @@ extern "C" {
        A rule which never matches and never consumes.
     */
     extern const PegcRule PegcRule_failure;
+
+    /**
+       An "invalid" rule, with all data members to 0.
+    */
+    extern const PegcRule PegcRule_invalid;
 
 
 #ifdef __cplusplus

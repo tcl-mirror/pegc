@@ -45,10 +45,17 @@ int test_one()
     PegcRule rHIPlus = pegc_r_plus(&rHI);
     NR = pegc_r_action( st, &rHIPlus, my_pegc_action );
     NR = pegc_r_star( &PegcRule_blank );
+#if 0
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
-    NR = pegc_r_notat(&PegcRule_digit);
+#else
+    PegcRule starAlpha =
+	pegc_r_repeat(st,&PegcRule_alpha,0,1)
+	//pegc_r_opt(&PegcRule_alpha)
+	;
+#endif
+    //NR = pegc_r_notat(&PegcRule_digit);
     NR = pegc_r_action( st, &starAlpha, my_pegc_action );
-    NR = pegc_r_string("world",false); // will fail
+    //NR = pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
 #undef ACPMF
 #undef NR
@@ -121,8 +128,9 @@ int test_two()
 }
 int main( int argc, char ** argv )
 {
-    int rc = test_one();
-    if(!rc) rc = test_two();
+    int rc = 0;
+    rc = test_one();
+    //if(!rc) rc = test_two();
     printf("Done rc=%d.\n",rc);
     return rc;
 }

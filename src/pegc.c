@@ -26,17 +26,16 @@ extern "C" {
 bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
 
 const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
-const PegcRule PegcRule_init = {PegcRule_mf_failure, /* rule */
-			      0, /* data */
-			      0, /* proxy */
-			      { /* client */
-			      0, /* flags */
-			      0 /* data */
-			      },
-			      {/* _internal */
-			      0 /* key */
-			      } 
-};
+#define PEGC_INIT_RULE(F) { \
+     0 /* rule */,\
+     0 /* data */,\
+     0 /* proxy */,\
+     /* client */ { 0/* flags */,0 /* data */},\
+     /* _internal */ { 0 /* key */}\
+}
+
+const PegcRule PegcRule_init = PEGC_INIT_RULE(PegcRule_mf_failure);
+const PegcRule PegcRule_invalid = PEGC_INIT_RULE(0);
 
 /**
    Internal holder for "match listener" data. Match listeners get
@@ -71,6 +70,7 @@ struct pegc_parser
 	hashtable * actions;
 	hashtable * rulelists;
 	hashtable * rules;
+	hashtable * generic; // GC for (void*)
     } hashes;
 #if 0
     struct {
@@ -95,7 +95,8 @@ pegc_parser_init = { 0, /* name */
 		    0, /* hashes */
 		    0, /* actions */
 		    0, /* rulelists */
-		    0 /* rules */
+		    0, /* rules */
+		    0 /* generic */
 		    },
 #if 0
 		     {/* keys */
@@ -321,6 +322,17 @@ static PegcRule const * pegc_rules_search( pegc_parser * st, void const * key )
     return r ? (PegcRule const *)r : 0;
 }
 
+/**
+   Adds item to the general-purposes garbage pool, to be cleaned up
+   when pegc_destroy_parser(st) is called.
+*/
+static void pegc_gc_add( pegc_parser * st, void * item )
+{
+    HASH_INIT(st,generic,free,0);
+    hashtable_insert( st->hashes.generic, item, item );
+}
+
+
 #undef HASH_INIT
 
 
@@ -449,8 +461,6 @@ pegc_iterator pegc_get_match_string( pegc_parser const * st )
     if( !st
 	|| !cur.begin
 	|| !*cur.begin
-	|| (cur.begin>cur.end)
-	|| (cur.begin==cur.end-1)
 	)
     {
 	return 0;
@@ -474,10 +484,10 @@ bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_ite
 	|| (! pegc_in_bounds( st, begin ))
 	|| (pegc_end(st) < end) )
     {
-	//MARKER;fprintf(stderr,"WARNING: pegc_set_match() is out of bounds.\n");
+	MARKER;fprintf(stderr,"WARNING: pegc_set_match() is out of bounds.\n");
 	return false;
     }
-    //MARKER;printf("pegc_setting_match() setting match of %d characters.\n",(end-begin));
+    MARKER;printf("pegc_setting_match() setting match of %d characters.\n",(end-begin));
     st->match.begin = begin;
     st->match.end = end;
     if( movePos )
@@ -1139,7 +1149,7 @@ static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
 
 PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 {
-    if( ! st ) return PegcRule_failure;
+    if( ! st ) return PegcRule_invalid;
     /**
        Fixme: use a hashtable to find out if st already has an
        instance of this rule, and re-use it if it does.  The problem
@@ -1185,6 +1195,58 @@ static bool PegcRule_mf_ascii( PegcRule const * self, pegc_parser * st )
 const PegcRule PegcRule_ascii = {PegcRule_mf_ascii,0};
 
 
+struct pegc_range_info
+{
+    unsigned int min;
+    unsigned int max;
+};
+typedef struct pegc_range_info pegc_range_info;
+
+static bool PegcRule_mf_repeat( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self || !st || !self->data || !self->proxy ) return false;
+    pegc_range_info const * info = self->data;
+    if( ! info ) return false;
+    pegc_const_iterator orig = pegc_pos(st);
+    unsigned int count = 0;
+    while( self->proxy->rule( self->proxy, st ) )
+    {
+	MARKER; printf("Matched %u time(s)\n", count+1);
+	if( (++count == info->max)
+	    || pegc_eof(st)
+	    || (orig == pegc_pos(st))
+	    ) break;
+    }
+    if( 
+       ((count >= info->min) && (count <= info->max) )
+       )
+    {
+	MARKER; printf("pos=(%c .. %c) distance=%ld\n",*orig,*pegc_pos(st),pegc_distance(st,orig));
+	pegc_set_match( st, orig, pegc_pos(st), true );
+	return true;
+    }
+    pegc_set_pos( st, orig );
+    return false;
+}
+
+
+PegcRule pegc_r_repeat( pegc_parser * st,
+			PegcRule const * rule,
+			unsigned int min,
+			unsigned int max )
+{
+    if( ! st || !rule || pegc_eof(st) ) return PegcRule_invalid;
+    if( (max < min) || (0==max) ) return PegcRule_invalid;
+    if( (min == 1) && (max ==1) ) return *rule;
+    if( (min == 0) && (max == 1) ) return pegc_r_opt( rule );
+    pegc_range_info * info = (pegc_range_info *)malloc(sizeof(pegc_range_info));
+    pegc_gc_add( st, info );
+    info->min = min;
+    info->max = max;
+    PegcRule r = pegc_r( PegcRule_mf_repeat, info );
+    r.proxy = rule;
+    return r;
+}
 
 bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end )
 {
@@ -1242,7 +1304,7 @@ bool pegc_destroy_parser( pegc_parser * st )
 }
 
 #undef MARKER
-
+#undef PEGC_INIT_RULE
 #if defined(__cplusplus)
 } // extern "C"
 #endif
