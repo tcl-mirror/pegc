@@ -13,7 +13,8 @@ PACKAGE.VERSION := $(shell date +%Y%m%d)
 
 INCLUDES += -I.
 HASH_OBJ := $(patsubst %,%.o,hashtable hashtable_itr hashtable_utility)
-test.BIN.OBJECTS = pegc.o $(HASH_OBJ) test.o
+PEGC_OBJ := clob.o pegc.o vappendf.o $(HASH_OBJ)
+test.BIN.OBJECTS = $(PEGC_OBJ) test.o
 
 $(call ShakeNMake.CALL.RULES.BINS,test)
 bins: test.BIN

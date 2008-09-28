@@ -53,7 +53,7 @@ int test_one()
 	//pegc_r_opt(&PegcRule_alpha)
 	;
 #endif
-    //NR = pegc_r_notat(&PegcRule_digit);
+    NR = pegc_r_notat(&PegcRule_digit);
     NR = pegc_r_action( st, &starAlpha, my_pegc_action, 0 );
     //NR = pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
@@ -109,7 +109,7 @@ int test_two()
     const PegcRule R = PegcRule_int_dec;
 #else
     const PegcRule R = pegc_r_int_dec_strict(P);
-    const PegcRule R2 = pegc_r_int_dec_strict(P);
+    const PegcRule R2 = pegc_r_int_dec_strict(P); // just checking the cache hit
 #endif
     printf("Source string = [%s]\n", src );
     if( pegc_parse(P, &R) )
@@ -131,7 +131,7 @@ int test_two()
 int test_three()
 {
     MARKER; printf("test three...\n");
-    char const * src = "::token::::";
+    char const * src = "::token::::xyz";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
 
@@ -143,7 +143,12 @@ int test_three()
     {
 	rc = 0;
 	char * m  = pegc_get_match_string(P);
-	printf("Got match on [%s]: [%s]\n",src, m?m:"<EMPTY>");
+	pegc_const_iterator pos = pegc_pos(P);
+	printf("Got match on [%s]: [%s] current pos=[%s]\n",
+	       src,
+	       m?m:"<EMPTY>",
+	       (pos && *pos) ? pegc_latin1(*pos) : "<NULL>"
+	       );
 	free(m);
     }
     else

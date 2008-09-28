@@ -162,6 +162,10 @@ extern "C" {
        Initializes it to point at the range [begin,end) and sets
        it->pos set to begin. Returns false and does nothing
        if (end<begin).
+
+       When re-mapping a parser to a different input source than
+       previously used, be sure to call pegc_set_error() to clear the
+       error state, or most parse operations will fail.
     */
     bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end );
 
@@ -227,7 +231,74 @@ extern "C" {
     */
     bool pegc_eof( pegc_parser const * st );
 
+    /**
+       Returns true if st has an error message set.
+       See pegc_set_error().
+    */
+    bool pegc_has_error( pegc_parser const * st );
+
+    /**
+       Returns true if st is not null and !pegc_eof(st)
+       and !pegc_has_errors(st). Remember that parsing
+       may legally move the parser to EOF, so do not use
+       this to check for external errors after a parse. Use
+       pegc_eof() and pegc_has_error() instead.
+    */
+    bool pegc_isgood( pegc_parser const * st );
+
+    /**
+       Calculates the line and column position of st by counting
+       newline characters, writing them to the given line and col
+       pointers (which must not be 0). The line number starts at one
+       and column starts at zero (because this is how emacs does it).
+
+       Returns false if any of the arguments are null, otherwise
+       returns true.
+
+       Note that this is a linear-time operation, as rules to not
+       update this information themselves (it would complicate the
+       implementation of nearly every single rule).
+    */
     bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
+
+    /**
+       Gets the current error string (which may be 0), line, and column. The string is
+       owned by the parser.
+
+       An of the integer pointers may be 0.
+
+       It returns 0 if:
+
+       - (!st)
+
+       - No error has been set using pegc_set_error().
+    */
+    char const * pegc_get_error( pegc_parser const * st,
+				 unsigned int * line,
+				 unsigned int * col,
+				 unsigned int * clientID );
+
+    /**
+       Copies the given null-terminated string as the current error
+       message for the parser. Also sets the line/column position.
+       The error can be fetched with pegc_get_error().
+
+       The clientNumber parameter is a client-determined number which
+       is not used by this library but is returned by pegc_get_error().
+
+       If msg if NULL then the error state is cleared and clientID
+       is ignored.
+
+       Returns false if:
+
+       - st is null
+
+       - cannot allocate memory for the error string.
+
+       Note that because it must allocate memory for the error string,
+       it is not a wise idea to set this in response to alloc errors.
+    */
+    bool pegc_set_error( pegc_parser * st, int clientID, char * const fmt, ... );
 
     /**
        Returns st's cursor.
@@ -433,7 +504,9 @@ extern "C" {
     struct PegcRule
     {
 	/**
-	   This object's rule function.
+	   This object's rule function. An object with a rule of 0
+	   is said to be "invalid" (several API routines use this
+	   term).
 	*/
 	PegcRule_mf rule;
 
@@ -481,6 +554,12 @@ extern "C" {
 	} _internal;
     };
     typedef struct PegcRule PegcRule;
+
+    /**
+       Returns true if (r && r->rule). Note that it does not
+       know about rule-specific validity checks.
+    */
+    bool pegc_is_rule_valid( PegcRule const * r );
 
     /**
        If either st or r are null then this function returns false,
@@ -601,6 +680,8 @@ extern "C" {
        This allocates resources for the returned rule which belong to
        this API and are freed when st is destroyed.
 
+       If st or li are null then an invalid rule is returned.
+
        The null-termination approach was chosen over the client
        explicitly providing the length of the list because when
        editing rule lists (which happens a lot during development) it
@@ -622,7 +703,8 @@ extern "C" {
 
     /**
        Works like pegc_r_list_a() but requires a NULL-terminated list of
-       (PegcRule const *).
+       (PegcRule const *). If the list cannot be constructed for some
+       reason then an invalid rule is returned.
 
        Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
     */
@@ -738,6 +820,19 @@ extern "C" {
        If you do not want to discard left/right but do want the
        mainRule match isolated from left/right then use an action as
        mainRule and fetch the match from there.
+
+       As an example of how discardLeftRight affects the match and iterator:
+
+       \code
+       PegcRule colon = pegc_r_char(':',true);
+       PegcRule word = pegc_r_plus( &PegcRule_alpha );
+       PegcRule R = pegc_r_pad( myParser, &colon, &word, &colon, true );
+       \endcode
+
+       When the string "::token::xyz" is parsed using the R rule, the
+       position of the parser will be 'x', but the match string will be
+       "token". It is possible to capture the left/right pad rule matches
+       by wrapping them in an Action rule.
     */
     PegcRule pegc_r_pad( pegc_parser * st,
 			 PegcRule const * leftRule,
@@ -764,10 +859,16 @@ extern "C" {
     extern const PegcRule PegcRule_alpha;
 
     /**
-       An object implementing functionality identical to the isascii()
-       found in some C libraries
+       An object which matches a single character in the range
+       [0,127].
     */
     extern const PegcRule PegcRule_ascii;
+
+    /**
+       An object which matches a single character in the range
+       [0,255].
+    */
+    extern const PegcRule PegcRule_latin1;
 
     /**
        An object implementing functionality identical to the
