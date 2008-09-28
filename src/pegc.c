@@ -26,16 +26,16 @@ extern "C" {
 bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
 
 const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
-#define PEGC_INIT_RULE(F) { \
-     0 /* rule */,\
-     0 /* data */,\
+#define PEGC_INIT_RULE(F,D) {	\
+     F /* rule */,\
+     D /* data */,\
      0 /* proxy */,\
      /* client */ { 0/* flags */,0 /* data */},\
      /* _internal */ { 0 /* key */}\
 }
 
-const PegcRule PegcRule_init = PEGC_INIT_RULE(PegcRule_mf_failure);
-const PegcRule PegcRule_invalid = PEGC_INIT_RULE(0);
+const PegcRule PegcRule_init = PEGC_INIT_RULE(PegcRule_mf_failure,0);
+const PegcRule PegcRule_invalid = PEGC_INIT_RULE(0,0);
 
 /**
    Internal holder for "match listener" data. Match listeners get
@@ -253,14 +253,21 @@ static void pegc_register_hashtable( pegc_parser * st, hashtable * h )
 	hashtable_set_dtors( P->hashes.H, DK, DV ); \
 	pegc_register_hashtable(P,P->hashes.H); \
     }
+
+struct pegc_action_info
+{
+    pegc_action action;
+    void * data;
+};
+typedef struct pegc_action_info pegc_action_info;
 /**
    Associates 'a' with st and key. Does not change ownership of 'a'.
 
    Ownership of key is transfered to st.
 */
-static void pegc_actions_insert( pegc_parser * st, void * key, pegc_action a )
+static void pegc_actions_insert( pegc_parser * st, void * key, pegc_action_info * a )
 {
-    HASH_INIT(st,actions,free,0);
+    HASH_INIT(st,actions,free,free);
     hashtable_insert(st->hashes.actions, key, a);
 }
 
@@ -268,12 +275,12 @@ static void pegc_actions_insert( pegc_parser * st, void * key, pegc_action a )
    Returns the pegc_action associated with the given key, or 0 if none
    was found.  See pegc_actions_insert().
 */
-static pegc_action pegc_actions_search( pegc_parser * st, void const * key )
+static pegc_action_info * pegc_actions_search( pegc_parser * st, void const * key )
 {
     HASH_INIT(st,actions,free,free);
     void * r = hashtable_search( st->hashes.actions, key );
     //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
-    return r ? (pegc_action)r : 0;
+    return r ? (pegc_action_info*)r : 0;
 }
 
 /**
@@ -331,7 +338,6 @@ static void pegc_gc_add( pegc_parser * st, void * item )
     HASH_INIT(st,generic,free,0);
     hashtable_insert( st->hashes.generic, item, item );
 }
-
 
 #undef HASH_INIT
 
@@ -487,7 +493,7 @@ bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_ite
 	MARKER;fprintf(stderr,"WARNING: pegc_set_match() is out of bounds.\n");
 	return false;
     }
-    MARKER;printf("pegc_setting_match() setting match of %d characters.\n",(end-begin));
+    //MARKER;printf("pegc_setting_match() setting match of %d characters.\n",(end-begin));
     st->match.begin = begin;
     st->match.end = end;
     if( movePos )
@@ -629,14 +635,14 @@ PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * 
     PegcRule r1 = pegc_r(func,data);
     PegcRule * r = (PegcRule*) malloc(sizeof(PegcRule));
     if( ! r ) return 0;
-    /**
-       FIXME? Allocate these in blocks, to avoid a large number
-       of mallocs()?
-    */
     *r = r1;
     if( st )
     {
-	pegc_rules_insert( st, (r->_internal.key = pegc_next_hash_key(st)), r );
+	/**
+	   Bug in waiting? We're using r->_internal.key, and probably shouldn't.
+	*/
+	//pegc_rules_insert( st, (r->_internal.key = pegc_next_hash_key(st)), r );
+	pegc_gc_add( st, r );
     }
     return r;
 }
@@ -651,12 +657,12 @@ bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
     return false;
 }
-const PegcRule PegcRule_failure = {PegcRule_mf_failure,0};
+const PegcRule PegcRule_failure = PEGC_INIT_RULE(PegcRule_mf_failure,0);
 bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
 {
     return true;
 }
-const PegcRule PegcRule_success = {PegcRule_mf_success,0};
+const PegcRule PegcRule_success = PEGC_INIT_RULE(PegcRule_mf_success,0);
 
 
 static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, bool caseSensitive )
@@ -988,11 +994,15 @@ static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
     if( rc )
     {
 	pegc_set_match( st, orig, pegc_pos(st), true );
-	pegc_action act = pegc_actions_search( st, self->_internal.key );
+	pegc_action_info * act = pegc_actions_search( st, self->_internal.key );
 	//MARKER; printf("action = %p\n", act);
 	if( act )
 	{
-	    (*act)(st);
+	    (*act->action)( st, act->data );
+	}
+	else
+	{
+	    fprintf(stderr,"%s:%d:PegcRule_mf_action(): internal error: rule is missing its action information.\n");
 	}
 	return true;
     }
@@ -1000,7 +1010,10 @@ static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
     return false;
 }
 
-PegcRule pegc_r_action( pegc_parser * st, PegcRule const * rule, pegc_action onMatch )
+PegcRule pegc_r_action( pegc_parser * st,
+			PegcRule const * rule,
+			pegc_action onMatch,
+			void * clientData )
 {
     //MARKER;
     PegcRule r = PegcRule_init;
@@ -1009,9 +1022,13 @@ PegcRule pegc_r_action( pegc_parser * st, PegcRule const * rule, pegc_action onM
     r.rule = PegcRule_mf_action;
     if( onMatch )
     {
+	pegc_action_info * info = (pegc_action_info*)malloc(sizeof(pegc_action_info));
+	if( ! info ) return PegcRule_invalid;
+	info->action = onMatch;
+	info->data = clientData;
 	r._internal.key = pegc_next_hash_key(st);
 	//MARKER; printf("action key = %p\n", l);
-	pegc_actions_insert( st, r._internal.key, onMatch );
+	pegc_actions_insert( st, r._internal.key, info );
     }
     return r;
 }
@@ -1063,7 +1080,7 @@ static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
     } \
     return false; \
 }\
-const PegcRule PegcRule_ ## F = {PegcRule_mf_ ## F,0}
+const PegcRule PegcRule_ ## F = {PegcRule_mf_ ## F,0,0}
 
 ACPRULE_ISA(alnum);
 ACPRULE_ISA(alpha);
@@ -1101,7 +1118,20 @@ static bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st )
 {
     return pegc_eof(st);
 }
-const PegcRule PegcRule_eof = {PegcRule_mf_eof, 0};
+const PegcRule PegcRule_eof = PEGC_INIT_RULE(PegcRule_mf_eof,0);
+static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self || ! st ) return false;
+    const PegcRule crnl = pegc_r_string("\r\n",true);
+    if( crnl.rule( &crnl, st ) ) return true;
+    const PegcRule nl = pegc_r_char('\n',true);
+    return nl.rule( &nl, st );
+}
+
+PegcRule pegc_r_eol()
+{
+    return pegc_r( PegcRule_mf_eol, 0 );
+}
 
 static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
 {
@@ -1247,6 +1277,71 @@ PegcRule pegc_r_repeat( pegc_parser * st,
     r.proxy = rule;
     return r;
 }
+
+struct pegc_pad_info
+{
+    PegcRule const * left;
+    PegcRule const * right;
+    bool discard;
+};
+typedef struct pegc_pad_info pegc_pad_info ;
+static bool PegcRule_mf_pad( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self || !st || !self->rule ) return false;
+    PegcRule const * left = 0;
+    PegcRule const * right = 0;
+    pegc_pad_info const * info = (pegc_pad_info const *)self->data;
+    pegc_const_iterator orig = pegc_pos(st);
+    pegc_const_iterator tail = 0;
+    if( info && info->left )
+    {
+	info->left->rule( info->left, st );
+	if( info->discard ) orig = pegc_pos(st);
+    }
+    bool ret = self->proxy->rule( self->proxy, st );
+    tail = pegc_pos(st);
+    if( ret && info && info->right )
+    {
+	info->right->rule( info->right, st );
+	if( ! info->discard ) tail = pegc_pos(st);
+    }
+    if( ret )
+    {
+	pegc_set_match( st, orig, tail, true );
+	return true;
+    }
+    pegc_set_pos( st, orig );
+    return false;
+}
+PegcRule pegc_r_pad( pegc_parser * st,
+		     PegcRule const * left,
+		     PegcRule const * rule,
+		     PegcRule const * right,
+		     bool discardLeftRight )
+{
+    if( !st || !rule ) return PegcRule_invalid;
+    if( ! left || !right ) return *rule;
+    PegcRule r = pegc_r( PegcRule_mf_pad, 0 );
+    r.proxy = rule;
+    if( left || right )
+    {
+	pegc_pad_info * d = (pegc_pad_info *) malloc(sizeof(pegc_pad_info));
+	if( ! d ) return PegcRule_invalid;
+	d->discard = discardLeftRight;
+	r.data = d;
+	pegc_gc_add( st, d );
+	if( left )
+	{
+	    d->left = pegc_copy_r( st, pegc_r_star( left ) );
+	}
+	if( right )
+	{
+	    d->right = pegc_copy_r( st, pegc_r_star( right ) );
+	}
+    }
+    return r;
+}
+
 
 bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end )
 {

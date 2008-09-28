@@ -10,7 +10,7 @@
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-void my_pegc_action( pegc_parser const * st )
+void my_pegc_action( pegc_parser const * st, void * unused )
 {
     char * c = pegc_get_match_string(st);
     MARKER; printf( "my_pegc_action got a match: [%s]\n", c ? c : "<EMPTY>");
@@ -43,7 +43,7 @@ int test_one()
     PegcRule rI = pegc_r_char( 'i', true );
     PegcRule rHI = pegc_r_or( st, &rI, &rH );
     PegcRule rHIPlus = pegc_r_plus(&rHI);
-    NR = pegc_r_action( st, &rHIPlus, my_pegc_action );
+    NR = pegc_r_action( st, &rHIPlus, my_pegc_action, 0 );
     NR = pegc_r_star( &PegcRule_blank );
 #if 0
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
@@ -54,7 +54,7 @@ int test_one()
 	;
 #endif
     //NR = pegc_r_notat(&PegcRule_digit);
-    NR = pegc_r_action( st, &starAlpha, my_pegc_action );
+    NR = pegc_r_action( st, &starAlpha, my_pegc_action, 0 );
     //NR = pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
 #undef ACPMF
@@ -126,11 +126,41 @@ int test_two()
     pegc_destroy_parser(P);
     return rc;
 }
+
+int test_three()
+{
+    MARKER; printf("test three...\n");
+    char const * src = "::token::::";
+    pegc_parser * P;
+    pegc_create_parser( &P, src, -1 );
+
+    PegcRule colon = pegc_r_char(':',true);
+    PegcRule word = pegc_r_plus( &PegcRule_alpha );
+    PegcRule R = pegc_r_pad( P, &colon, &word, &colon, true );
+    int rc = 0;
+    if( pegc_parse(P, &R) )
+    {
+	rc = 0;
+	char * m  = pegc_get_match_string(P);
+	printf("Got match on [%s]: [%s]\n",src, m?m:"<EMPTY>");
+	free(m);
+    }
+    else
+    {
+	rc = 1;
+	printf("failed to match [%s]\n",src);
+    }
+
+    pegc_destroy_parser( P );
+    return rc;
+}
+
 int main( int argc, char ** argv )
 {
     int rc = 0;
-    rc = test_one();
+    //rc = test_one();
     //if(!rc) rc = test_two();
+    if(!rc) rc = test_three();
     printf("Done rc=%d.\n",rc);
     return rc;
 }

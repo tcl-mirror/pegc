@@ -647,21 +647,25 @@ extern "C" {
        Actions can act on client-side data by setting st->client.data
        and accessing it from the action.
     */
-    typedef void (*pegc_action)( pegc_parser const * st );
+    typedef void (*pegc_action)( pegc_parser const * st, void * clientData );
 
     /*
       Creates a new Action. If rule matches then onMatch(pegc_parser*)
-      is called. onMatch can fetch the matched string (which must have
-      been set by rule) using pegc_get_match_string() or
-      pegc_get_match_cursor().
+      is called. onMatch can fetch the matched string using
+      pegc_get_match_string() or pegc_get_match_cursor().
 
       This allocates resources for the returned rule which belong to
       this API and are freed when st is destroyed.
 
+      The clientData argument may be 0 and is not used by this API,
+      but is passed on to onMatch as-is. This can be used to
+      accumulate parsed tokens in a client-side structure, convert
+      tokens to (e.g.) integers, or whatever the client needs to do.
      */
     PegcRule pegc_r_action( pegc_parser * st,
 			    PegcRule const * rule,
-			    pegc_action onMatch );
+			    pegc_action onMatch,
+			    void * clientData );
 
     /**
        Creates a rule which matches between min and max
@@ -686,6 +690,45 @@ extern "C" {
 			    PegcRule const * rule,
 			    unsigned int min,
 			    unsigned int max );
+
+    /**
+       Creates a rule which matches if the equivalent of:
+
+       ((leftRule*) && mainRule && (rightRule*))
+
+       This is normally used to match leading or trailing spaces.
+
+       Either or both of leftRule and rightRule to be 0, but both st
+       and mainRule must be valid.  As a special case, if both
+       leftRule and leftRule are 0 then the returned rule is a bitwise
+       copy of mainRule and no extra resources need to be allocated.
+
+       There two policies for how the matched string is set by this
+       rule:
+
+       - If discardLeftRight is false then leftRule's and rightRule's
+       matches (if any) contribute to the matched string.
+
+       - If discardLeftRight is true then leftRule's and rightRule's
+       matches (if any) do not contribute to the matched string. That is,
+       the matched string represents only mainRule's match, but the parser's
+       current position will be set for rightRule's match (if any).
+
+       If you do not want to discard left/right but do want the
+       mainRule match isolated from left/right then use an action as
+       mainRule and fetch the match from there.
+    */
+    PegcRule pegc_r_pad( pegc_parser * st,
+			 PegcRule const * leftRule,
+			 PegcRule const * mainRule,
+			 PegcRule const * rightRule,
+			 bool discardLeftRight);
+
+    /**
+       Returns a rule which matches either a carriage return followed
+       by a newline, or a newline (in that order).
+    */
+    PegcRule pegc_r_eol();
 
     /**
        An object implementing functionality identical to the
