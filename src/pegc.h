@@ -44,34 +44,34 @@ API Notes and Conventions:
 Parsers are created using pegc_create_parser() and destroyed using
 pegc_destroy_parser().
 
-Rules are modelled using PegcRule objects, which conceptually hold
-a function pointer (the rule implementation), rule-specific static
-data (e.g. a list of characters to match against), an optional
+Rules are modelled using PegcRule objects, which conceptually hold a
+function pointer (the rule implementation), rule-specific static data
+(e.g. a list of characters to match against), an optional
 client-provided data pointer, and (in some cases) "hidden" dynamically
 allocated data (some rules cannot be implemented using only static
-data). Rule objects are created either by using the pegc_r_XXX() family of
-functions or providing customized PegcRule objects.
+data). Rule objects are created either by using the pegc_r_XXX()
+family of functions or providing customized PegcRule objects.
 
-Note that many pegc_r_XXX() functions can be created without having a
-parser object, but some require a parser object so that they have a
-place to "attach" dynamically allocated resources and avoid memory
-leaks. This API inconsistency wouldn't be necessary in a language with
-destructors (because rules could free their own resources), but this
-approach would seem to be the only feasible solution in C (unless a
+Many pegc_r_XXX() functions can be called without having a parser
+object, but some require a parser object so that they have a place to
+"attach" dynamically allocated resources and avoid memory leaks. This
+API inconsistency wouldn't be necessary in a language with destructors
+(because rules could free their own resources), but this approach
+would seem to be the only feasible solution in C (unless a
 full-fledged garbage collector was built in to this library). An
 important consideration when building parsers which use such rules is
 that one only needs to create each rule one time for any given
-parser. For example, if you need a certain list of rules in several
-places in your grammar, it is wise to create that list only once and
-reference it throughout the grammar, instead of calling
-pegc_r_list_a() (or similar) each time an identical rule is needed.
-Failing to follow this guideline will result in significantly larger
-memory costs for the parser.
+parser. Rules have, by convention, no non-const state, so it is safe
+to share them within the context of a given parser.  For example, if
+you need a certain list of rules in several places in your grammar, it
+is wise to create that list only once and reference it throughout the
+grammar, instead of calling pegc_r_list_a() (or similar) each time an
+identical rule is needed.  Failing to follow this guideline will
+result in significantly larger memory costs for the parser.
 
-
-Rules can be composed to form parsers of arbitrary complexity, starting
-with a single root/top/start rule, which then delegates as necessary
-for the specific grammar.
+Rules can be composed to form parsers of arbitrary complexity,
+starting with a single root/top/start rule, which then delegates as
+necessary for the specific grammar.
 
 Some examples of pegc rules:
 
@@ -98,11 +98,12 @@ API can avoid overrunning the bounds of a rule list.
 
 Thread safety:
 
-It is never legal to use the same instance of a parser in multiple threads
-at one time, as the parsing process continually updates the parser state.
-No routines in this library (currenly) rely on shared data in a
-manner which prohibits multiple threads from running different parsers
-at the same time.
+It is never legal to use the same instance of a parser in multiple
+threads at one time, as the parsing process continually updates the
+parser state.  With two small exception during initialization and
+cleanup, no routines in this library rely on any shared data in a manner which
+prohibits multiple threads from running different parsers at the same
+time.
 ************************************************************************/
 #include <stdarg.h>
 #ifdef __cplusplus
@@ -164,10 +165,16 @@ extern "C" {
     */
     bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end );
 
+    /**
+       pegc_parser is the parser class used by the pegc API. It is an
+       opaque type used by almost all functions in the API. This type
+       holds information about the current state of a given parse,
+       such as the input range, a pointer to the current position of
+       the input, and sometimes memory dynamically allocated by
+       various rules.
+    */
     struct pegc_parser;
     typedef struct pegc_parser pegc_parser;
-
-
 
     /**
        Creates a new parser, assigns it to st, and sets it up to point
@@ -219,6 +226,8 @@ extern "C" {
        Rules should check this value before doing any comparisons.
     */
     bool pegc_eof( pegc_parser const * st );
+
+    bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
 
     /**
        Returns st's cursor.
@@ -367,27 +376,19 @@ extern "C" {
 
     /**
        Associates data with the given parser. This library places no
-       significance on the data with one exception:
-
-       If the dtor parameter is non-null then when
-       pegc_destroy_parser(st) is called, the dtor function will be
-       called and passed the client data.
+       significance on the data parameter - it is owned by the caller
+       and can be fetched with pegc_get_client_data().
 
        Client-specific data can be used to hold, e.g., parser state
        information specific to the client's parser.
-
-       If this function is called multiple times, the client is responsible
-       for calling the dtor function (or similar) on the data if needed.
-       This API only uses the dtor in pegc_destroy_parser(), and only if
-       it is not NULL.
     */
-    void pegc_set_client_data( pegc_parser * st, void * data, void (*dtor)(void*) );
+    void pegc_set_client_data( pegc_parser const * st, void * data );
 
     /**
        Returns the data associated with st via pegc_set_client_data(), or 0
        if no data has been associated or st is null.
     */
-    void * pegc_get_client_data( pegc_parser * st );
+    void * pegc_get_client_data( pegc_parser const * st );
 
 
     struct PegcRule;
@@ -516,6 +517,13 @@ extern "C" {
     /**
        Like pegc_alloc_r() (with the same ownership conventions),
        but copies all data from r.
+
+       Note that this is a shallow copy.Data pointed to by r or
+       sub(sub(sub))-rules of r are not copied.
+
+       This routine is often useful when constructing compound rules.
+       For many examples of when/why to use it, see pegc.c and
+       search for this function name.
     */
     PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const r );
 
@@ -641,13 +649,26 @@ extern "C" {
     PegcRule pegc_r_and_e( pegc_parser * st, ... );
 
     /**
-       Typedef for Action functions. Actions are run in response to
-       rules. Actions are created using pegc_r_action().
+       Typedef for Action functions. Actions are created using
+       pegc_r_action() and are triggered when their proxy rule
+       matches.
 
-       Actions can act on client-side data by setting st->client.data
-       and accessing it from the action.
+       Actions can act on client-side data in two ways:
+
+       - By passing a data object as the 4th paramter to
+       pegc_r_action(). This approach is useful if different
+       subparsers need different types of state.
+
+       - By calling pegc_set_client_data() and accessing it from the
+       action. If all actions access the same shared state, this is
+       the simplest approach.
+
+       Actions normally should not modify st, but st is not const so
+       that client actions have non-const access to data set via
+       pegc_set_client_data(). Changing the position of the parser
+       will affect down-stream rules, so try not to do it from here.
     */
-    typedef void (*pegc_action)( pegc_parser const * st, void * clientData );
+    typedef void (*pegc_action)( pegc_parser * st, void * clientData );
 
     /*
       Creates a new Action. If rule matches then onMatch(pegc_parser*)
@@ -814,20 +835,19 @@ extern "C" {
     extern const PegcRule PegcRule_digits;
 
     /**
-       Creates a rule which matches a decimal integer
-       (optionally signed), but only if the integer part
-       is not followed by an "illegal" character, namely:
+       Creates a rule which matches a decimal integer (optionally
+       signed), but only if the integer part is not followed by an
+       "illegal" character, namely:
 
        [._a-zA-Z]
 
-       Any other trailing characters (including EOF)
-       are considered legal.
+       Any other trailing characters (including EOF) are considered
+       legal.
 
-       This rule requires a "relatively" large amount
-       of dynamic resources (for several sub-rules),
-       so it is highly recommended that only one
-       instance is created per pegc_parser instance,
-       and then shared throughout the parser.
+       This rule requires a "relatively" large amount of dynamic
+       resources (for several sub-rules), but it caches the rules on a
+       per-parser basis.  This subsequent calls with the same parser
+       argument will always return a handle to a single object.
     */
     PegcRule pegc_r_int_dec_strict( pegc_parser * st );
 

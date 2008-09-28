@@ -292,6 +292,7 @@ void hashtable_set_dtors( hashtable * h, void (*keyDtor)( void * ), void (*valDt
 void
 hashtable_destroy(hashtable *h)
 {
+    if( ! h ) return;
     hashval_t i;
     hashtable_entry *e, *f;
     hashtable_entry **table = h->table;

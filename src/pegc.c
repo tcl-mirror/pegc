@@ -33,7 +33,6 @@ const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
      /* client */ { 0/* flags */,0 /* data */},\
      /* _internal */ { 0 /* key */}\
 }
-
 const PegcRule PegcRule_init = PEGC_INIT_RULE(PegcRule_mf_failure,0);
 const PegcRule PegcRule_invalid = PEGC_INIT_RULE(0,0);
 
@@ -52,6 +51,11 @@ typedef struct pegc_match_listener_data pegc_match_listener_data;
 const static pegc_match_listener_data
 pegc_match_listener_data_init = {0,0,0};
 
+/**
+   For mapping parsers to client-supplied data.
+ */
+static hashtable * pegc_hashClientData = 0;
+
 struct pegc_parser
 {
     char const * name; /* for debugging + error reporting purposes */
@@ -66,11 +70,12 @@ struct pegc_parser
        and for garbage collection.
     */
     struct {
-	hashtable * hashes; // GC for the following hashtables...
-	hashtable * actions;
-	hashtable * rulelists;
-	hashtable * rules;
-	hashtable * generic; // GC for (void*)
+	hashtable * hashes; /* GC for the following hashtables... */
+	hashtable * actions; /* data for Actions. */
+	hashtable * rulelists; /* data for rule lists */
+	hashtable * rules; /* not currently used (used to be) */
+	hashtable * generic; /* GC for (void*) */
+	hashtable * funcptr; /* for mapping funcs to shared/reusable objects. */
     } hashes;
 #if 0
     struct {
@@ -85,7 +90,7 @@ struct pegc_parser
 	void (*dtor)(void*);
     } client;
 };
-
+static unsigned int pegc_parser_instanceCount = 0;
 static const pegc_parser
 pegc_parser_init = { 0, /* name */
 		    {0,0,0}, /* cursor */
@@ -96,7 +101,8 @@ pegc_parser_init = { 0, /* name */
 		    0, /* actions */
 		    0, /* rulelists */
 		    0, /* rules */
-		    0 /* generic */
+		    0, /* generic */
+		    0 /* funcptr */
 		    },
 #if 0
 		     {/* keys */
@@ -339,6 +345,34 @@ static void pegc_gc_add( pegc_parser * st, void * item )
     hashtable_insert( st->hashes.generic, item, item );
 }
 
+/**
+   This hashtable maps arbitrary data to a combination of (st,key). It
+   is used by functions which dynamically create rules and cache those
+   results for use in subsequent calls. The key should be a function
+   pointer (the function we're mapping the data to) and the value is
+   arbitrary. Ownership of all arguments is unchanged. Normally one
+   needs to call pegc_gc_add(st,val) (or similar) after calling this
+   if st is to take over ownership of it.
+*/
+static void pegc_funcptr_insert( pegc_parser * st, void * key, void * val )
+{
+    HASH_INIT(st,funcptr,0,0);
+    hashtable_insert( st->hashes.funcptr, key, key );
+}
+
+/**
+   Returns the data associated with the given key, or 0 if none
+   was found. See pegc_funcptr_insert().
+*/
+static void * pegc_funcptr_search( pegc_parser * st, void const * key )
+{
+    HASH_INIT(st,funcptr,0,0);
+    void * r = hashtable_search( st->hashes.funcptr, key );
+    //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
+    return r;
+}
+
+
 #undef HASH_INIT
 
 
@@ -371,18 +405,40 @@ pegc_const_iterator pegc_latin1(int ch)
 
 
 
-void pegc_set_client_data( pegc_parser * st, void * data, void (*dtor)(void*) )
+void pegc_set_client_data( pegc_parser const * st, void * data ) /* , void (*dtor)(void*) */
 {
+#if 0
     if( st )
     {
 	st->client.data = data;
 	st->client.dtor = dtor;
     }
+#else
+    if( ! pegc_hashClientData )
+    {
+	/* there is a miniscule race condition here if
+	   two threads call this routine.
+	*/
+	pegc_hashClientData = hashtable_create(3, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr );
+	if( ! pegc_hashClientData )
+	{
+	    fprintf(stderr,"%s:%d:pegc_set_client_data() could not create hashtable! Out of memory?\n",
+		    __FILE__,__LINE__);
+	    return;
+	}
+	hashtable_set_dtors( pegc_hashClientData, 0, 0 );
+    }
+    hashtable_insert( pegc_hashClientData, (pegc_parser* /*i hate this cast!*/)st, data );
+#endif
 }
 
-void * pegc_get_client_data( pegc_parser * st )
+void * pegc_get_client_data( pegc_parser const * st )
 {
+#if 0
     return st ? st->client.data : NULL;
+#else
+    return 0;
+#endif
 }
 
 bool pegc_eof( pegc_parser const * st )
@@ -448,6 +504,31 @@ bool pegc_bump( pegc_parser * st )
 long pegc_distance( pegc_parser const * st, pegc_const_iterator e )
 {
     return (st&&e) ? (e - pegc_pos(st)) : 0;
+}
+
+bool pegc_line_col( pegc_parser const * st,
+		    unsigned int * line,
+		    unsigned int * col )
+{
+    if( !st || ! line || !col ) return false;
+    *line = 1;
+    *col = 0;
+    PegcRule eol = pegc_r_eol();
+    pegc_const_iterator pos = pegc_pos(st);
+    pegc_const_iterator beg = pegc_begin(st);
+    for( ; beg && *beg && (beg != pos ); ++beg )
+    {
+	if( *beg == '\n' )
+	{
+	     ++(*line);
+	     *col = 0;
+	}
+	else
+	{
+	    ++(*col);
+	}
+    }
+    return true;
 }
 
 pegc_cursor pegc_get_match_cursor( pegc_parser const * st )
@@ -1180,30 +1261,50 @@ static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
 PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 {
     if( ! st ) return PegcRule_invalid;
-    /**
-       Fixme: use a hashtable to find out if st already has an
-       instance of this rule, and re-use it if it does.  The problem
-       is where to put the key, unless we add a list of such keys to
-       pegc_parser and search through them. i don't like that idea,
-       though.
-
-       Reminder we have to copy the rules here because we need the
-       sub-rules to be valid pointers after this routine returns.
-    */
+    void * x = pegc_funcptr_search( st, PegcRule_mf_int_dec_strict );
     PegcRule r = PegcRule_int_dec_strict;
-    PegcRule * sign = pegc_copy_r( st, pegc_r_oneof("+-",true) );
-    PegcRule * prefix = pegc_copy_r( st, pegc_r_opt( sign ) );
-    PegcRule * integer = pegc_copy_r( st, pegc_r_and_e( st, prefix, &PegcRule_digits, 0 ) );
+    PegcRule * proxy = 0;
+    if( x )
+    {
+	proxy = (PegcRule *)x;
+    }
+    else
+    {
+	/**
+	   Reminder: we have to copy the rules here because we need
+	   the sub-rules to be valid pointers after this routine
+	   returns.
+	*/
+	PegcRule * sign = pegc_copy_r( st, pegc_r_oneof("+-",true) );
+	PegcRule * prefix = pegc_copy_r( st, pegc_r_opt( sign ) );
+	PegcRule * integer = pegc_copy_r( st, pegc_r_and_e( st, prefix, &PegcRule_digits, 0 ) );
 
+	/**
+	   After we've matched digits we need to ensure that the next
+	   character is [what we consider to be] legal.
+	*/
+	PegcRule * uscore = pegc_copy_r( st, pegc_r_oneof("._",true) );
+	PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, uscore, 0 ) );
+	PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
+	PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
+	proxy = pegc_copy_r( st, pegc_r_and( st, integer, end ) );
+
+	/**
+	   Now cache the rule and give it over to st:
+	*/
+	pegc_funcptr_insert( st, PegcRule_mf_int_dec_strict, proxy );
+	pegc_gc_add( st, proxy );
+    }
+    r.proxy = proxy;
     /**
-       After we've matched digits we need to ensure that the next
-       character is not illegal.
+       ^^^ instead of setting r.proxy we could just do
+       pegc_funcptr_search() in PegcRule_mf_int_dec_strict. That might
+       complicate debugging, thought, as our physical rule chain would
+       be effectively broken, so we couldn't effectively traverse the
+       rule chain in a debugger. Also, r.proxy is there, costs us
+       nothing extra, and is const-time access (unlike the hashtable
+       lookup).
     */
-    PegcRule * uscore = pegc_copy_r( st, pegc_r_oneof("._",true) );
-    PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, uscore, 0 ) );
-    PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
-    PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
-    r.proxy = pegc_copy_r( st, pegc_r_and( st, integer, end ) );
     return r;
 }
 
@@ -1360,8 +1461,8 @@ bool pegc_create_parser( pegc_parser ** st, char const * inp, long len )
     if( !inp || !*inp ) return false;
     pegc_parser * p = (pegc_parser*) malloc( sizeof(pegc_parser) );
     if( ! p ) return false;
+    ++pegc_parser_instanceCount;
     *p = pegc_parser_init;
-
     if( len < 0 ) len = strlen(inp);
     pegc_init_cursor( &p->cursor, inp, inp + len );
     *st = p;
@@ -1395,6 +1496,20 @@ bool pegc_destroy_parser( pegc_parser * st )
 	x = X;
     }
     free(st);
+    if( 0 == --pegc_parser_instanceCount )
+    {
+	if( pegc_hashClientData )
+	{
+	    /*
+	      There's tiny a race condition here if one thread calls
+	      pegc_set_client_data() at the moment that another
+	      thread is destructing the (previous) last instance.
+	    */
+	    hashtable * x = pegc_hashClientData;
+	    pegc_hashClientData = 0;
+	    hashtable_destroy( x );
+	}
+    }
     return true;
 }
 

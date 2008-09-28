@@ -10,7 +10,7 @@
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-void my_pegc_action( pegc_parser const * st, void * unused )
+void my_pegc_action( pegc_parser * st, void * unused )
 {
     char * c = pegc_get_match_string(st);
     MARKER; printf( "my_pegc_action got a match: [%s]\n", c ? c : "<EMPTY>");
@@ -49,7 +49,7 @@ int test_one()
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
 #else
     PegcRule starAlpha =
-	pegc_r_repeat(st,&PegcRule_alpha,0,1)
+	pegc_r_repeat(st,&PegcRule_alpha,3,10)
 	//pegc_r_opt(&PegcRule_alpha)
 	;
 #endif
@@ -98,17 +98,18 @@ int test_two()
     {
 	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
     }
-    src = "-3492xyz . asa";
+    src = "-3492 xyz . asa";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
     //pegc_add_match_listener( P, my_match_listener, P );
     int rc = 1;
-#if 1
+#if 0
     //PegcRule sign = pegc_r_oneof("+-",true);
     //PegcRule R = pegc_r_notat( &PegcRule_alpha );
     const PegcRule R = PegcRule_int_dec;
 #else
     const PegcRule R = pegc_r_int_dec_strict(P);
+    const PegcRule R2 = pegc_r_int_dec_strict(P);
 #endif
     printf("Source string = [%s]\n", src );
     if( pegc_parse(P, &R) )
@@ -158,8 +159,8 @@ int test_three()
 int main( int argc, char ** argv )
 {
     int rc = 0;
-    //rc = test_one();
-    //if(!rc) rc = test_two();
+    rc = test_one();
+    if(!rc) rc = test_two();
     if(!rc) rc = test_three();
     printf("Done rc=%d.\n",rc);
     return rc;
