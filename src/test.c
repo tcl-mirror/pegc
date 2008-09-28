@@ -137,14 +137,30 @@ int test_two()
 
 int test_three()
 {
+    if(1)
+    {
+	char const * in = "fbde";
+	char out[50];
+	memset(out,0,50);
+	int rc = sscanf(in,"%1[bdf]",&out[0]);
+	MARKER; printf("sscanf rc==%d, out=%s\n",rc,out);
+	//return -1;
+    }
+
+
     MARKER; printf("test three...\n");
-    char const * src = "ZYXtokenCBA";
+    char const * src = "ZYXtokenCBA!end";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
 
     PegcRule colon = pegc_r_char(':',true);
+#if 1
+    PegcRule rangeU = pegc_r_char_spec( P, "[A-Z]" );
+    PegcRule rangeL = pegc_r_char_spec( P, "[a-z]" );
+#else
     PegcRule rangeU = pegc_r_char_range( 'A','Z' );
     PegcRule rangeL = pegc_r_char_range( 'a','z' );
+#endif
     PegcRule delim = pegc_r_plus( &rangeU );
     PegcRule word = pegc_r_plus( &rangeL );
     PegcRule R = pegc_r_pad( P, &delim, &word, &delim, true );

@@ -658,7 +658,17 @@ extern "C" {
        range [start,end].
     */
     PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end );
-    //PegcRule pegc_r_char_range( char const * spec );
+    /**
+       Matches a single char in a set defined by the spec parameter.
+       spec must be in the format "[a-z]", where "abc" is a range
+       specified such as "a-z", "A-Z", or "a-zA-Z". It uses sscanf()
+       to do the parsing, so it supports any definition supported by
+       the '%[' specifier.
+       
+       If st or spec are null, or the first character of spec
+       is not a '[' then an invalid rule is returned.
+    */
+    PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec );
 
 
     /**

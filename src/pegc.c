@@ -732,7 +732,7 @@ bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_ite
 	return false;
     }
     //MARKER;printf("pegc_setting_match() setting match of %d characters.\n",(end-begin));
-    st->match.begin = begin;
+    st->match.pos = st->match.begin = begin;
     st->match.end = end;
     if( movePos )
     {
@@ -845,6 +845,52 @@ PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end )
     return r;
 }
 
+static bool PegcRule_mf_char_spec( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_isgood( st ) ) return false;
+    char const * spec = (char const *) self->data;
+    pegc_const_iterator orig = pegc_pos(st);
+#if 0
+    if( ! spec ) return false;
+    int len = 0;
+    const unsigned int fmtSize = strlen(spec) + 5;
+    char * fmt = (char *)malloc(fmtSize);
+    memset(fmt,0,fmtSize);
+    snprintf( fmt, fmtSize, "%%1%s", spec );
+    //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,fmt,strlen(fmt));
+    char ch[] = {0,0};
+    int rc = sscanf(pegc_pos(st), fmt, ch);
+    //MARKER;printf("sscanf rc=%d, ch=%s\n",rc,ch);
+    free(fmt);
+#else
+    //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,fmt,strlen(fmt));
+    char ch[] = {0,0};
+    int rc = sscanf(pegc_pos(st), spec, ch);
+#endif
+    //MARKER;printf("inChar=%c sscanf rc=%d, ch=%s\n",*orig,rc,ch);
+    if( 0 == rc ) return false;
+    pegc_set_match( st, orig, orig + 1, true );
+    return true;
+    /**
+       For reasons beyond my comprehension, SOMETIMES after returning
+       from here, st's data is completely hosed with out-of-bounds
+       pointers, causing a segfault. i have no clue why.
+    */
+}
+
+PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec )
+{
+    //MARKER;printf("WARNING: using broken PegcRule_mf_char_spec{%s}\n",spec);
+    if( ! st || !spec || (*spec != '[') ) return PegcRule_invalid;
+    const unsigned int fmtSize = strlen(spec) + 5;
+    char * fmt = (char *)malloc(fmtSize);
+    memset(fmt,0,fmtSize);
+    snprintf( fmt, fmtSize, "%%1%s", spec );
+    pegc_gc_add(st,fmt);
+    return pegc_r(PegcRule_mf_char_spec,fmt);
+}
+
+
 void pegc_clear_match( pegc_parser * st )
 {
     if( st ) pegc_set_match(st, 0, 0, false);
@@ -883,16 +929,6 @@ bool PegcRule_mf_oneofi( PegcRule const * self, pegc_parser * st );
 */
 bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st );
 
-/**
-   Requires that self->proxy be set to an object this routine can
-   use as a proxy rule.
-
-   Works like PegcRule_mf_star(), but matches 1 or more times.
-   This routine is "greedy", matching as long as it can UNLESS
-   self->data (the rule) does not consume input, in which case
-   this routine stops at the first match to avoid an endless loop.
-*/
-bool PegcRule_mf_plus( PegcRule const * self, pegc_parser * st );
 
 /**
    Requires that self->data be a pegc_const_iterator. Matches if
@@ -1089,7 +1125,16 @@ bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
-bool PegcRule_mf_plus( PegcRule const * self, pegc_parser * st )
+/**
+   Requires that self->proxy be set to an object this routine can
+   use as a proxy rule.
+
+   Works like PegcRule_mf_star(), but matches 1 or more times.
+   This routine is "greedy", matching as long as it can UNLESS
+   self->data (the rule) does not consume input, in which case
+   this routine stops at the first match to avoid an endless loop.
+*/
+static bool PegcRule_mf_plus( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
     pegc_const_iterator orig = pegc_pos(st);
