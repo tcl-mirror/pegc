@@ -193,8 +193,11 @@ valuetype * fnname (hashtable *h, keytype const *k) \
  *
  * Removes the given key from the hashtable and returns the value to
  * the caller.  If a match is found, hashtable_free_key(h,k) is called
- * to clean it (or not). The ownership of the returned pointer is
- * application-specific.
+ * to clean it (or not).
+ *
+ *  The ownership of the returned pointer is application-specific and
+ *  defined by the destructor set via hashtable_set_val_dtor().
+ *
  *
  * @name        hashtable_take
  * @param   h   the hashtable to remove the item from
@@ -208,10 +211,10 @@ hashtable_take(hashtable *h, void const *k);
 /**
    Works like hashtable_take(h,k), but also
    calls hashtable_free_val() if it finds a match, which may
-   (or may not) deallocate the object.
-
-   The ownership of the returned pointer is application-specific and
-   defined by the destructor set via hashtable_set_val_dtor().
+   (or may not) deallocate the object. Note that hashtable_take()
+   may deallocate the key (depends on the destructor assigned to
+   it), so the k parameter may not be valid after this function
+   returns.
 
    Returns 1 if it finds a value, else 0.
 */
