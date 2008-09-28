@@ -98,19 +98,26 @@ int test_two()
     {
 	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
     }
-    src = "-3492 xyz . asa";
+#define TRY_STRICT 1
+#if TRY_STRICT
+    src = "-3492 . xyz . asa";
+#else
+    src = "-3492.323asa";
+#endif
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
     //pegc_add_match_listener( P, my_match_listener, P );
     int rc = 1;
-#if 0
+#if ! TRY_STRICT
     //PegcRule sign = pegc_r_oneof("+-",true);
     //PegcRule R = pegc_r_notat( &PegcRule_alpha );
     const PegcRule R = PegcRule_int_dec;
+    //const PegcRule R = PegcRule_double;
 #else
     const PegcRule R = pegc_r_int_dec_strict(P);
     const PegcRule R2 = pegc_r_int_dec_strict(P); // just checking the cache hit
 #endif
+#undef TRY_STRICT
     printf("Source string = [%s]\n", src );
     if( pegc_parse(P, &R) )
     {
@@ -121,7 +128,7 @@ int test_two()
     }
     else
     {
-	printf("int_dec failed to match [%s]\n",src);
+	printf("number parse failed to match [%s]\n",src);
     }
     printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
     pegc_destroy_parser(P);
@@ -131,13 +138,16 @@ int test_two()
 int test_three()
 {
     MARKER; printf("test three...\n");
-    char const * src = "::token::::xyz";
+    char const * src = "ZYXtokenCBA";
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
 
     PegcRule colon = pegc_r_char(':',true);
-    PegcRule word = pegc_r_plus( &PegcRule_alpha );
-    PegcRule R = pegc_r_pad( P, &colon, &word, &colon, true );
+    PegcRule rangeU = pegc_r_char_range( 'A','Z' );
+    PegcRule rangeL = pegc_r_char_range( 'a','z' );
+    PegcRule delim = pegc_r_plus( &rangeU );
+    PegcRule word = pegc_r_plus( &rangeL );
+    PegcRule R = pegc_r_pad( P, &delim, &word, &delim, true );
     int rc = 0;
     if( pegc_parse(P, &R) )
     {

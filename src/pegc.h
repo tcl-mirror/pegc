@@ -653,6 +653,13 @@ extern "C" {
     */
     PegcRule pegc_r_char( pegc_char_t ch, bool caseSensitive );
 
+    /**
+       Returns a rule which matches any character in the inclusive
+       range [start,end].
+    */
+    PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end );
+    //PegcRule pegc_r_char_range( char const * spec );
+
 
     /**
        Creates a rule which matches if proxy matches, but does not
@@ -969,6 +976,18 @@ extern "C" {
        FIXME: use (long long) if C99 mode is enabled.
     */
     extern const PegcRule PegcRule_int_dec;
+
+    /**
+       Matches a double-precision floating point number (or optinally
+       signed decimal integer), in all formats supported by sscanf().
+
+       See PegcRule_int_dec for notes about the lack of
+       "tail checking".
+
+       Limitation: this type cannot parse numbers larger
+       than can be represented in a double.
+    */
+    extern const PegcRule PegcRule_double;
 
     /**
        A rule which matches only at EOF and never consumes.

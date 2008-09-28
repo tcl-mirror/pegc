@@ -791,6 +791,60 @@ bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long 
     return true;
 }
 
+static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_isgood( st ) ) return false;
+    int const * range = (int*) self->data;
+    if( ! range ) return false;
+#if 0
+    int min = range[0];
+    int max = range[1];
+#else
+    int evil = (int)self->data;
+    int min = ((evil >> 8) & 0x00ff);
+    int max = (evil & 0x00ff);
+    //MARKER;printf("min=%c, max=%c, evil=%d\n",min,max,evil);
+#endif
+    pegc_const_iterator orig = pegc_pos(st);
+    if( (*orig >= min) && (*orig <= max) )
+    {
+	//MARKER;printf("matched: ch=%c, min=%c, max=%c, evil=%d\n",*orig?*orig:'!',min,max,evil);
+	pegc_set_match(st,orig,orig+1,true);
+	return true;
+    }
+    return false;
+}
+
+PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end )
+//PegcRule pegc_r_char_range( char const * spec )
+{
+    //if( ! spec ) return PegcRule_invalid;
+    if( start > end )
+    {
+	pegc_char_t x = end;
+	start = end;
+	end = x;
+    }
+#if 0
+    int ** range = (int**)calloc( 2, sizeof(int*));
+    if( ! range ) return PegcRule_invalid;
+    pegc_gc_add( st, range );
+    *range[0] = start;
+    *range[1] = end;
+    PegcRule r = pegc_r( PegcRule_mf_char_range, range );
+#else
+    /**
+       i'm not proud of this, but i want to avoid allocating
+       for this rule, since i expect it to be used often.
+     */
+    unsigned int evil = ((start << 8) | end);
+    //MARKER;printf("min=%c, max=%c, evil=%d\n",start,end,evil);
+    PegcRule r = pegc_r( PegcRule_mf_char_range, 0 );
+    r.data = (void*)evil;
+#endif
+    return r;
+}
+
 void pegc_clear_match( pegc_parser * st )
 {
     if( st ) pegc_set_match(st, 0, 0, false);
@@ -1470,9 +1524,9 @@ static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
 PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 {
     if( ! st ) return PegcRule_invalid;
-    void * x = pegc_funcptr_search( st, PegcRule_mf_int_dec_strict );
     PegcRule r = PegcRule_int_dec_strict;
     PegcRule * proxy = 0;
+    void * x = pegc_funcptr_search( st, PegcRule_mf_int_dec_strict );
     if( x )
     {
 	proxy = (PegcRule *)x;
@@ -1484,16 +1538,19 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	   the sub-rules to be valid pointers after this routine
 	   returns.
 	*/
+#if 0
 	PegcRule * sign = pegc_copy_r( st, pegc_r_oneof("+-",true) );
 	PegcRule * prefix = pegc_copy_r( st, pegc_r_opt( sign ) );
 	PegcRule * integer = pegc_copy_r( st, pegc_r_and_e( st, prefix, &PegcRule_digits, 0 ) );
-
+#else
+	PegcRule const * integer = &PegcRule_int_dec;
+#endif
 	/**
 	   After we've matched digits we need to ensure that the next
 	   character is [what we consider to be] legal.
 	*/
-	PegcRule * uscore = pegc_copy_r( st, pegc_r_oneof("._",true) );
-	PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, uscore, 0 ) );
+	PegcRule * punct = pegc_copy_r( st, pegc_r_oneof("._",true) );
+	PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, punct, 0 ) );
 	PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
 	PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
 	proxy = pegc_copy_r( st, pegc_r_and( st, integer, end ) );
@@ -1516,6 +1573,18 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
     */
     return r;
 }
+
+static bool PegcRule_mf_double( PegcRule const * self, pegc_parser * st )
+{
+    pegc_const_iterator orig = pegc_pos(st);
+    double myv = 0.0;
+    int len = 0;
+    int rc = sscanf(pegc_pos(st), "%lf%n",&myv,&len);
+    if( (EOF == rc) || (0 == len) ) return false;
+    return pegc_set_match( st, orig, orig + len, true );
+}
+
+const PegcRule PegcRule_double = {PegcRule_mf_double,0};
 
 
 static bool PegcRule_mf_ascii_impl( PegcRule const * self, pegc_parser * st, int max )
@@ -1640,24 +1709,21 @@ PegcRule pegc_r_pad( pegc_parser * st,
 		     bool discardLeftRight )
 {
     if( !st || !rule ) return PegcRule_invalid;
-    if( ! left || !right ) return *rule;
+    if( ! left && !right ) return *rule;
     PegcRule r = pegc_r( PegcRule_mf_pad, 0 );
     r.proxy = rule;
-    if( left || right )
+    pegc_pad_info * d = (pegc_pad_info *) malloc(sizeof(pegc_pad_info));
+    if( ! d ) return PegcRule_invalid;
+    d->discard = discardLeftRight;
+    r.data = d;
+    pegc_gc_add( st, d );
+    if( left )
     {
-	pegc_pad_info * d = (pegc_pad_info *) malloc(sizeof(pegc_pad_info));
-	if( ! d ) return PegcRule_invalid;
-	d->discard = discardLeftRight;
-	r.data = d;
-	pegc_gc_add( st, d );
-	if( left )
-	{
-	    d->left = pegc_copy_r( st, pegc_r_star( left ) );
-	}
-	if( right )
-	{
-	    d->right = pegc_copy_r( st, pegc_r_star( right ) );
-	}
+	d->left = pegc_copy_r( st, pegc_r_star( left ) );
+    }
+    if( right )
+    {
+	d->right = pegc_copy_r( st, pegc_r_star( right ) );
     }
     return r;
 }
