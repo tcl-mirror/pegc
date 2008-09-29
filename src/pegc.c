@@ -94,8 +94,8 @@ struct pegc_parser
     } hashes;
     struct {
 	char * message;
-	int line;
-	int col;
+	unsigned int line;
+	unsigned int col;
 	int clientID;
     } errinfo;
     struct
@@ -1571,7 +1571,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
     if( ! st ) return PegcRule_invalid;
     PegcRule r = PegcRule_int_dec_strict;
     PegcRule * proxy = 0;
-    void * x = pegc_funcptr_search( st, PegcRule_mf_int_dec_strict );
+    void * x = pegc_funcptr_search( st, (void const *)PegcRule_mf_int_dec_strict );
     if( x )
     {
 	proxy = (PegcRule *)x;
@@ -1603,7 +1603,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	/**
 	   Now cache the rule and give it over to st:
 	*/
-	pegc_funcptr_insert( st, PegcRule_mf_int_dec_strict, proxy );
+	pegc_funcptr_insert( st, (void *)PegcRule_mf_int_dec_strict, proxy );
 	pegc_gc_add( st, proxy );
     }
     r.proxy = proxy;
