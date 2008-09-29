@@ -41,7 +41,7 @@ const float max_load_factor = 0.65;
 size_t hashtable_index(size_t tablelength, size_t hashvalue)
 {
     return (hashvalue % tablelength);
-};
+}
 #endif
 
 /*****************************************************************************/
