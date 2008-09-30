@@ -9,8 +9,10 @@ C++ parsing toolkits like Boost.Spirit and parsepp
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 License: Public Domain
 
+Home page: http://fossil.wanderinghorse.net/repos/pegc/
+
 pegc attempts to implement a model of parser which has become quite
-popular in C++, but within the limitations of C (e.g. lack of type
+popular in C++, but attempts to do so within the limitations of C (e.g. lack of type
 safety in many places, and no safe casts). As far as i am aware,
 pegc is the first C code of its type. The peg/leg project
 (http://piumarta.com/software/peg/) is similar but solves the problem
@@ -37,7 +39,6 @@ My theory is that once the basic set of rules are in place, it will be
 relatively easy to implement a self-hosted code generator which can
 read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
 is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
-
 
 API Notes and Conventions:
 
@@ -298,7 +299,7 @@ extern "C" {
        Note that because it must allocate memory for the error string,
        it is not a wise idea to set this in response to alloc errors.
     */
-    bool pegc_set_error( pegc_parser * st, int clientID, char * const fmt, ... );
+    bool pegc_set_error( pegc_parser * st, int clientID, char const * fmt, ... );
 
     /**
        Returns st's cursor.
@@ -858,12 +859,6 @@ extern "C" {
 			 bool discardLeftRight);
 
     /**
-       Returns a rule which matches either a carriage return followed
-       by a newline, or a newline (in that order).
-    */
-    PegcRule pegc_r_eol();
-
-    /**
        An object implementing functionality identical to the
        C-standard isalnum().
     */
@@ -1015,9 +1010,21 @@ extern "C" {
     extern const PegcRule PegcRule_failure;
 
     /**
-       An "invalid" rule, with all data members to 0.
+       An "invalid" rule, with all data members set to 0.
     */
     extern const PegcRule PegcRule_invalid;
+
+    /*
+      A rule which matches: (\r\n) / (\r) / (\n)
+    */
+    extern const PegcRule PegcRule_eol;
+
+    /**
+       Creates a rule which always returns false and sets the parser
+       error message to msg. The errorID is a client-determined
+       error ID number, as specified for pegc_set_error().
+    */
+    PegcRule pegc_r_error( char const * msg, int errorID );
 
 
 #ifdef __cplusplus

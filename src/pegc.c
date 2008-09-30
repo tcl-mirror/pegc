@@ -19,6 +19,7 @@ extern "C" {
 #define DUMPPOS(P) MARKER; printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
 #include "pegc.h"
 #include "hashtable.h"
+#include "hashtable_utility.h"
 /**
    We only use the clob API for dynamic allocation of error strings.
    If i could settle on having pre-alloced, fixed-length error
@@ -508,7 +509,7 @@ char const * pegc_get_error( pegc_parser const * st,
     return st->errinfo.message;
 }
 
-static bool pegc_set_error_v( pegc_parser * st, int clientID, char * const fmt, va_list vargs )
+static bool pegc_set_error_v( pegc_parser * st, int clientID, char const * fmt, va_list vargs )
 {
     if( ! st ) return false;
     if( st->errinfo.message ) free(st->errinfo.message);
@@ -533,7 +534,7 @@ static bool pegc_set_error_v( pegc_parser * st, int clientID, char * const fmt, 
     return true;
 }
 
-bool pegc_set_error( pegc_parser * st, int clientID, char * const fmt, ... )
+bool pegc_set_error( pegc_parser * st, int clientID, char const * fmt, ... )
 {
     va_list vargs;
     va_start( vargs, fmt );
@@ -568,7 +569,11 @@ void pegc_set_client_data( pegc_parser const * st, void * data ) /* , void (*dto
 	}
 	hashtable_set_dtors( pegc_hashClientData, 0, 0 );
     }
-    hashtable_insert( pegc_hashClientData, (pegc_parser* /*i hate this cast!*/)st, data );
+    void * key = (pegc_parser* /*i hate this cast!*/)st;
+    if( 0 == hashtable_change( pegc_hashClientData, key, data ) )
+    {
+	hashtable_insert( pegc_hashClientData, key, data );
+    }
 #endif
 }
 
@@ -661,7 +666,6 @@ bool pegc_line_col( pegc_parser const * st,
     if( !st || ! line || !col ) return false;
     *line = 1;
     *col = 0;
-    PegcRule eol = pegc_r_eol();
     pegc_const_iterator pos = pegc_pos(st);
     pegc_const_iterator beg = pegc_begin(st);
     for( ; beg && *beg && (beg != pos ); ++beg )
@@ -815,6 +819,14 @@ static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
     return false;
 }
 
+PegcRule pegc_r( PegcRule_mf rule, void const * data )
+{
+    PegcRule r = PEGC_INIT_RULE(rule,data);
+    //r.rule = rule; // ? rule : PegcRule_mf_failure;
+    //r.data = data;
+    return r;
+}
+
 PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end )
 //PegcRule pegc_r_char_range( char const * spec )
 {
@@ -850,23 +862,9 @@ static bool PegcRule_mf_char_spec( PegcRule const * self, pegc_parser * st )
     if( ! pegc_isgood( st ) ) return false;
     char const * spec = (char const *) self->data;
     pegc_const_iterator orig = pegc_pos(st);
-#if 0
-    if( ! spec ) return false;
-    int len = 0;
-    const unsigned int fmtSize = strlen(spec) + 5;
-    char * fmt = (char *)malloc(fmtSize);
-    memset(fmt,0,fmtSize);
-    snprintf( fmt, fmtSize, "%%1%s", spec );
-    //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,fmt,strlen(fmt));
-    char ch[] = {0,0};
-    int rc = sscanf(pegc_pos(st), fmt, ch);
-    //MARKER;printf("sscanf rc=%d, ch=%s\n",rc,ch);
-    free(fmt);
-#else
     //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,fmt,strlen(fmt));
     char ch[] = {0,0};
     int rc = sscanf(pegc_pos(st), spec, ch);
-#endif
     //MARKER;printf("inChar=%c sscanf rc=%d, ch=%s\n",*orig,rc,ch);
     if( 0 == rc ) return false;
     pegc_set_match( st, orig, orig + 1, true );
@@ -888,6 +886,21 @@ PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec )
     snprintf( fmt, fmtSize, "%%1%s", spec );
     pegc_gc_add(st,fmt);
     return pegc_r(PegcRule_mf_char_spec,fmt);
+}
+
+static bool PegcRule_mf_error( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self || ! st ) return false;
+    char const * msg = self->data ? (char const *)self->data : "unspecified error";
+    pegc_set_error( st, self->_internal.key ? (int)self->_internal.key : 0, msg );
+    return false;
+}
+
+PegcRule pegc_r_error( char const * errstr, int errorID  )
+{
+    PegcRule r = pegc_r( PegcRule_mf_error, errstr );
+    r._internal.key = (void*)errorID;
+    return r;
 }
 
 
@@ -953,13 +966,6 @@ bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st );
 */
 bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st );
 
-PegcRule pegc_r( PegcRule_mf rule, void const * data )
-{
-    PegcRule r = PegcRule_init;
-    r.rule = rule; // ? rule : PegcRule_mf_failure;
-    r.data = data;
-    return r;
-}
 
 PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * data )
 {
@@ -1508,14 +1514,11 @@ static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
     if( ! pegc_isgood(st) || !self ) return false;
     const PegcRule crnl = pegc_r_string("\r\n",true);
     if( crnl.rule( &crnl, st ) ) return true;
-    const PegcRule nl = pegc_r_char('\n',true);
+    const PegcRule nl = pegc_r_oneof("\r\n",true);
     return nl.rule( &nl, st );
 }
 
-PegcRule pegc_r_eol()
-{
-    return pegc_r( PegcRule_mf_eol, 0 );
-}
+const PegcRule PegcRule_eol = PEGC_INIT_RULE(PegcRule_mf_eol,0);
 
 static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
 {
