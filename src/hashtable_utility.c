@@ -12,9 +12,11 @@
  *
  * function to change the value associated with a key, where there already
  * exists a value bound to the key in the hashtable.
- * Source due to Holger Schemel.
- * 
- *  */
+ *
+ * Returns 0 if no match is found (and therefor not changed), else non-zero.
+ *
+ * Source by to Holger Schemel.
+ */
 int
 hashtable_change(hashtable *h, void *k, void *v)
 {
