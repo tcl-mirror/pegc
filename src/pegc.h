@@ -7,6 +7,7 @@ C++ parsing toolkits like Boost.Spirit and parsepp
 (http://wanderinghorse.net/cgi-bin/parsepp.cgi).
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
+
 License: Public Domain
 
 Home page: http://fossil.wanderinghorse.net/repos/pegc/
@@ -39,6 +40,8 @@ My theory is that once the basic set of rules are in place, it will be
 relatively easy to implement a self-hosted code generator which can
 read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
 is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
+
+========================================================================
 
 API Notes and Conventions:
 
@@ -96,25 +99,42 @@ The API provides routines for creating rule lists, but care must be
 taken to always terminate such lists with a NULL entry so that this
 API can avoid overrunning the bounds of a rule list.
 
+========================================================================
 
 Thread safety:
 
 It is never legal to use the same instance of a parser in multiple
 threads at one time, as the parsing process continually updates the
-parser state.  With two small exception during initialization and
-cleanup, no routines in this library rely on any shared data in a manner which
-prohibits multiple threads from running different parsers at the same
-time.
+parser state.  No routines in this library rely on any shared data
+in a manner which prohibits multiple threads from running different
+parsers at the same time.
+
+========================================================================
+
+Credits:
+
+Bryan Ford (http://www.brynosaurus.com) is, AFAIK, the originator of the
+PEG concept.
+
+PEGTL (http://code.google.com/p/pegtl/), by Dr. Colin Hirsch, was my first
+exposure to PEGs, and immediately piqued my interest in the topic. After
+implementing two libraries similar to PEGTL, i felt compelled to try it
+yet again, this time in plain old C.
+
+Christopher Clark implemented the hashtable code used by pegc for garbage
+collection.
 ************************************************************************/
+
 #include <stdarg.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #ifndef __cplusplus
-#ifndef PEGC_HAVE_STDBOOL
-#define PEGC_HAVE_STDBOOL 0
+#  ifndef PEGC_HAVE_STDBOOL
+#  define PEGC_HAVE_STDBOOL 0
 #endif
+
 #if defined(PEGC_HAVE_STDBOOL) && !(PEGC_HAVE_STDBOOL)
 /* i still can't fucking believe that C has no bool. */
 #  if !defined(bool)
@@ -131,6 +151,11 @@ extern "C" {
 #endif /* PEGC_HAVE_STDBOOL */
 #endif /* __cplusplus */
 
+    /**
+       We use typedefs for input types so that we can hopefully
+       refactor the library to handle non-(char const *) input without
+       too much work.
+    */
     typedef char pegc_char_t;
     typedef pegc_char_t const * pegc_const_iterator;
     typedef pegc_char_t * pegc_iterator;
@@ -175,8 +200,7 @@ extern "C" {
        opaque type used by almost all functions in the API. This type
        holds information about the current state of a given parse,
        such as the input range, a pointer to the current position of
-       the input, and sometimes memory dynamically allocated by
-       various rules.
+       the input, and memory dynamically allocated by various rules.
     */
     struct pegc_parser;
     typedef struct pegc_parser pegc_parser;
@@ -242,7 +266,7 @@ extern "C" {
        Returns true if st is not null and !pegc_eof(st)
        and !pegc_has_errors(st). Remember that parsing
        may legally move the parser to EOF, so do not use
-       this to check for external errors after a parse. Use
+       this to check for external errors *after* a parse. Use
        pegc_eof() and pegc_has_error() instead.
     */
     bool pegc_isgood( pegc_parser const * st );
@@ -263,16 +287,20 @@ extern "C" {
     bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
 
     /**
-       Gets the current error string (which may be 0), line, and column. The string is
-       owned by the parser.
+       Gets the current error string (which may be 0), line, column,
+       and "client error ID", as set by pegc_set_error(). The string
+       is owned by the parser.
 
-       An of the integer pointers may be 0.
+       Any of the integer pointers may be 0.
 
        It returns 0 if:
 
        - (!st)
 
        - No error has been set using pegc_set_error().
+
+       The returned string is owned by the parser and will be invalidated
+       by the next parsing operation which sets the error state.
     */
     char const * pegc_get_error( pegc_parser const * st,
 				 unsigned int * line,
@@ -302,9 +330,10 @@ extern "C" {
     bool pegc_set_error( pegc_parser * st, int clientID, char const * fmt, ... );
 
     /**
-       Returns st's cursor.
+       Returns st's cursor. Note that any parsing operations may change its
+       state.
     */
-    pegc_cursor * pegc_iter( pegc_parser * st );
+    pegc_cursor const * pegc_iter( pegc_parser const * st );
 
     /**
        Returns st's starting position.
@@ -370,7 +399,7 @@ extern "C" {
        for debug purposes.
 
        The clientData parameter is an arbitrary client pointer. This
-       API does nothing with it but pass it along to the callback.
+       API does nothing with it except pass it along to the callback.
     */
     void pegc_add_match_listener( pegc_parser * st, pegc_match_listener f, void * clientData );
 
@@ -431,13 +460,13 @@ extern "C" {
     void pegc_clear_match( pegc_parser * st );
 
     /**
-       Returns a pointer to a statically allocated length-one string of
-       all latin1 characters in the range [0,255]. The returned string
-       contains the value of the given character, such that pegc_latin1('c')
-       will return a pointer to a string with the value "c". The caller
-       must never modify nor deallocate the string, as it is statically allocated
-       the first time this routine is called. It is non-const because
-       we need to be able to pass it as a value to PegcRule.data.
+       Returns a pointer to a statically allocated length-one string
+       of all latin1 characters in the range [0,255]. The returned
+       string contains the value of the given character, such that
+       pegc_latin1('c') will return a pointer to a null-terminated
+       string with the value "c". The caller must never modify nor
+       deallocate the string, as it is statically allocated the first
+       time this routine is called.
 
        If ch is not in the range [0,255] then 0 is returned.
 
@@ -447,18 +476,21 @@ extern "C" {
     pegc_const_iterator pegc_latin1(int ch);
 
     /**
-       Associates data with the given parser. This library places no
-       significance on the data parameter - it is owned by the caller
-       and can be fetched with pegc_get_client_data().
+       Associates client-side data with the given parser. This library
+       places no significance on the data parameter - it is owned by
+       the caller and can be fetched with pegc_get_client_data().
 
        Client-specific data can be used to hold, e.g., parser state
        information specific to the client's parser.
+
+       If this routine is called multiple times for the same
+       parser, the data is replaced on subsequent calls.
     */
-    void pegc_set_client_data( pegc_parser const * st, void * data );
+    void pegc_set_client_data( pegc_parser * st, void * data );
 
     /**
-       Returns the data associated with st via pegc_set_client_data(), or 0
-       if no data has been associated or st is null.
+       Returns the data associated with st via pegc_set_client_data(),
+       or 0 if no data has been associated or st is null.
     */
     void * pegc_get_client_data( pegc_parser const * st );
 
@@ -519,8 +551,8 @@ extern "C" {
 	void const * data;
 
 	/**
-	   Some rules need a proxy rule. Since it is not always
-	   convenient to use the data slot for this, here it is...
+	   Some rules need a proxy rule. Since it is often
+	   inconvenient to use the data slot for this, here it is...
 	*/
 	struct PegcRule const * proxy;
 
@@ -579,7 +611,7 @@ extern "C" {
     extern const PegcRule PegcRule_init;
 
     /**
-       Creates an PegcRule from the given arguments. All fields
+       Creates a PegcRule from the given arguments. All fields
        not covered by these arguments are set to 0.
     */
     PegcRule pegc_r( PegcRule_mf func, void const * data );
@@ -598,7 +630,7 @@ extern "C" {
        Like pegc_alloc_r() (with the same ownership conventions),
        but copies all data from r.
 
-       Note that this is a shallow copy.Data pointed to by r or
+       Note that this is a shallow copy. Data pointed to by r or
        sub(sub(sub))-rules of r are not copied.
 
        This routine is often useful when constructing compound rules.
@@ -642,9 +674,8 @@ extern "C" {
     PegcRule pegc_r_opt( PegcRule const * proxy );
 
     /**
-       Creates a rule which will match the given string
-       case-sensitively. The string must outlive the rule, as it is
-       not copied.
+       Creates a rule which will match the given string. The string
+       must outlive the rule, as it is not copied.
     */
     PegcRule pegc_r_string( pegc_const_iterator input, bool caseSensitive );
 
@@ -687,11 +718,11 @@ extern "C" {
     PegcRule pegc_r_notat( PegcRule const * proxy );
 
     /**
-       Creates a rule which performs either an OR (if orOp is true) or
-       an AND (if orOp is false) on the given list of rules. The list
-       MUST be terminated with either NULL, or an entry where
-       entry->rule is 0, or results are undefined (almost certainly an
-       overflow).
+       Creates a rule which performs either an OR operation (if orOp
+       is true) or an AND operation (if orOp is false) on the given
+       list of rules. The list MUST be terminated with either NULL, or
+       an entry where entry->rule is 0, or results are undefined
+       (almost certainly an overflow).
 
        All rules in li must outlive the returned object.
 
@@ -729,7 +760,7 @@ extern "C" {
     PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap );
 
     /**
-       Convenience form of pegc_r_list( st, true, ... ).
+       Convenience form of pegc_r_list_a( st, true, ... ).
     */
     PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
 
@@ -763,17 +794,17 @@ extern "C" {
        action. If all actions access the same shared state, this is
        the simplest approach.
 
-       Actions normally should not modify st, but st is not const so
-       that client actions have non-const access to data set via
-       pegc_set_client_data(). Changing the position of the parser
-       will affect down-stream rules, so try not to do it from here.
+       Under consideration: make st non-const so that actions can set
+       the error state. This leaves much room for inappropriate
+       updates of the state from actions, however. In my experience,
+       actions should not, as a rule, change the parser state.
     */
-    typedef void (*pegc_action)( pegc_parser * st, void * clientData );
+    typedef void (*pegc_action)( pegc_parser const * st, void * clientData );
 
     /*
-      Creates a new Action. If rule matches then onMatch(pegc_parser*)
-      is called. onMatch can fetch the matched string using
-      pegc_get_match_string() or pegc_get_match_cursor().
+      Creates a new Action. If rule matches then
+      onMatch(st,clientData) is called. onMatch can fetch the matched
+      string using pegc_get_match_string() or pegc_get_match_cursor().
 
       This allocates resources for the returned rule which belong to
       this API and are freed when st is destroyed.
@@ -797,15 +828,15 @@ extern "C" {
 
        (min==1, max==1): returns *rule
 
-       (min==1, max ==1): returns pegc_r_opt(rule)
+       (min==0, max ==1): returns pegc_r_opt(rule)
 
        For those specific cases, the st parameter may be 0, as they do
        not allocate any extra resources. For all other cases, st must
        be valid so that we can allocate the resources needed for the
        rule mapping.
 
-       On error ((max<min), st or rule are null, or eof),
-       an invalid rule is returned.
+       On error ((max<min), st or rule are null, or eof), an invalid
+       rule is returned.
     */
     PegcRule pegc_r_repeat( pegc_parser * st,
 			    PegcRule const * rule,
@@ -824,8 +855,8 @@ extern "C" {
        leftRule and leftRule are 0 then the returned rule is a bitwise
        copy of mainRule and no extra resources need to be allocated.
 
-       There two policies for how the matched string is set by this
-       rule:
+       There are two policies for how the matched string is set by
+       this rule:
 
        - If discardLeftRight is false then leftRule's and rightRule's
        matches (if any) contribute to the matched string.
@@ -960,7 +991,7 @@ extern "C" {
        This rule requires a "relatively" large amount of dynamic
        resources (for several sub-rules), but it caches the rules on a
        per-parser basis.  This subsequent calls with the same parser
-       argument will always return a handle to a single object.
+       argument will always return a handle to the same object.
     */
     PegcRule pegc_r_int_dec_strict( pegc_parser * st );
 

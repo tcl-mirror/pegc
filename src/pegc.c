@@ -5,9 +5,11 @@
 
 #if defined(__cplusplus)
 extern "C" {
-#define ARG_UNUSED(X)
+#  include <cassert>
+#  define ARG_UNUSED(X)
 #else
-#define ARG_UNUSED(X) X
+#  include <assert.h>
+#  define ARG_UNUSED(X) X
 #endif
 
 #if 1
@@ -68,10 +70,8 @@ const static pegc_match_listener_data
 pegc_match_listener_data_init = {0,0,0};
 
 /**
-   For mapping parsers to client-supplied data.
- */
-static hashtable * pegc_hashClientData = 0;
-
+   The main parser state type.
+*/
 struct pegc_parser
 {
     char const * name; /* for debugging + error reporting purposes */
@@ -99,12 +99,8 @@ struct pegc_parser
 	unsigned int col;
 	int clientID;
     } errinfo;
-    struct
-    {
-	void * data;
-	void (*dtor)(void*);
-    } client;
 };
+
 static unsigned int pegc_parser_instanceCount = 0;
 static const pegc_parser
 pegc_parser_init = { 0, /* name */
@@ -125,12 +121,6 @@ pegc_parser_init = { 0, /* name */
 		     0, /* col */
 		     0 /* clientID */
 		     }
-#if 0
-		    { /* client data */
-		    0, /* data */
-		    0 /* dtor */
-		    }
-#endif
 };
 
 void pegc_add_match_listener( pegc_parser * st,
@@ -201,18 +191,18 @@ static void * pegc_next_hash_key(pegc_parser * st)
     }
 #else
     /*
-      FIXME: pre-allocate a memory block for action keys, and
-      expand as necessary.  We can actually just pre-allocate a
-      string and return successive addresses in that string. We
-      "could" use the clob class to get auto-expansion on that
-      array, but we may(?) run a risk of invalidating addresses on
-      a realloc.
-
-      This might require adding a pegc_parser argument so we can clean
-      up the blocks properly.
+      FIXME: pre-allocate a memory block for action keys, and expand
+      as necessary.  We can actually just pre-allocate a string and
+      return successive addresses in that string. We "could" use the
+      clob class to get auto-expansion on that array, but we run a
+      risk of invalidating addresses on a realloc. On solution might
+      be to create a chain of allocs, each with (say) 2-4k
+      pre-alloced. When one is used up, we add one to the chain. That
+      solves the address invalidation problem at the cost of
+      complexity.
 
       If we wanna be risky, we could just alloc 1k chars or so,
-      and hope that app uses more than that. It's highly unlikely
+      and hope that no app uses more than that. It's highly unlikely
       that even a very complex grammar needs more 100-200
       actions(?). My grammars to date have needed fewer than 20.
       
@@ -229,7 +219,7 @@ static void * pegc_next_hash_key(pegc_parser * st)
 */
 static hashval_t pegc_hash_void_ptr( void const * k )
 {
-    typedef long kludge_t; // must be the same size as the platform's (void*)
+    typedef long kludge_t; /* must apparently be the same size as the platform's (void*) */
     return (hashval_t) (kludge_t) k;
 }
 
@@ -372,24 +362,27 @@ static void pegc_gc_add( pegc_parser * st, void * item )
    results for use in subsequent calls. The key should be a function
    pointer (the function we're mapping the data to) and the value is
    arbitrary. Ownership of all arguments is unchanged. Normally one
-   needs to call pegc_gc_add(st,val) (or similar) after calling this
-   if st is to take over ownership of it.
+   needs to call pegc_gc_add(st,val) (or similar) if st is to take
+   over ownership of it.
 */
 static void pegc_funcptr_insert( pegc_parser * st, void * key, void * val )
 {
     PEGC_HASH_INIT(st,funcptr,0,0);
-    hashtable_insert( st->hashes.funcptr, key, key );
+    if( 0 == hashtable_change( st->hashes.funcptr, key, val ) )
+    {
+	hashtable_insert( st->hashes.funcptr, key, val );
+    }
 }
 
 /**
    Returns the data associated with the given key, or 0 if none
    was found. See pegc_funcptr_insert().
 */
-static void * pegc_funcptr_search( pegc_parser * st, void const * key )
+static void * pegc_funcptr_search( pegc_parser const * st, void const * key )
 {
-    PEGC_HASH_INIT(st,funcptr,0,0);
+    if( ! st->hashes.funcptr ) return 0;
     void * r = hashtable_search( st->hashes.funcptr, key );
-    //MARKER; printf("h=%p, key=%p, val=%p\n", h, key, r );
+    //MARKER; printf("h=%p, key=%p, val=%p\n", st->hashes.funcptr, key, r );
     return r;
 }
 #undef PEGC_HASH_INIT
@@ -424,39 +417,12 @@ bool pegc_create_parser( pegc_parser ** st, char const * inp, long len )
 bool pegc_destroy_parser( pegc_parser * st )
 {
     if( ! st ) return false;
-    /*
-      fixme: we need a mutex lock here because of
-      pegc_hashClientData.
-
-      There's tiny a race condition here if one thread calls
-      pegc_set_client_data() at the moment that another
-      thread is destructing the (previous) last instance.
-    */
     pegc_set_error( st, 0, 0 );
-    if( pegc_hashClientData )
-    {
-	hashtable_take( pegc_hashClientData, st );
-	if( 0 == --pegc_parser_instanceCount )
-	{
-	    hashtable_destroy( pegc_hashClientData );
-	    pegc_hashClientData = 0;
-	}
-    }
-
-#if 0
-    if( st->client.data && st->client.dtor )
-    {
-	st->client.dtor( st->client.data );
-	st->client.data = NULL;
-    }
-#endif
-
     if( st->hashes.hashes )
     {
 	hashtable_destroy( st->hashes.hashes );
 	st->hashes.hashes = 0;
     }
-
     pegc_match_listener_data * x = st->listeners;
     while( x )
     {
@@ -471,7 +437,7 @@ bool pegc_destroy_parser( pegc_parser * st )
 
 bool pegc_parse( pegc_parser * st, PegcRule const * r )
 {
-    if( ! st || !r ) return false;
+    if( ! st || !r || (0 == r->rule) ) return false;
     return r->rule( r, st );
 }
 
@@ -543,47 +509,14 @@ bool pegc_set_error( pegc_parser * st, int clientID, char const * fmt, ... )
     return ret;
 }
 
-void pegc_set_client_data( pegc_parser const * st, void * data ) /* , void (*dtor)(void*) */
+void pegc_set_client_data( pegc_parser * st, void * data ) /* , void (*dtor)(void*) */
 {
-#if 0
-    if( st )
-    {
-	st->client.data = data;
-	st->client.dtor = dtor;
-    }
-#else
-    if( ! pegc_hashClientData )
-    {
-	/* there is a miniscule race condition here if
-	   two threads call this routine.
-	*/
-	pegc_hashClientData = hashtable_create(3, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr );
-	if( ! pegc_hashClientData )
-	{
-	    /* Reminder: we don't want to call pegc_set_error() if a
-	       malloc failed b/c that routine will also malloc.
-	    */
-	    if(0) fprintf(stderr,"%s:%d:pegc_set_client_data() could not create hashtable! Out of memory?\n",
-			  __FILE__,__LINE__);
-	    return;
-	}
-	hashtable_set_dtors( pegc_hashClientData, 0, 0 );
-    }
-    void * key = (pegc_parser* /*i hate this cast!*/)st;
-    if( 0 == hashtable_change( pegc_hashClientData, key, data ) )
-    {
-	hashtable_insert( pegc_hashClientData, key, data );
-    }
-#endif
+    pegc_funcptr_insert( st, (void *)pegc_set_client_data, data );
 }
 
 void * pegc_get_client_data( pegc_parser const * st )
 {
-#if 0
-    return st ? st->client.data : NULL;
-#else
-    return 0;
-#endif
+    return pegc_funcptr_search( st, (void *)pegc_set_client_data );
 }
 
 bool pegc_eof( pegc_parser const * st )
@@ -603,7 +536,7 @@ bool pegc_isgood( pegc_parser const * st )
 {
     return st && !pegc_eof(st) && ! pegc_has_error(st);
 }
-pegc_cursor * pegc_iter( pegc_parser * st )
+pegc_cursor const * pegc_iter( pegc_parser const * st )
 {
     return st ? &st->cursor : 0;
 }
@@ -635,10 +568,10 @@ bool pegc_set_pos( pegc_parser * st, pegc_const_iterator p )
     if( ! st || !p ) return false;
     if( pegc_in_bounds(st,p) || (p == pegc_end(st)) )
     {
-	pegc_iter(st)->pos = p;
+	st->cursor.pos = p;
     }
     //MARKER; printf("pos=%p, p=%p, char=%d\n", pegc_iter(st)->pos, p, (p&&*p) ? *p : '!' );
-    return pegc_iter(st)->pos == p;
+    return st->cursor.pos == p;
 }
 
 
@@ -899,6 +832,7 @@ static bool PegcRule_mf_error( PegcRule const * self, pegc_parser * st )
 PegcRule pegc_r_error( char const * errstr, int errorID  )
 {
     PegcRule r = pegc_r( PegcRule_mf_error, errstr );
+    assert( (sizeof(void*) >= sizeof(int)) && "pegc_r_error(): illegal use of (void*) to store an integer value - (void*) is too small!" );
     r._internal.key = (void*)errorID;
     return r;
 }
@@ -969,24 +903,19 @@ bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st );
 
 PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * data )
 {
-    if( ! st ) return 0;
     PegcRule r1 = pegc_r(func,data);
     PegcRule * r = (PegcRule*) malloc(sizeof(PegcRule));
     if( ! r ) return 0;
     *r = r1;
     if( st )
     {
-	/**
-	   Bug in waiting? We're using r->_internal.key, and probably shouldn't.
-	*/
-	//pegc_rules_insert( st, (r->_internal.key = pegc_next_hash_key(st)), r );
 	pegc_gc_add( st, r );
     }
     return r;
 }
 PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const src )
 {
-    PegcRule * r = st ? pegc_alloc_r( st, 0, 0 ) : 0;
+    PegcRule * r = pegc_alloc_r( st, 0, 0 );
     if( r ) *r = src;
     return r;
 }
@@ -1300,7 +1229,7 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
     }
     return pegc_r_list_a( st, orOp, li );
 #else
-    const unsigned int blockSize = 5;
+    const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
     unsigned int count = 0;
     PegcRule const ** li = 0;
     unsigned int pos = 0;
@@ -1317,7 +1246,7 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
 	    else
 	    {
 		void * re = realloc( li, sizeof(PegcRule*) * (count + 1)  );
-		if( ! re ) break; // FIXME: error out and clean up!
+		if( ! re ) break;
 		li = (PegcRule const **)re;
 	    }
 	}
@@ -1325,7 +1254,11 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
 	if( ! vr ) break;
 	li[pos++] = vr;
     }
-    if( ! li ) return PegcRule_invalid;
+    if( ! pos || !li )
+    {
+	if(li) free(li);
+	return PegcRule_invalid;
+    }
     li[pos] = 0;
     PegcRule r = pegc_r_list_a( st, orOp, li );
     free(li);
@@ -1703,6 +1636,10 @@ PegcRule pegc_r_repeat( pegc_parser * st,
     if( (max < min) || (0==max) ) return PegcRule_invalid;
     if( (min == 1) && (max ==1) ) return *rule;
     if( (min == 0) && (max == 1) ) return pegc_r_opt( rule );
+    /**
+       TODO: consider stuffing min into st->data and max into st->proxy, to
+       avoid an allocation here.
+    */
     pegc_range_info * info = (pegc_range_info *)malloc(sizeof(pegc_range_info));
     pegc_gc_add( st, info );
     info->min = min;
@@ -1778,6 +1715,7 @@ PegcRule pegc_r_pad( pegc_parser * st,
 
 #undef MARKER
 #undef PEGC_INIT_RULE
+#undef DUMPPOS
 #if defined(__cplusplus)
-} // extern "C"
+} /* extern "C" */
 #endif
