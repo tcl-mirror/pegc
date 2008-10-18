@@ -1,9 +1,9 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
 /************************************************************************
-pegc is an EXPERIMENTAL toolkit for writing parsers in C using
-something similar to functional composition, conceptually similar to
-C++ parsing toolkits like Boost.Spirit and parsepp
+pegc is a toolkit for writing PEG-style parsers in C using something
+similar to functional composition, conceptually similar to C++ parsing
+toolkits like Boost.Spirit, PEGTL, and parsepp
 (http://wanderinghorse.net/cgi-bin/parsepp.cgi).
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
@@ -24,7 +24,7 @@ could be used to implement one).
 The basic idea is that one defines a grammar as a list of Rule
 objects. A grammar starts with a top rule, and that rule may then
 delegate all parsing, as it sees fit, to other rules. The result of a
-parse is either 'true' (the top-most rule matches) or false (the
+parse is either true (the top-most rule matches) or false (the
 top-most rule fails). It is roughly modelled off of recursive descent
 parsers, and follows some of those conventions. For example, a parsing
 rule which does not match (i.e. return true) must not consume
@@ -34,12 +34,12 @@ are several exceptions to that rule, though).
 In C++ we would build the parser using templates (at least that's
 how i'd do it). In C we don't have that option, so we build up little
 objects which contain a Rule function and some data for that function.
-Those rules can then be processed in an RD fashion.
+Those rules can then be processed in a PEG fashion.
 
 My theory is that once the basic set of rules are in place, it will be
 relatively easy to implement a self-hosted code generator which can
 read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
-is, an PEGC-parsed grammar which in turn generates PEGC parsers code.
+is, a PEGC-parsed grammar which in turn generates PEGC parser code.
 
 ========================================================================
 
@@ -105,9 +105,22 @@ Thread safety:
 
 It is never legal to use the same instance of a parser in multiple
 threads at one time, as the parsing process continually updates the
-parser state.  No routines in this library rely on any shared data
+parser state. No routines in this library rely on any shared data
 in a manner which prohibits multiple threads from running different
-parsers at the same time.
+parsers at the same time. In theory, Rules (which are normally
+effectively const) are more or less thread-safe after they are initialized
+(though there is room for race conditions during their initialization and
+cleanup). That said, many rules have an association with a specific parser
+instance, and those rules must be treated as non-thread-safe.
+
+========================================================================
+Notes about boolean types:
+
+By default this code defines its own macros for true/false and the bool
+keyword. If PEGC_HAVE_STDBOOL is defined to a true value then <stdbool.h>
+is used instead. When compiling under C++ (i.e. __cplusplus is defined),
+stdbool.h is not necessary and we use the C++-defined bool/true/false
+(and PEGC_HAVE_STDBOOL is ignored entirely).
 
 ========================================================================
 
@@ -123,6 +136,9 @@ yet again, this time in plain old C.
 
 Christopher Clark implemented the hashtable code used by pegc for garbage
 collection.
+
+Some of the utility code (e.g. vappendf.{c,h}) is based on public domain
+code written by other people.
 ************************************************************************/
 
 #include <stdarg.h>
@@ -132,23 +148,23 @@ extern "C" {
 
 #ifndef __cplusplus
 #  ifndef PEGC_HAVE_STDBOOL
-#  define PEGC_HAVE_STDBOOL 0
-#endif
+#    define PEGC_HAVE_STDBOOL 0
+#  endif
 
-#if defined(PEGC_HAVE_STDBOOL) && !(PEGC_HAVE_STDBOOL)
+#  if defined(PEGC_HAVE_STDBOOL) && !(PEGC_HAVE_STDBOOL)
 /* i still can't fucking believe that C has no bool. */
-#  if !defined(bool)
-#    define bool char
-#  endif
-#  if !defined(true)
-#    define true 1
-#  endif
-#  if !defined(false)
-#    define false 0
-#  endif
-#else /* aha! stdbool.h! C99. */
-#  include <stdbool.h>
-#endif /* PEGC_HAVE_STDBOOL */
+#    if !defined(bool)
+#      define bool char
+#    endif
+#    if !defined(true)
+#      define true 1
+#    endif
+#    if !defined(false)
+#      define false 0
+#    endif
+#  else /* aha! stdbool.h! C99. */
+#    include <stdbool.h>
+#  endif /* PEGC_HAVE_STDBOOL */
 #endif /* __cplusplus */
 
     /**
@@ -227,7 +243,26 @@ extern "C" {
        \code
        pegc_parser * p = 0;
        if( ! pegc_create_parser( &p, "...", -1 ) ) { ... error... }
+       ...
+       pegc_destroy_parser(p);
        \endcode
+
+
+       Notes of potential interest:
+
+       Creating a parser is not that expensive. A parser itself has a
+       relatively small amount of state. However, many rules require
+       dynamically allocated memory for their state data. Such memory
+       is owned by the associated parser, so the amount of memory used
+       by a parser is directly related to the number of rules
+       associated with it.  Not all rules require dynamic memory. As a
+       general rule, the pegc_r_xxx() functions which do not take a
+       pegc_parser as the first argument do not require dynamic
+       memory, whereas those which do not have a pegc_parser argument
+       do. In fact, the reason they have the pegc_parser argument is
+       so that they know where to "attach" the allocated memory to
+       (for cleanup purposes).
+       
     */
     bool pegc_create_parser( pegc_parser ** st, char const * inp, long len );
 
@@ -239,7 +274,7 @@ extern "C" {
        This routine returns false only if st is 0.
 
        Note that the library internally allocates some storage
-       associated with the parser for certain opertaions (e.g.  see
+       associated with the parser for certain operations (e.g.  see
        pegc_r_action() and pegc_r_list()). That memory is not freed
        until this function is called. Thus if parsers are not properly
        finalized, leak detection tools may report that this code
@@ -283,6 +318,10 @@ extern "C" {
        Note that this is a linear-time operation, as rules to not
        update this information themselves (it would complicate the
        implementation of nearly every single rule).
+
+       FIXME: does not correctly handle platforms which use a single
+       carriage return as the newline character. We can use
+       PegcRule_eol to implement that behaviour.
     */
     bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
 

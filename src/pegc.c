@@ -488,6 +488,7 @@ static bool pegc_set_error_v( pegc_parser * st, int clientID, char const * fmt, 
 	st->errinfo.message = 0;
 	st->errinfo.line = 1;
 	st->errinfo.col = 0;
+	st->errinfo.clientID = 0;
 	return true;
     }
     else
