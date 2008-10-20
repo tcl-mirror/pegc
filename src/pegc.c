@@ -13,9 +13,9 @@ extern "C" {
 #endif
 
 #if 1
-#define MARKER printf("MARKER: %s:%d:%s():\n\t",__FILE__,__LINE__,__func__);
+#define MARKER printf("MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
 #else
-#define MARKER printf("MARKER: %s:%d:\n\t",__FILE__,__LINE__);
+#define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
 #define DUMPPOS(P) MARKER; printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
@@ -631,7 +631,7 @@ bool pegc_set_pos( pegc_parser * st, pegc_const_iterator p )
     {
 	st->cursor.pos = p;
     }
-    //MARKER; printf("pos=%p, p=%p, char=%d\n", pegc_iter(st)->pos, p, (p&&*p) ? *p : '!' );
+    //MARKER; printf("pos=%p, p=%p, char=%c\n", pegc_iter(st)->pos, p, (p&&*p) ? *p : '!' );
     return st->cursor.pos == p;
 }
 
@@ -749,7 +749,7 @@ bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_ite
 bool pegc_matches_char( pegc_parser const * st, int ch )
 {
     return st
-	? (pegc_eof(st) ? false : (*pegc_pos(st) == ch))
+	? (pegc_eof(st) ? (ch == '\0') : (*pegc_pos(st) == ch))
 	: false;
 }
 
@@ -1507,7 +1507,9 @@ PegcRule pegc_r_opt( PegcRule const * proxy )
 
 static bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st )
 {
-    return pegc_eof(st);
+    bool r = pegc_eof(st);
+    MARKER; printf("at EOF? ==%d\n",r);
+    return r;
 }
 const PegcRule PegcRule_eof = PEGC_INIT_RULE(PegcRule_mf_eof,0);
 static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
@@ -1544,9 +1546,12 @@ static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
     long myv = 0;
     int len = 0;
     int rc = sscanf(pegc_pos(st), "%ld%n",&myv,&len);
+    MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
     if( (EOF == rc) || (0 == len) ) return false;
-    if( ! pegc_advance(st,len) ) return false;
-    pegc_set_match( st, orig, pegc_pos(st), true );
+    MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
+    //if( ! pegc_advance(st,len) ) return false;
+    //MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
+    pegc_set_match( st, orig, orig + len, true );
     return true;
 }
 const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
@@ -1561,7 +1566,7 @@ static bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st 
 	return true;
     }
     //MARKER;
-    pegc_set_pos(st,orig);
+    //pegc_set_pos(st,orig);
     return false;
 }
 static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
@@ -1585,13 +1590,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	   the sub-rules to be valid pointers after this routine
 	   returns.
 	*/
-#if 0
-	PegcRule * sign = pegc_copy_r( st, pegc_r_oneof("+-",true) );
-	PegcRule * prefix = pegc_copy_r( st, pegc_r_opt( sign ) );
-	PegcRule * integer = pegc_copy_r( st, pegc_r_and_e( st, prefix, &PegcRule_digits, 0 ) );
-#else
 	PegcRule const * integer = &PegcRule_int_dec;
-#endif
 	/**
 	   After we've matched digits we need to ensure that the next
 	   character is [what we consider to be] legal.
@@ -1600,7 +1599,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, punct, 0 ) );
 	PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
 	PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
-	proxy = pegc_copy_r( 0, pegc_r_and( st, integer, end ) );
+	proxy = pegc_copy_r( 0, pegc_r_and_e( st, integer, end, 0 ) );
 	pegc_gc_register( st, (void *)PegcRule_mf_int_dec_strict, 0, proxy, pegc_free );
     }
     r.proxy = proxy;

@@ -100,9 +100,9 @@ int test_two()
     }
 #define TRY_STRICT 1
 #if TRY_STRICT
-    src = "-3492 . xyz . asa";
+    src = "-3492"; //" . xyz . asa";
 #else
-    src = "-3492.323asa";
+    src = "-3492"; // ".323asa";
 #endif
     pegc_parser * P;
     pegc_create_parser( &P, src, -1 );
@@ -128,7 +128,9 @@ int test_two()
     }
     else
     {
-	printf("number parse failed to match [%s]\n",src);
+	printf("number parse failed to match [%s]\nError string=[%s]\n",src,
+	       pegc_get_error(P,0,0));
+	
     }
     printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
     pegc_destroy_parser(P);
