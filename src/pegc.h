@@ -326,9 +326,9 @@ extern "C" {
     bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
 
     /**
-       Gets the current error string (which may be 0), line, column,
-       and "client error ID", as set by pegc_set_error(). The string
-       is owned by the parser.
+       Gets the current error string (which may be 0), line, and
+       column. The string is owned by the parser and will be invalided
+       the next time pegc_set_error() is called.
 
        Any of the integer pointers may be 0.
 
@@ -343,8 +343,7 @@ extern "C" {
     */
     char const * pegc_get_error( pegc_parser const * st,
 				 unsigned int * line,
-				 unsigned int * col,
-				 unsigned int * clientID );
+				 unsigned int * col );
 
     /**
        Copies the given null-terminated string as the current error
@@ -354,8 +353,7 @@ extern "C" {
        The clientNumber parameter is a client-determined number which
        is not used by this library but is returned by pegc_get_error().
 
-       If msg if NULL then the error state is cleared and clientID
-       is ignored.
+       If msg if NULL then the error state is cleared.
 
        Returns false if:
 
@@ -366,7 +364,7 @@ extern "C" {
        Note that because it must allocate memory for the error string,
        it is not a wise idea to set this in response to alloc errors.
     */
-    bool pegc_set_error( pegc_parser * st, int clientID, char const * fmt, ... );
+    bool pegc_set_error( pegc_parser * st, char const * fmt, ... );
 
     /**
        Returns st's cursor. Note that any parsing operations may change its
@@ -494,7 +492,9 @@ extern "C" {
     bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long strLen, bool caseSensitive );
 
     /**
-       Clears the parser's match string.
+       Clears the parser's match string, such that
+       pegc_get_match_string() will return null. In practice this is
+       never necessary, but here it is in case you need it.
     */
     void pegc_clear_match( pegc_parser * st );
 
@@ -650,6 +650,56 @@ extern "C" {
     extern const PegcRule PegcRule_init;
 
     /**
+       Registers an arbitrary key and value with the garbage
+       collector, such that pegc_destroy_parser(st) will clean up the
+       resources using the given destructor functions. This is often
+       useful for rule factories which need to dynamically allocate
+       resources.
+
+       The key parameter is used as a literal hash key (that is, the
+       pointer's value is its hash value).
+
+       If keyDtor is not 0 then during cleanup keyDtor(key) is
+       called. Likewise, if valDtor is not 0 then valDtor(value) is
+       called at cleanup time.
+
+       It is perfectly legal for the key and value to be the same
+       object, but only if at least one of the destructor functions is
+       0 (otherwise a double-free will happen).
+
+       It is legal for both keyDtor and valDtor to be 0, in which case
+       this routine can be used similarly to pegc_set_client_data()
+       (and should be used in place of that routine if the parser
+       should take ownership of the client data).
+
+       Returns true if the item is now registered, or false on error
+       (!st, !key, or a memory allocation error).
+
+       Note that the destruction order of items cleaned up using this
+       mechanism is undefined.
+
+       It is illegal to register the same key more than once with the
+       same parser. Doing so will cause false to be returned.
+    */
+    bool pegc_gc_register( pegc_parser * st,
+			   void * key, void (*keyDtor)(void*),
+			   void * value, void (*valDtor)(void*) );
+
+    /**
+       A convenience form of pegc_gc_register(), equivalent to
+       pegc_gc_register(st,item,dtor,item,0).
+    */
+    bool pegc_gc_add( pegc_parser * st, void * item, void (*dtor)(void*) );
+
+    /**
+       Searches the garbage collection pool for data associated with
+       the given key, returning it (or 0 if not found or either st or
+       key are 0). Ownership of the returned object does not change -
+       it is defined in the corresponding call to pegc_gc_register().
+    */
+    void * pegc_gc_search( pegc_parser const * st, void const * key );
+
+    /**
        Creates a PegcRule from the given arguments. All fields
        not covered by these arguments are set to 0.
     */
@@ -657,9 +707,9 @@ extern "C" {
 
     /**
        Identical to pegc_r() but allocates a new object on the heap.
-       If st is not NULL true then the new object is owned by st and
-       will be destroyed when pegc_destroy_parser(st) is called,
-       otherwise the caller owns it.
+       If st is not NULL then the new object is owned by st and will
+       be destroyed when pegc_destroy_parser(st) is called, otherwise
+       the caller owns it.
 
        Returns 0 if it cannot allocate a new object.
     */
@@ -959,6 +1009,12 @@ extern "C" {
     extern const PegcRule PegcRule_blank;
 
     /**
+       A rule object for matching any number of blank characters
+       (space or horizontal tab). Equivalent to: ([ \t]*)
+    */
+    extern const PegcRule PegcRule_blanks;
+
+    /**
        An object implementing functionality identical to the
        C-standard iscntrl().
     */
@@ -1085,17 +1141,43 @@ extern "C" {
     extern const PegcRule PegcRule_invalid;
 
     /*
-      A rule which matches: (\r\n) / (\r) / (\n)
+      A rule which matches: (\r\n) / (\n) / (\r)
     */
     extern const PegcRule PegcRule_eol;
 
     /**
-       Creates a rule which always returns false and sets the parser
-       error message to msg. The errorID is a client-determined
-       error ID number, as specified for pegc_set_error().
-    */
-    PegcRule pegc_r_error( char const * msg, int errorID );
+       A rule which never consumes and only matches when one of the
+       following is true:
 
+       - at the beginning of a parse (before any other characters) are
+       consumed).
+
+       - The the previous character (before the current parse
+       position) is a newline char.
+
+       Note that an empty line (containing only a newline sequence)
+       will match this rule (on the newline character), though it
+       would seem to philosophically lie somewhere between BOL and
+       EOL.
+    */
+    extern const PegcRule PegcRule_bol;
+
+    /**
+       Creates a rule which always returns false and sets the parser
+       error message to msg. The msg string is not copied until the rule
+       is triggered, so it must outlive the returned rule.
+    */
+    PegcRule pegc_r_error( char const * msg );
+    /**
+       Creates a rule which always returns false, never consumes, and
+       sets the parser error string to the printf-style formated
+       string.
+    */
+    PegcRule pegc_r_error_v( pegc_parser * st, char const * fmt, va_list );
+    /**
+       Identical to pegc_r_error_v() except that it takes (...) instead of a va_list.
+    */
+    PegcRule pegc_r_error_e( pegc_parser * st, char const * fmt, ... );
 
 #ifdef __cplusplus
 } // extern "C"
