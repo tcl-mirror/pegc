@@ -1,8 +1,8 @@
 /* Copyright (C) 2002 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
 /* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
 /* Code taken from: http://www.cl.cam.ac.uk/~cwc22/hashtable/ */
-#ifndef __HASHTABLE_CWC22_H__
-#define __HASHTABLE_CWC22_H__
+#ifndef __HASHTABLE_CWC22_SGB11_H__
+#define __HASHTABLE_CWC22_SGB11_H__
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,8 +23,11 @@ extern "C" {
    which can get away with (void const *) instead of (void*) now use
    const parameters.
 
-   - Added ability to set a custom key/value dtor for each
+   - Added ability to set a custom key/value dtors for each
    hashtable.
+
+   - Slightly changed semantics of some routines to accommodate the
+   dtor handling.
 */
 
 typedef unsigned long long hashval_t;
@@ -70,13 +73,15 @@ extern const hashval_t hashval_t_err;
  *
  * DEFINE_HASHTABLE_INSERT(insert_some, struct some_key, struct some_value);
  * DEFINE_HASHTABLE_SEARCH(search_some, struct some_key, struct some_value);
- * DEFINE_HASHTABLE_TAKE(remove_some, struct some_key, struct some_value);
+ * DEFINE_HASHTABLE_TAKE(take_some, struct some_key);
+ * DEFINE_HASHTABLE_REMOVE(remove_some, struct some_key);
  *
- * This defines the functions 'insert_some', 'search_some' and 'remove_some'.
- * These operate just like hashtable_insert etc., with the same parameters,
- * but their function signatures have 'struct some_key *' rather than
- * 'void *', and hence can generate compile time errors if your program is
- * supplying incorrect data as a key (and similarly for value).
+ * This defines the functions 'insert_some', 'search_some',
+ * 'take_some', and 'remove_some'.  These operate just like
+ * hashtable_insert() etc., with the same parameters, but their function
+ * signatures have 'struct some_key *' rather than 'void *', and hence
+ * can generate compile time errors if your program is supplying
+ * incorrect data as a key (and similarly for value).
  *
  * Note that the hash and key equality functions passed to hashtable_create
  * still take 'void *' parameters instead of 'some key *'. This shouldn't be
@@ -189,15 +194,15 @@ valuetype * fnname (hashtable *h, keytype const *k) \
 }
 
 /*****************************************************************************
- * hashtable_take
+ * hashtable_take() removes the given key from the hashtable and
+ * returns the value to the caller.  If a match is found, the key dtor
+ * set via hashtable_set_key_dtor() (if any) will be called and passed
+ * k.
  *
- * Removes the given key from the hashtable and returns the value to
- * the caller.  If a match is found, hashtable_free_key(h,k) is called
- * to clean it (or not).
- *
- *  The ownership of the returned pointer is application-specific and
- *  defined by the destructor set via hashtable_set_val_dtor().
- *
+ * The ownership of the returned pointer is application-specific and
+ * defined by the destructor set via hashtable_set_val_dtor(). This routine
+ * does not call the value dtor. If you want to remove an item and call the
+ * dtors for its key and value, use hashtable_remove().
  *
  * @name        hashtable_take
  * @param   h   the hashtable to remove the item from
@@ -209,12 +214,12 @@ void *
 hashtable_take(hashtable *h, void const *k);
 
 /**
-   Works like hashtable_take(h,k), but also
-   calls hashtable_free_val() if it finds a match, which may
-   (or may not) deallocate the object. Note that hashtable_take()
-   may deallocate the key (depends on the destructor assigned to
-   it), so the k parameter may not be valid after this function
-   returns.
+   Works like hashtable_take(h,k), but also calls the value dtor (set
+   via hashtable_set_val_dtor()) if it finds a match, which may (or
+   may not) deallocate the object. Note that hashtable_take() may also
+   deallocate the key (depends on the destructor assigned to
+   hashtable_set_key_dtor()), so the k parameter may not be valid
+   after this function returns.
 
    Returns 1 if it finds a value, else 0.
 */
@@ -225,6 +230,9 @@ valuetype * fnname (hashtable *h, keytype const *k) \
 { \
     return (valuetype *) (hashtable_take(h,k)); \
 }
+
+#define DEFINE_HASHTABLE_REMOVE(fnname, keytype) \
+short fnname (hashtable *h, keytype const *k) { return hashtable_remove(h,k);}
 
 
 /*****************************************************************************
@@ -241,8 +249,9 @@ hashtable_count(hashtable const * h);
 
 
 /*****************************************************************************
- * hashtable_destroy
-   
+ * hashtable_destroy() cleans up resources allocated by a hashtable. After
+ * this call, h is invalid.
+ * 
  * @name        hashtable_destroy
  * @param   h   the hashtable
  */
@@ -294,7 +303,7 @@ hashval_t hash_long( void const * n );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* __HASHTABLE_CWC22_H__ */
+#endif /* __HASHTABLE_CWC22_SGB11_H__ */
 
 /*
  * Copyright (c) 2002, Christopher Clark
