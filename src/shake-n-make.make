@@ -592,6 +592,7 @@ endif
 # Doxygen
 ShakeNMake.BINS.SED := $(call ShakeNMake.CALL.FIND_BIN,sed)
 ShakeNMake.BINS.PERL := $(call ShakeNMake.CALL.FIND_BIN,perl)
+ShakeNMake.BINS.LATEX := $(call ShakeNMake.CALL.FIND_BIN,latex)
 ifneq (,$(ShakeNMake.BINS.PERL))
 ShakeNMake.BINS.DOXYGEN := $(call ShakeNMake.CALL.FIND_BIN,doxygen)
 ifneq (,$(ShakeNMake.BINS.DOXYGEN))
@@ -611,39 +612,50 @@ PACKAGE.DIST_FILES += $(ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE) $(ShakeNMake.DOXYG
 
 ShakeNMake.DOXYGEN.INCLUDE_DIRS = .
 
-ShakeNMake.DOXYGEN.OUTPUT_DIR = $(PACKAGE.NAME)-$(PACKAGE.VERSION)-doxygen
+ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML = $(PACKAGE.NAME)-$(PACKAGE.VERSION)-doxygen-html
+ShakeNMake.DOXYGEN.OUTPUT_DIR.LATEX = $(PACKAGE.NAME)-$(PACKAGE.VERSION)-doxygen-latex
 
+ifeq (,$(ShakeNMake.BINS.LATEX))
+  ShakeNMake.DOXYGEN.GENERATE_LATEX := NO
+else
+  ShakeNMake.DOXYGEN.GENERATE_LATEX := YES
+endif
 Doxyfile: $(ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE) $(ShakeNMake.MAKEFILE) $(PACKAGE.MAKEFILE)
 	@$(ShakeNMake.BINS.SED) -e 's,@PACKAGE_NAME@,$(PACKAGE.NAME),' \
 		-e 's,@PACKAGE_VERSION@,$(PACKAGE.VERSION),' \
 		-e 's,@DOXYGEN_INPUT@,$(ShakeNMake.DOXYGEN.INDEX) $(ShakeNMake.DOXYGEN.INCLUDE_DIRS),' \
-		-e 's,@HTML_OUTPUT@,$(ShakeNMake.DOXYGEN.OUTPUT_DIR),' \
+		-e 's,@HTML_OUTPUT@,$(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML),' \
+		-e 's,@LATEX_OUTPUT@,$(ShakeNMake.DOXYGEN.OUTPUT_DIR.LATEX),' \
+		-e 's,@GENERATE_LATEX@,$(ShakeNMake.DOXYGEN.GENERATE_LATEX),' \
 		-e 's,@PERL@,$(ShakeNMake.BINS.PERL),' \
 		-e 's,@USE_DOT@,$(ShakeNMake.DOXYGEN.USE_DOT),' \
 	< $(ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE) > $@
 
 doxygen-clean:
-	@test -d $(ShakeNMake.DOXYGEN.OUTPUT_DIR) && rm -fr $(ShakeNMake.DOXYGEN.OUTPUT_DIR); \
+	@test -d $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML) && rm -fr $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML); \
 	rm -f Doxyfile; \
 	true
 
-.PHONY: $(ShakeNMake.DOXYGEN.OUTPUT_DIR)
-$(ShakeNMake.DOXYGEN.OUTPUT_DIR): Doxyfile
+.PHONY: $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML)
+$(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML): Doxyfile
 	@echo "Building docs from headers"
 	$(ShakeNMake.BINS.DOXYGEN)
 	@echo "Output should be in the directory '$@'."
+ifneq (,$(ShakeNMake.BINS.LATEX))
+	@echo "Latex output is in '$(ShakeNMake.DOXYGEN.OUTPUT_DIR.LATEX)'."
+endif
 
-doxygen: $(ShakeNMake.DOXYGEN.OUTPUT_DIR)
+doxygen: $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML)
 
 doxygen-dist: doxygen
-	tar czf $(ShakeNMake.DOXYGEN.OUTPUT_DIR).tar.gz $(ShakeNMake.DOXYGEN.OUTPUT_DIR)
-	@ls -la $(ShakeNMake.DOXYGEN.OUTPUT_DIR).tar.gz
+	tar czf $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML).tar.gz $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML)
+	@ls -la $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML).tar.gz
 
 dist: doxygen-dist
-CLEAN_FILES += Doxyfile $(ShakeNMake.DOXYGEN.OUTPUT_DIR) latex
+CLEAN_FILES += Doxyfile $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML) latex
 
 
-INSTALL_DOXYGEN = $(ShakeNMake.DOXYGEN.OUTPUT_DIR)
+INSTALL_DOXYGEN = $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML)
 INSTALL_DOXYGEN_DEST = $(prefix)/share/doc/$(PACKAGE.NAME)
 install: doxygen
 $(call ShakeNMake.CALL.RULES.INSTALL,DOXYGEN)
