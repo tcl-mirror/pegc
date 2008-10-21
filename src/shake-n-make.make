@@ -597,8 +597,8 @@ ShakeNMake.BINS.DOXYGEN := $(call ShakeNMake.CALL.FIND_BIN,doxygen)
 ifneq (,$(ShakeNMake.BINS.DOXYGEN))
 ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE = Doxyfile.at
 ifneq (,$(wildcard $(ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE)))
-ShakeNMake.DOXYGEN.INDEX = Doxygen-index.txt
-ifneq (,$(wildcard $(ShakeNMake.DOXYGEN.INDEX)))
+ShakeNMake.DOXYGEN.INDEX := $(wildcard Doxygen-index.txt)
+#ifneq (,$(wildcard $(ShakeNMake.DOXYGEN.INDEX)))
 ########################################################################
 # let's try to do doxygen stuff...
 ########################################################################
@@ -649,7 +649,7 @@ install: doxygen
 $(call ShakeNMake.CALL.RULES.INSTALL,DOXYGEN)
 
 ##################################################
-endif # $(ShakeNMake.DOXYGEN.INDEX)
+#endif # $(ShakeNMake.DOXYGEN.INDEX)
 endif # $(ShakeNMake.DOXYGEN.DOXYFILE_TEMPLATE)
 endif # $(ShakeNMake.BINS.DOXYGEN)
 endif # $(ShakeNMake.BINS.PERL)
