@@ -41,20 +41,20 @@ int test_one()
     NR = pegc_r_oneof("abcxyz",false);
     PegcRule rH = pegc_r_char( 'h', true );
     PegcRule rI = pegc_r_char( 'i', true );
-    PegcRule rHI = pegc_r_or( st, &rI, &rH );
-    PegcRule rHIPlus = pegc_r_plus(&rHI);
-    NR = pegc_r_action( st, &rHIPlus, my_pegc_action, 0 );
+    PegcRule const * rHI = pegc_r_or( st, &rI, &rH );
+    PegcRule rHIPlus = pegc_r_plus(rHI);
+    NR = *pegc_r_action( st, &rHIPlus, my_pegc_action, 0 );
     NR = pegc_r_star( &PegcRule_blank );
 #if 0
     PegcRule starAlpha = pegc_r_star(&PegcRule_alpha);
 #else
-    PegcRule starAlpha =
+    PegcRule const * starAlpha =
 	pegc_r_repeat(st,&PegcRule_alpha,3,10)
 	//pegc_r_opt(&PegcRule_alpha)
 	;
 #endif
     NR = pegc_r_notat(&PegcRule_digit);
-    NR = pegc_r_action( st, &starAlpha, my_pegc_action, 0 );
+    NR = *pegc_r_action( st, starAlpha, my_pegc_action, 0 );
     //NR = pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
 #undef ACPMF
@@ -114,12 +114,12 @@ int test_two()
     const PegcRule R = PegcRule_int_dec;
     //const PegcRule R = PegcRule_double;
 #else
-    const PegcRule R = pegc_r_int_dec_strict(P);
-    const PegcRule R2 = pegc_r_int_dec_strict(P); // just checking the cache hit
+    const PegcRule * R = pegc_r_int_dec_strict(P);
+    const PegcRule * R2 = pegc_r_int_dec_strict(P); // just checking the cache hit
 #endif
 #undef TRY_STRICT
     printf("Source string = [%s]\n", src );
-    if( pegc_parse(P, &R) )
+    if( pegc_parse(P, R) )
     {
 	rc = 0;
 	char * m  = pegc_get_match_string(P);
@@ -139,7 +139,7 @@ int test_two()
 
 int test_three()
 {
-    if(1)
+    if(0)
     {
 	char const * in = "fbde";
 	char out[50];
@@ -156,18 +156,18 @@ int test_three()
     pegc_create_parser( &P, src, -1 );
 
     PegcRule colon = pegc_r_char(':',true);
-#if 1
-    PegcRule rangeU = pegc_r_char_spec( P, "[A-Z]" );
-    PegcRule rangeL = pegc_r_char_spec( P, "[a-z]" );
+#if 0
+    PegcRule const * rangeU = pegc_r_char_spec( P, "[A-Z]" );
+    PegcRule const * rangeL = pegc_r_char_spec( P, "[a-z]" );
 #else
-    PegcRule rangeU = pegc_r_char_range( 'A','Z' );
-    PegcRule rangeL = pegc_r_char_range( 'a','z' );
+    PegcRule const * rangeU = pegc_copy_r( P, pegc_r_char_range( 'A','Z' ) );
+    PegcRule const * rangeL = pegc_copy_r( P, pegc_r_char_range( 'a','z' ) );
 #endif
-    PegcRule delim = pegc_r_plus( &rangeU );
-    PegcRule word = pegc_r_plus( &rangeL );
-    PegcRule R = pegc_r_pad( P, &delim, &word, &delim, true );
+    PegcRule delim = pegc_r_plus( rangeU );
+    PegcRule word = pegc_r_plus( rangeL );
+    PegcRule const * R = pegc_r_pad( P, &delim, &word, &delim, true );
     int rc = 0;
-    if( pegc_parse(P, &R) )
+    if( pegc_parse(P, R) )
     {
 	rc = 0;
 	char * m  = pegc_get_match_string(P);
