@@ -755,7 +755,7 @@ bool pegc_matches_char( pegc_parser const * st, int ch )
 
 bool pegc_matches_chari( pegc_parser const * st, int ch )
 {
-    if( ! pegc_isgood(st) ) return false;
+    if( !st || pegc_has_error(st) ) return false;
     pegc_const_iterator p = pegc_pos(st);
     if( !p && !*p ) return false;
     return (p && *p)
@@ -764,7 +764,7 @@ bool pegc_matches_chari( pegc_parser const * st, int ch )
 
 bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long strLen, bool caseSensitive )
 {
-    if( ! pegc_isgood(st) ) return false;
+    if( !st || pegc_has_error(st) ) return false;
     if( strLen < 0 ) strLen = strlen(str);
     //MARKER; printf("Trying to match %ld chars of a string.\n",strLen);
     if( ! pegc_in_bounds(st, pegc_pos(st)+strLen-1) ) return false;
@@ -1112,7 +1112,7 @@ bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st )
 
 bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
+    if( !st || pegc_has_error(st) || !self || !self->proxy ) return false;
     int matches = 0;
     pegc_const_iterator orig = pegc_pos(st);
     pegc_const_iterator p2 = orig;
@@ -1149,7 +1149,7 @@ bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st )
 */
 static bool PegcRule_mf_plus( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
+    if( !st || pegc_has_error(st) || !self || !self->proxy ) return false;
     pegc_const_iterator orig = pegc_pos(st);
     int matches = self->proxy->rule( self->proxy, st )
 	? 1 : 0;
@@ -1175,7 +1175,7 @@ static bool PegcRule_mf_plus( PegcRule const * self, pegc_parser * st )
 
 static bool PegcRule_mf_at( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
+    if( !self || !self->proxy ) return false;
     pegc_const_iterator orig = pegc_pos(st);
     bool rc = self->proxy->rule( self->proxy, st );
     pegc_set_pos(st,orig);
@@ -1191,7 +1191,7 @@ PegcRule pegc_r_at( PegcRule const * proxy )
 
 static bool PegcRule_mf_notat( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self ) return false;
+    if( !st || pegc_has_error(st) || !self ) return false;
 #if 0
     pegc_const_iterator orig = pegc_pos(st);
     bool ret = ! PegcRule_mf_at(self,st);
@@ -1212,24 +1212,26 @@ PegcRule pegc_r_notat( PegcRule const * proxy )
 
 static bool PegcRule_mf_or( PegcRule const * self, pegc_parser * st )
 {
-    if( !pegc_isgood(st) || !self ) return false;
+    if( !self ) return false;
     pegc_const_iterator orig = pegc_pos(st);
     PegcRule const ** li = pegc_rulelists_search( st, self->_internal.key );
     for( ; li && *li && (*li)->rule; ++li )
     {
+	//MARKER;
 	if( (*li)->rule( *li, st ) )
 	{
 	    pegc_set_match( st, orig, pegc_pos(st), true );
 	    return true;
 	}
     }
+    //MARKER;
     pegc_set_pos(st,orig);
     return false;
 }
 
 static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self ) return false;
+    if( !self ) return false;
     pegc_const_iterator orig = pegc_pos(st);
     PegcRule const ** li = pegc_rulelists_search( st, self->_internal.key );
     if(!li) return false;
@@ -1372,7 +1374,7 @@ PegcRule pegc_r_and_e( pegc_parser * st, ... )
 
 static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
+    if( !st || pegc_has_error(st) || !self || !self->proxy ) return false;
     pegc_const_iterator orig = pegc_pos(st);
     bool rc = self->proxy->rule( self->proxy, st );
     //MARKER; printf("rule matched =? %d\n", rc);
@@ -1453,7 +1455,7 @@ PegcRule pegc_r_char( pegc_char_t input, bool caseSensitive )
 #define ACPRULE_ISA(F) \
 static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
 { \
-    if( ! pegc_isgood(st)  ) return false; \
+    if( !st || pegc_has_error(st)  ) return false; \
     pegc_const_iterator pos = pegc_pos(st); \
     if( is ## F(*pos) ) { \
 	pegc_set_match( st, pos, pos+1, true ); \
@@ -1484,7 +1486,7 @@ ACPRULE_ISA(blank," \t");
 
 static bool PegcRule_mf_blanks( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self ) return false;
+    if( !st || pegc_has_error(st) || !self ) return false;
     const PegcRule r = pegc_r_star( &PegcRule_blank );
     return r.rule( &r, st );
 }
@@ -1493,7 +1495,7 @@ const PegcRule PegcRule_blanks = {PegcRule_mf_blanks,0};
 
 static bool PegcRule_mf_opt( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_isgood(st) || !self || !self->proxy ) return false;
+    if( !st || pegc_has_error(st) || !self || !self->proxy ) return false;
     self->proxy->rule( self->proxy, st );
     return true;
 }
@@ -1508,7 +1510,7 @@ PegcRule pegc_r_opt( PegcRule const * proxy )
 static bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st )
 {
     bool r = pegc_eof(st);
-    MARKER; printf("at EOF? ==%d\n",r);
+    //MARKER; printf("at EOF? == %d\n",r);
     return r;
 }
 const PegcRule PegcRule_eof = PEGC_INIT_RULE(PegcRule_mf_eof,0);
@@ -1546,9 +1548,9 @@ static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
     long myv = 0;
     int len = 0;
     int rc = sscanf(pegc_pos(st), "%ld%n",&myv,&len);
-    MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
-    if( (EOF == rc) || (0 == len) ) return false;
-    MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
+    //MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
+    if( (1 != rc) || (0 == len) ) return false;
+    //MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
     //if( ! pegc_advance(st,len) ) return false;
     //MARKER;printf("sscanf(%%ld) rc=%d len=%ld\n", rc, len );
     pegc_set_match( st, orig, orig + len, true );
@@ -1595,10 +1597,10 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	   After we've matched digits we need to ensure that the next
 	   character is [what we consider to be] legal.
 	*/
-	PegcRule * punct = pegc_copy_r( st, pegc_r_oneof("._",true) );
-	PegcRule * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, punct, 0 ) );
-	PegcRule * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
-	PegcRule * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
+	PegcRule const * punct = pegc_copy_r( st, pegc_r_oneof("._",true) );
+	PegcRule const * illegaltail = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_alpha, punct, 0 ) );
+	PegcRule const * next = pegc_copy_r( st, pegc_r_notat( illegaltail ) );
+	PegcRule const * end = pegc_copy_r( st, pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
 	proxy = pegc_copy_r( 0, pegc_r_and_e( st, integer, end, 0 ) );
 	pegc_gc_register( st, (void *)PegcRule_mf_int_dec_strict, 0, proxy, pegc_free );
     }
@@ -1663,7 +1665,7 @@ typedef struct pegc_range_info pegc_range_info;
 
 static bool PegcRule_mf_repeat( PegcRule const * self, pegc_parser * st )
 {
-    if( ! self || !st || !self->data || !self->proxy ) return false;
+    if( ! self || !st || !self->data || !self->proxy || pegc_has_error(st) ) return false;
     pegc_range_info const * info = self->data;
     if( ! info ) return false;
     pegc_const_iterator orig = pegc_pos(st);
@@ -1692,7 +1694,7 @@ PegcRule pegc_r_repeat( pegc_parser * st,
 			unsigned int min,
 			unsigned int max )
 {
-    if( ! st || !rule || pegc_eof(st) ) return PegcRule_invalid;
+    if( ! st || !rule ) return PegcRule_invalid;
     if( (max < min) || (0==max) ) return PegcRule_invalid;
     if( (min == 1) && (max ==1) ) return *rule;
     if( (min == 0) && (max == 1) ) return pegc_r_opt( rule );
@@ -1718,7 +1720,7 @@ struct pegc_pad_info
 typedef struct pegc_pad_info pegc_pad_info ;
 static bool PegcRule_mf_pad( PegcRule const * self, pegc_parser * st )
 {
-    if( ! self || !st || !self->rule ) return false;
+    if( ! self || !st || pegc_has_error(st) || !self->rule ) return false;
     PegcRule const * left = 0;
     PegcRule const * right = 0;
     pegc_pad_info const * info = (pegc_pad_info const *)self->data;

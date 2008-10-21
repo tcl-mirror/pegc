@@ -298,11 +298,13 @@ extern "C" {
     bool pegc_has_error( pegc_parser const * st );
 
     /**
-       Returns true if st is not null and !pegc_eof(st)
-       and !pegc_has_errors(st). Remember that parsing
-       may legally move the parser to EOF, so do not use
-       this to check for external errors *after* a parse. Use
-       pegc_eof() and pegc_has_error() instead.
+       Returns true if st is not null and !pegc_eof(st) and
+       !pegc_has_errors(st). Remember that parsing may legally move
+       the parser to EOF, and that arbitrary rules may treat EOF as a
+       matchable value, so this routine has to be used carefully to
+       avoid conflicts with EOF. If a rule might legally run into EOF
+       then use pegc_eof() and pegc_has_error() instead of this
+       routine.
     */
     bool pegc_isgood( pegc_parser const * st );
 
