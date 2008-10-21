@@ -1,7 +1,6 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
-/*!
-@mainpage pegc PEG generation library
+/*! @mainpage pegc PEG generation library
 
 pegc is a toolkit for writing PEG-style parsers in C using something
 similar to functional composition, conceptually similar to C++ parsing
@@ -10,9 +9,12 @@ toolkits like Boost.Spirit, PEGTL, and parsepp
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
-License: Public Domain
+License: the core library is Public Domain, but some of the borrowed
+utility code is released under a BSD license (see hashtable*.{c,h} for details).
 
 Home page: http://fossil.wanderinghorse.net/repos/pegc/
+
+@section sec_about About
 
 pegc attempts to implement a model of parser which has become quite
 popular in C++, but attempts to do so within the limitations of C (e.g. lack of type
@@ -43,20 +45,26 @@ relatively easy to implement a self-hosted code generator which can
 read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
 is, a PEGC-parsed grammar which in turn generates PEGC parser code.
 
-========================================================================
-
-API Notes and Conventions:
+@section sec_apinotes API Notes and Conventions:
 
 Parsers are created using pegc_create_parser() and destroyed using
-pegc_destroy_parser().
+pegc_destroy_parser(). A parser object is an opaque type used by
+the library to keep track of the state of a parse, including the
+input range and any resources dynamically allocated by the rules
+generation process.
 
-Rules are modelled using PegcRule objects, which conceptually hold a
-function pointer (the rule implementation), rule-specific static data
-(e.g. a list of characters to match against), an optional
-client-provided data pointer, and (in some cases) "hidden" dynamically
-allocated data (some rules cannot be implemented using only static
-data). Rule objects are created either by using the pegc_r_XXX()
-family of functions or providing customized PegcRule objects.
+Rules are modelled using PegcRule objects, which are composed in
+various ways to parse client-defined grammars of arbitrary
+complexity. A rule conceptually hold a function pointer (the rule
+implementation), possibly rule-specific static data (e.g. a list of
+characters to match against), an optional client-provided data
+pointer, and (in some cases) "hidden" dynamically allocated data (some
+rules cannot be implemented using only static data). Rule objects are
+created either by using the pegc_r_XXX() family of functions or
+providing customized PegcRule objects. Rules which can be implemented
+using only static data (and no parser-specific data) can often be
+implemented as shared PegcRule objects (e.g. PegcRule_eof and
+PegcRule_isspace).
 
 Many pegc_r_XXX() functions can be called without having a parser
 object, but some require a parser object so that they have a place to
@@ -64,7 +72,7 @@ object, but some require a parser object so that they have a place to
 important consideration when building parsers which use such rules is
 that one only needs to create each rule one time for any given
 parser. Rules have, by convention, no non-const state, so it is safe
-to share them within the context of a given parser.  For example, if
+to use them in multiple parts of a given grammar.  For example, if
 you need a certain list of rules in several places in your grammar, it
 is wise to create that list only once and reference that copy
 throughout the grammar, instead of calling pegc_r_list_a() (or
@@ -74,13 +82,9 @@ the parser. Note that most allocation happens during the construction
 of the grammar, not during the actual parsing (where little or no
 allocation happens unless the user copies tokens from the parse).
 
-Rules can be composed to form parsers of arbitrary complexity,
-starting with a single root/top/start rule, which then delegates as
-necessary for the specific grammar.
-
 Some examples of pegc rules:
 
-\code
+@code
 //matches a single 'a', case-sensitively:
 PegcRule a = pegc_r_char('a',true);
 
@@ -94,15 +98,13 @@ PegcRule foo = pegc_r_string("foo", true);
 
 // matches ((foo)?):
 PegcRule optFoo = pegc_r_opt(&foo);
-\endcode
+@endcode
 
 The API provides routines for creating rule lists, but care must be
 taken to always terminate such lists with a NULL entry so that this
 API can avoid overrunning the bounds of a rule list.
 
-========================================================================
-
-Thread safety:
+@section sec_threadsafety Thread safety:
 
 It is never legal to use the same instance of a parser in multiple
 threads at one time, as the parsing process continually updates the
@@ -114,8 +116,7 @@ effectively const) are more or less thread-safe after they are initialized
 cleanup). That said, many rules have an association with a specific parser
 instance, and those rules must be treated as non-thread-safe.
 
-========================================================================
-Notes about boolean types:
+@section sec_aboutbooleans About boolean types:
 
 By default this code defines its own macros for true/false and the bool
 keyword. If PEGC_HAVE_STDBOOL is defined to a true value then <stdbool.h>
@@ -123,9 +124,7 @@ is used instead. When compiling under C++ (i.e. __cplusplus is defined),
 stdbool.h is not necessary and we use the C++-defined bool/true/false
 (and PEGC_HAVE_STDBOOL is ignored entirely).
 
-========================================================================
-
-Credits:
+@section sec_credits Credits
 
 Bryan Ford (http://www.brynosaurus.com) is, AFAIK, the originator of the
 PEG concept.
@@ -135,11 +134,11 @@ exposure to PEGs, and immediately piqued my interest in the topic. After
 implementing two libraries similar to PEGTL, i felt compelled to try it
 yet again, this time in plain old C.
 
-Christopher Clark implemented the hashtable code used by pegc for garbage
-collection.
+Christopher Clark implemented the hashtable code used extensively by
+pegc.
 
 Some of the utility code (e.g. vappendf.{c,h}) is based on public domain
-code written by other people.
+code written mostly by other people.
 ************************************************************************/
 
 #include <stdarg.h>
@@ -527,6 +526,9 @@ extern "C" {
 
        If this routine is called multiple times for the same
        parser, the data is replaced on subsequent calls.
+
+       If you want the parser to take ownership of the data, use
+       pegc_gc_register() and pegc_gc_search() instead.
     */
     void pegc_set_client_data( pegc_parser * st, void * data );
 
@@ -721,8 +723,8 @@ extern "C" {
     PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const r );
 
     /**
-       Requires that self->data be a pegc_const_iterator. Matches if
-       any character in that string matches the next char of st.
+       Returns a rule which matches if any character in the given string
+       matches the next input char.
     */
     PegcRule pegc_r_oneof( char const * list, bool caseSensitive );
 
@@ -781,7 +783,7 @@ extern "C" {
        If st or spec are null, or the first character of spec
        is not a '[' then an invalid rule is returned.
     */
-    PegcRule const * pegc_r_char_spec( pegc_parser * st, char const * spec );
+    PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec );
 
 
     /**
@@ -789,6 +791,7 @@ extern "C" {
        consume. proxy must not be 0 and must outlive the returned
        object.
     */
+    //PegcRule pegc_r_at( PegcRule const * proxy );
     PegcRule pegc_r_at( PegcRule const * proxy );
 
     /**
@@ -825,7 +828,7 @@ extern "C" {
        most efficient (the others synthesize an array, which causes
        extra allocations, and call this routine).  ).
     */
-    PegcRule const * pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
+    PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
 
     /**
        Works like pegc_r_list_a() but requires a NULL-terminated list of
@@ -833,7 +836,7 @@ extern "C" {
 
        Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
     */
-    PegcRule const * pegc_r_list_e( pegc_parser * st, bool orOp, ... );
+    PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... );
 
     /**
        Works like pegc_r_list_a() but requires a NULL-terminated list of
@@ -842,27 +845,27 @@ extern "C" {
 
        Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
     */
-    PegcRule const * pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap );
+    PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap );
 
     /**
-       Convenience form of pegc_r_list_a( st, true, ... ).
+       Convenience form of pegc_r_list_e( st, true, lhs, rhs, 0 ).
     */
-    PegcRule const * pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
+    PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
 
     /**
        Like pegc_r_or(), but requires a null-terminated list of (PegcRule const *).
     */
-    PegcRule const * pegc_r_or_e( pegc_parser * st, ... );
+    PegcRule pegc_r_or_e( pegc_parser * st, ... );
 
     /**
-       Convenience form of pegc_r_list_e( st, false, ... ).
+       Convenience form of pegc_r_list_e( st, false, lhs, rhs, 0 ).
     */
-    PegcRule const * pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
+    PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
 
     /**
        Like pegc_r_and(), but requires a null-terminated list of (PegcRule const *).
     */
-    PegcRule const * pegc_r_and_e( pegc_parser * st, ... );
+    PegcRule pegc_r_and_e( pegc_parser * st, ... );
 
     /**
        Typedef for Action functions. Actions are created using
@@ -899,10 +902,10 @@ extern "C" {
       accumulate parsed tokens in a client-side structure, convert
       tokens to (e.g.) integers, or whatever the client needs to do.
      */
-    PegcRule const * pegc_r_action( pegc_parser * st,
-				    PegcRule const * rule,
-				    pegc_action onMatch,
-				    void * clientData );
+    PegcRule pegc_r_action( pegc_parser * st,
+			    PegcRule const * rule,
+			    pegc_action onMatch,
+			    void * clientData );
 
     /**
        Creates a rule which matches between min and max
@@ -923,10 +926,10 @@ extern "C" {
        On error ((max<min), st or rule are null, or eof), an invalid
        rule is returned.
     */
-    PegcRule const * pegc_r_repeat( pegc_parser * st,
-				    PegcRule const * rule,
-				    unsigned int min,
-				    unsigned int max );
+    PegcRule pegc_r_repeat( pegc_parser * st,
+			    PegcRule const * rule,
+			    unsigned int min,
+			    unsigned int max );
 
     /**
        Creates a rule which matches if the equivalent of:
@@ -968,11 +971,11 @@ extern "C" {
        "token". It is possible to capture the left/right pad rule matches
        by wrapping them in an Action rule.
     */
-    PegcRule const * pegc_r_pad( pegc_parser * st,
-				 PegcRule const * leftRule,
-				 PegcRule const * mainRule,
-				 PegcRule const * rightRule,
-				 bool discardLeftRight);
+    PegcRule pegc_r_pad( pegc_parser * st,
+			 PegcRule const * leftRule,
+			 PegcRule const * mainRule,
+			 PegcRule const * rightRule,
+			 bool discardLeftRight);
 
     /**
        An object implementing functionality identical to the
@@ -1006,7 +1009,7 @@ extern "C" {
 
     /**
        A rule object for matching any number of blank characters
-       (space or horizontal tab). Equivalent to: ([ \t]*)
+       (space or horizontal tab). Equivalent to: ([ \\t]*)
     */
     extern const PegcRule PegcRule_blanks;
 
@@ -1079,13 +1082,12 @@ extern "C" {
        Any other trailing characters (including EOF) are considered
        legal.
 
-       The returned object is owned by st. This rule requires a
-       "relatively" large amount of dynamic resources (for several
-       sub-rules), but it caches the rules on a per-parser basis. This
-       subsequent calls with the same parser argument will always
-       return a handle to the same object.
+       This rule requires a "relatively" large amount of dynamic
+       resources (for several sub-rules), but it caches the rules on a
+       per-parser basis. This subsequent calls with the same parser
+       argument will always return a handle to the same object.
     */
-    PegcRule const * pegc_r_int_dec_strict( pegc_parser * st );
+    PegcRule pegc_r_int_dec_strict( pegc_parser * st );
 
     /**
        Similar to pegc_r_int_dec_strict(), but does not
@@ -1163,25 +1165,21 @@ extern "C" {
        Creates a rule which always returns false and sets the parser
        error message to msg. The msg string is not copied until the rule
        is triggered, so it must outlive the returned rule.
-
-       The returned rule is owned by st.
     */
-    PegcRule const * pegc_r_error( pegc_parser * st, char const * msg );
+    PegcRule pegc_r_error( pegc_parser * st, char const * msg );
 
     /**
        Creates a rule which always returns false, never consumes, and
        sets the parser error string to the printf-style formated
        string. In contrast to pegc_r_error(), the string is copied
        when the rule is created.
-
-       The returned rule is owned by st.
     */
-    PegcRule const * pegc_r_error_v( pegc_parser * st, char const * fmt, va_list );
+    PegcRule pegc_r_error_v( pegc_parser * st, char const * fmt, va_list );
 
     /**
        Identical to pegc_r_error_v() except that it takes (...) instead of a va_list.
     */
-    PegcRule const * pegc_r_error_e( pegc_parser * st, char const * fmt, ... );
+    PegcRule pegc_r_error_e( pegc_parser * st, char const * fmt, ... );
 
 #ifdef __cplusplus
 } // extern "C"
