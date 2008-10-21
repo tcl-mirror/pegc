@@ -86,14 +86,14 @@ struct pegc_parser
        These hashtables are used to pass private data between routines
        and for garbage collection.
     */
-    struct {
+    struct hashes {
 	hashtable * hashes; /* GC for the following hashtables... */
 	hashtable * actions; /* data for Actions. */
 	hashtable * rulelists; /* data for rule lists */
 	hashtable * funcptr; /* for mapping funcs to shared/reusable objects. */
 	hashtable * gc; /* holds pegc_gc_entry objects. */
     } hashes;
-    struct {
+    struct errinfo {
 	char * message;
 	unsigned int line;
 	unsigned int col;

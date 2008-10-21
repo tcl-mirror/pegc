@@ -1,6 +1,8 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
-/************************************************************************
+/*!
+@mainpage pegc PEG generation library
+
 pegc is a toolkit for writing PEG-style parsers in C using something
 similar to functional composition, conceptually similar to C++ parsing
 toolkits like Boost.Spirit, PEGTL, and parsepp
@@ -58,20 +60,19 @@ family of functions or providing customized PegcRule objects.
 
 Many pegc_r_XXX() functions can be called without having a parser
 object, but some require a parser object so that they have a place to
-"attach" dynamically allocated resources and avoid memory leaks. This
-API inconsistency wouldn't be necessary in a language with destructors
-(because rules could free their own resources), but this approach
-would seem to be the only feasible solution in C (unless a
-full-fledged garbage collector was built in to this library). An
+"attach" dynamically allocated resources and avoid memory leaks. An
 important consideration when building parsers which use such rules is
 that one only needs to create each rule one time for any given
 parser. Rules have, by convention, no non-const state, so it is safe
 to share them within the context of a given parser.  For example, if
 you need a certain list of rules in several places in your grammar, it
-is wise to create that list only once and reference it throughout the
-grammar, instead of calling pegc_r_list_a() (or similar) each time an
-identical rule is needed.  Failing to follow this guideline will
-result in significantly larger memory costs for the parser.
+is wise to create that list only once and reference that copy
+throughout the grammar, instead of calling pegc_r_list_a() (or
+similar) each time an identical rule is needed.  Failing to follow
+this guideline will result in significantly larger memory costs for
+the parser. Note that most allocation happens during the construction
+of the grammar, not during the actual parsing (where little or no
+allocation happens unless the user copies tokens from the parse).
 
 Rules can be composed to form parsers of arbitrary complexity,
 starting with a single root/top/start rule, which then delegates as
@@ -601,7 +602,7 @@ extern "C" {
 	   The client object is reserved for client-side use.
 	   This library makes no use of it.
 	*/
-	struct {
+	struct client {
 	    /**
 	       For client-side use. This library makes no use of it.
 	    */
@@ -618,7 +619,7 @@ extern "C" {
 	   this code - don't rely on it. Don't even look at it.
 	   Not even the docs for it.
 	*/
-	struct
+	struct _internal
 	{
 	     /*
 	       A unique lookup key for some mappings (e.g. actions and
@@ -830,6 +831,10 @@ extern "C" {
        once).
 
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
+
+       Of the various pegc_r_list_X() implementations, this one is
+       most efficient (the others synthesize an array, which causes
+       extra allocations, and call this routine).  ).
     */
     PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
 
