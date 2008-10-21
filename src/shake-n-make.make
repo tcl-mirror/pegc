@@ -553,20 +553,13 @@ ShakeNMake.USE_MKDEPS ?= 0
 else
 ShakeNMake.USE_MKDEPS ?= 1
 endif
-
+#$(warning ShakeNMake.USE_MKDEPS=$(ShakeNMake.USE_MKDEPS));
 ifeq (1,$(ShakeNMake.USE_MKDEPS))
 ShakeNMake.CISH_SOURCES += $(wildcard *.cpp *.c *.c++ *.h *.hpp *.h++ *.hh)
+#$(warning ShakeNMake.CISH_SOURCES=$(ShakeNMake.CISH_SOURCES))
 ifneq (,$(ShakeNMake.CISH_SOURCES))
 ShakeNMake.CISH_DEPS_FILE := .make.c_deps
 ShakeNMake.BINS.MKDEP = gcc -E -MM $(INCLUDES)
-# ShakeNMake.BINS.MKDEP = ./mkdep $(INCLUDES) --
-# PACKAGE.DIST_FILES += mkdep.c
-# mkdep: mkdep.c
-#	$(CC) -o $@ $^
-# DISTCLEAN_FILES += $(ShakeNMake.BINS.MKDEP)
-
-# Reminder: don't add $(ShakeNMake.BINS.MKDEP) to CLEAN_FILES because
-# that causes it the deps and cleanup rules conflict a bit.
 CLEAN_FILES += $(ShakeNMake.CISH_DEPS_FILE)
 $(ShakeNMake.CISH_DEPS_FILE): $(PACKAGE.MAKEFILE) $(ShakeNMake.MAKEFILE) $(ShakeNMake.CISH_SOURCES)
 	@$(ShakeNMake.BINS.MKDEP) $(ShakeNMake.CISH_SOURCES) 2>/dev/null > $@ || \
@@ -575,10 +568,10 @@ $(ShakeNMake.CISH_DEPS_FILE): $(PACKAGE.MAKEFILE) $(ShakeNMake.MAKEFILE) $(Shake
 # to kill the build.
 
 ifneq (,$(strip $(filter distclean clean,$(MAKECMDGOALS))))
-# $(warning Skipping C/C++ deps generation.)
+#$(warning Skipping C/C++ deps generation.)
 ABSOLUTEBOGO := $(shell $(ShakeNMake.BINS.RM) -f $(ShakeNMake.CISH_DEPS_FILE))
 else
-# $(warning Including C/C++ deps.)
+#$(warning Including C/C++ deps.)
 -include $(ShakeNMake.CISH_DEPS_FILE)
 endif
 
