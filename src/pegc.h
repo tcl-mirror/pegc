@@ -35,15 +35,29 @@ rule which does not match (i.e. return true) must not consume
 input. Most rules which do match, on the other hand, do consume (there
 are several exceptions to that rule, though).
 
-In C++ we would build the parser using templates (at least that's
+This is a much different approach from traditional code generators
+such as lex/yacc/bison. Aside from PEGs being runtime-defined parsers
+(whereas lex and friends create C code for a static parser), the PEG
+model inherently reduces the tokenize/parse steps into one step.
+
+In C++ we would build a PEG parser using templates (at least that's
 how i'd do it). In C we don't have that option, so we build up little
 objects which contain a Rule function and some data for that function.
 Those rules can then be processed in a PEG fashion.
 
-My theory is that once the basic set of rules are in place, it will be
+In theory, once the basic set of pegc rules are in place, it should be
 relatively easy to implement a self-hosted code generator which can
-read a lex/yacc/lemon-like grammar and generate pegc-based parsers. That
-is, a PEGC-parsed grammar which in turn generates PEGC parser code.
+read a lex/yacc/lemon-like grammar and generate parsers which
+themselves use the pegc API. That is, a PEGC-parsed grammar which in
+turn generates PEGC parser code.
+
+@section sec_features_misfeatures Features and Misfeatures
+
+The main feature of pegc is the ability to create parsers
+in C code using "structural composition." That is, "composing"
+grammars by chaining rule objects together.
+
+
 
 @section sec_apinotes API Notes and Conventions:
 
@@ -92,6 +106,8 @@ PegcRule a = pegc_r_char('a',true);
 PegcRule aA = pegc_r_char('a',false);
 // same meaning, but different approach:
 PegcRule aA = pegc_r_oneof("aA",false);
+// Again the same meaning, but different approach:
+PegcRule aA pegc_r_char_spec( myParser, "[aA]" );
 
 // matches the literal string "foo", case-sensitively:
 PegcRule foo = pegc_r_string("foo", true);
@@ -103,6 +119,35 @@ PegcRule optFoo = pegc_r_opt(&foo);
 The API provides routines for creating rule lists, but care must be
 taken to always terminate such lists with a NULL entry so that this
 API can avoid overrunning the bounds of a rule list.
+
+@section sec_requirements Requirements and Prerequisites
+
+pegc has no external dependencies other than the standard C
+library. That said, some code relies on features which are not part of the
+C89 standard, ARE part of the C99 standard, but are supported by default
+on almost all C compilers (whether or not running in C99 mode). The notable
+examples are variable-length arrays, e.g.:
+
+@code
+const int foo = 10;
+some_type bar[foo];
+@endcode
+
+and the ability to declare variables somewhere other than the very start
+of the function body, e.g.:
+
+@code
+int foo() {
+  int x;
+  double y;
+  printf("%d %f\n",d,y);
+  int z; // this is not allowed by C89 but almost all C compilers allow it.
+  ...
+}
+@endcode
+
+Additionally, there may be instances of C++-style to-end-of-line comments (<tt>//</tt>).
+
 
 @section sec_threadsafety Thread safety:
 
@@ -143,6 +188,7 @@ Some of the utility code (e.g. vappendf.{c,h}) is based on public domain
 code written mostly by other people.
 
 This Wikipedia page was really helpful: http://en.wikipedia.org/wiki/Parsing_expression_grammar
+
 
 ************************************************************************/
 
@@ -207,8 +253,9 @@ extern "C" {
 
     /**
        Initializes it to point at the range [begin,end) and sets
-       it->pos set to begin. Returns false and does nothing
-       if (end<begin).
+       it->pos set to begin. Returns false and does nothing if
+       (end<begin). As a special case, if end is 0 then strlen(begin)
+       will be used
 
        When re-mapping a parser to a different input source than
        previously used, be sure to call pegc_set_error() to clear the
@@ -270,6 +317,21 @@ extern "C" {
        
     */
     bool pegc_create_parser( pegc_parser ** st, char const * inp, long len );
+
+
+
+    /**
+       Initializes st's input. This effectively invalidates any
+       current parse, as the input range has changed. The input range
+       must outlive st.
+
+       If length is less than 0 then strlen(begin) will be used to
+       calculate the end point.
+
+       If (!st) then false is returned. null input is legal (but not
+       parseable).
+    */
+    bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length );
 
     /**
        Clears the parser's internal state, freeing any resources
@@ -582,6 +644,19 @@ extern "C" {
        Some rules also need a proxy rule, on whos behalf they run
        (normally providing some other processing if the proxy rule
        matches, such as running an action).
+
+       When creating rule implementations it is sometimes useful to
+       bind extra dynamically-allocated information to a rule. The
+       preferred approach is to set PegcRule.data to some lookup key
+       value (any void pointer which is not in use by another rule,
+       which will stay valid for the life of other rule) and then call
+       pegc_gc_register() to map the custom metadata to the
+       PegcRule.data key. That approach ensures that copies of such
+       PegcRule object end up using the same shared data. While it
+       might be tempting to use a rule's address as the key, this is
+       only useful if the rule is created on the heap (and then
+       (rule->data=rule) should be set so that copies of the object
+       get the same key address.
     */
     struct PegcRule
     {

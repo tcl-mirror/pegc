@@ -20,6 +20,7 @@ extern "C" {
 
 #define DUMPPOS(P) MARKER; printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
 #include "pegc.h"
+#include "pegc_strings.h"
 #include "hashtable.h"
 #include "hashtable_utility.h"
 #include "vappendf.h"
@@ -376,29 +377,33 @@ static void * pegc_funcptr_search( pegc_parser const * st, void const * key )
 
 bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end )
 {
+    if( begin && (0 == end) ) end = (begin + strlen(begin));
     if( !it || (end < begin) ) return false;
     it->begin = it->pos = begin;
     it->end = end;
     return true;
 }
 
+bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length )
+{
+    return st
+	&& pegc_init_cursor( &st->cursor, begin,
+			     (length < 0)
+			     ? 0
+			     : (begin + length) );
+}
+
 bool pegc_create_parser( pegc_parser ** st, char const * inp, long len )
 {
     if( ! st ) return false;
     *st = 0;
-    if( !inp || !*inp ) return false;
     pegc_parser * p = (pegc_parser*) malloc( sizeof(pegc_parser) );
     if( ! p ) return false;
     ++pegc_parser_instanceCount;
     *p = pegc_parser_init;
-    if( len < 0 ) len = strlen(inp);
-    pegc_init_cursor( &p->cursor, inp, inp + len );
+    pegc_set_input( p, inp, len );
     *st = p;
     return true;
-    /**
-       fixme: do a proper check by calculating the size of a (char const *) and making sure that
-       ((thatval - len) > imp)
-    */
 }
 
 bool pegc_destroy_parser( pegc_parser * st )
@@ -570,8 +575,8 @@ bool pegc_set_pos( pegc_parser * st, pegc_const_iterator p )
 bool pegc_advance( pegc_parser * st, long n )
 {
     return ( 0 == n )
-	? 0
-	: (st ? pegc_set_pos( st, pegc_begin(st) + n ) : false);
+	? false
+	: (st ? pegc_set_pos( st, pegc_pos(st) + n ) : false);
 }
 
 bool pegc_bump( pegc_parser * st )
@@ -1375,7 +1380,7 @@ PegcRule pegc_r_char( pegc_char_t input, bool caseSensitive )
 #define ACPRULE_ISA(F) \
 static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
 { \
-    if( !st || pegc_has_error(st)  ) return false; \
+    if( !st || !pegc_isgood(st)  ) return false; \
     pegc_const_iterator pos = pegc_pos(st); \
     if( is ## F(*pos) ) { \
 	pegc_set_match( st, pos, pos+1, true ); \
@@ -1384,7 +1389,7 @@ static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
     return false; \
 }\
 const PegcRule PegcRule_ ## F = PEGC_INIT_RULE(PegcRule_mf_ ## F,0);
-/* {PegcRule_mf_ ## F,0,0} */
+/* SunStudio compiler says: warning: syntax error:  empty declaration. No clue what he's talking about. */
 
 ACPRULE_ISA(alnum);
 ACPRULE_ISA(alpha);
@@ -1535,7 +1540,31 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
        nothing extra, and is const-time access (unlike the hashtable
        lookup).
     */
+#if 0
     return r ? *r : PegcRule_invalid;
+#else
+    return r ? *((PegcRule const *)r) : PegcRule_invalid;
+    /*
+      ^^^ This cast is to get around a completely stupid warning from
+      the SunStudio compiler:
+
+    "pegc.c", line xxxx: warning: operands have incompatible types:
+    struct PegcRule {pointer to function(pointer to const struct
+    PegcRule {..}, pointer to struct pegc_parser {..}) returning char
+    rule, pointer to const void data, pointer to const struct PegcRule
+    {..} proxy, struct client {..} client} ":" const struct PegcRule
+    {pointer to function(pointer to const struct PegcRule {..},
+    pointer to struct pegc_parser {..}) returning char rule, pointer
+    to const void data, pointer to const struct PegcRule {..} proxy,
+    struct client {..} client}
+
+	
+    The problem appears to be that PegcRule_invalid is explicitely
+    const, whereas *r is not. This confuses the compiler, though in my
+    opinion that's a compiler bug.
+    */
+#endif
+
 }
 
 static bool PegcRule_mf_double( PegcRule const * self, pegc_parser * st )
@@ -1695,6 +1724,123 @@ PegcRule pegc_r_pad( pegc_parser * st,
     }
     return r;
 }
+
+
+
+struct pegc_string_quoted_data
+{
+    int qstyle; // 1 = single quotes, 2 = double
+    pegc_char_t ** dest;
+};
+typedef struct pegc_string_quoted_data pegc_string_quoted_data;
+/**
+   GC dtor for pegc_string_quoted_data objects.
+ */
+static void pegc_free_string_quoted_data(void *x)
+{
+    pegc_string_quoted_data * p = (pegc_string_quoted_data*)x;
+    if( x )
+    {
+	if( *(p->dest) ) free(*(p->dest));
+    }
+    free(x);
+}
+
+static bool PegcRule_mf_string_quoted_d( PegcRule const * self, pegc_parser * st )
+{
+    if( ! self || !self->data || !pegc_isgood(st) ) return false;
+    pegc_string_quoted_data * sd = (pegc_string_quoted_data*)pegc_gc_search( st, self->data );
+    if( ! sd ) return false;
+    if( *(sd->dest) )
+    {
+	MARKER; printf("freeing old match string: [%s]\n",*(sd->dest));
+	free(*(sd->dest));
+	*(sd->dest) = 0;
+    }
+    Clob * cb = 0;
+    clob_init( &cb, 0, 0 );
+    pegc_const_iterator orig = pegc_pos(st);
+    if( *pegc_pos(st) != '"' ) return false;
+    pegc_bump(st);
+    bool ok = true;
+    while( pegc_isgood(st) )
+    {
+	pegc_char_t ch = *pegc_pos(st);
+	if( '\\' == ch )
+	{
+	    if( ! pegc_bump(st) )
+	    {
+		ok = false;
+		break;
+	    }
+	    ch = *pegc_pos(st);
+	    switch(ch)
+	    {
+	      case 't': ch = '\t'; break;
+	      case 'n': ch = '\n'; break;
+	      case 'r': ch = '\r'; break;
+	      case 'v': ch = '\v'; break;
+	      case 'b': ch = '\b'; break;
+	      default:
+		  break;
+	    };
+	}
+	else if( '"' == ch )
+	{
+	    break;
+	}
+	clob_append_char_n( cb, ch, 1 );
+	pegc_bump(st);
+    }
+    if( (!ok)
+	|| (!pegc_isgood(st))
+	|| (*pegc_pos(st) != '"') )
+    {
+	clob_finalize(cb);
+	pegc_set_pos( st, orig );
+	return false;
+    }
+    pegc_bump(st);
+    *(sd->dest) = clob_take_buffer(cb);
+    MARKER; printf("target string = [%s]\n",*(sd->dest));
+    pegc_set_match( st, orig, pegc_pos(st), false );
+    clob_finalize(cb);
+    return true;
+}
+const PegcRule PegcRule_string_quoted_d = PEGC_INIT_RULE(PegcRule_mf_string_quoted_d,0);
+
+static bool PegcRule_mf_string_quoted_s( PegcRule const * self, pegc_parser * st )
+{
+    return false;
+}
+const PegcRule PegcRule_string_quoted_s = PEGC_INIT_RULE(0,0);
+
+static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
+{
+    return PegcRule_string_quoted_d.rule( self, st )
+	|| PegcRule_string_quoted_s.rule( self, st );
+}
+
+const PegcRule PegcRule_string_quoted = PEGC_INIT_RULE(PegcRule_mf_string_quoted,0);
+
+PegcRule pegc_r_string_quoted_d( pegc_parser * st,
+				 pegc_char_t ** target )
+{
+    if( ! st ) return PegcRule_invalid;
+    pegc_string_quoted_data * sd = (pegc_string_quoted_data*)malloc(sizeof(pegc_string_quoted_data));
+    if( ! sd ) return PegcRule_invalid;
+    PegcRule r = PegcRule_string_quoted_d;
+    sd->qstyle = 2;
+    sd->dest = target;
+    *(sd->dest) = 0;
+    r.data = sd;
+    pegc_gc_register( st, sd, 0, sd, pegc_free_string_quoted_data );
+    return r;
+}
+
+
+
+
 
 #undef MARKER
 #undef PEGC_INIT_RULE
