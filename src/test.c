@@ -189,12 +189,64 @@ int test_three()
     return rc;
 }
 
+#include "pegc_strings.h"
+int test_strings()
+{
+    MARKER; printf("test strings...\n");
+    char const * src[] = {
+    "\"a \\\"double-quoted\\\"  \\b\\bstring\"",
+    "\"a mis-quoted string",
+    "'a !'single-quoted!' string!!'",
+    "\"\"",
+    "'!t*!t*!t'",
+    0 };
+    pegc_parser * P;
+    pegc_create_parser( &P, 0, 0 );
+    char * tgt = 0;
+    PegcRule const QD = pegc_r_string_quoted( P, '"', '\\', &tgt );
+    PegcRule const QS = pegc_r_string_quoted( P, '\'', '!', &tgt );
+    PegcRule const R = pegc_r_list_e( P, true, &QD, &QS, 0 );
+    int rc = 0;
+    int i = 0;
+    for( i = 0 ; src[i]; ++i )
+    {
+	pegc_set_input( P, src[i], -1 );
+	MARKER;printf("\tset input to [%s]\n",src[i]);
+	if( pegc_parse(P, &R) )
+	{
+	    rc = 0;
+	    char * m  = pegc_get_match_string(P);
+	    pegc_const_iterator pos = pegc_pos(P);
+	    printf("Got match [unescaped=[%s]] on [src=[%s]]==[match=[%s]] current pos=[%s]\n",
+		   tgt ? tgt : "<EMPTY>",
+		   src[i],
+		   m?m:"<EMPTY>",
+		   (pos && *pos) ? pegc_latin1(*pos) : "<EOF>"
+		   );
+	    free(m);
+	}
+	else
+	{
+	    rc = 1;
+	    printf("failed to match [%s]\n",src[i]);
+	}
+	if( pegc_has_error( P ) )
+	{
+	    printf("Parser error message: [%s]\n",pegc_get_error(P,0,0));
+	}
+    }
+    pegc_destroy_parser( P );
+    return rc;
+}
+
+
 int main( int argc, char ** argv )
 {
     int rc = 0;
     rc = test_one();
     if(!rc) rc = test_two();
     if(!rc) rc = test_three();
+    if(!rc) rc = test_strings();
     printf("Done rc=%d.\n",rc);
     return rc;
 }
