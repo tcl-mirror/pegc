@@ -827,7 +827,7 @@ PegcRule pegc_r_error_e( pegc_parser * st, char const * fmt, ... )
     return ret;
 }
 
-PegcRule pegc_r_error( pegc_parser * st, char const * errstr  )
+PegcRule pegc_r_error( char const * errstr  )
 {
     return pegc_r( PegcRule_mf_error, errstr );
 }

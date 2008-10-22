@@ -1,11 +1,11 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
-/*! @mainpage pegc PEG generation library
+/*! @mainpage pegc: PEG parser generation library
 
 pegc is a toolkit for writing PEG-style parsers in C using something
 similar to functional composition, conceptually similar to C++ parsing
 toolkits like Boost.Spirit, PEGTL, and parsepp
-(http://wanderinghorse.net/cgi-bin/parsepp.cgi).
+(http://fossil.wanderinghorse.net/repos/parsepp/).
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
@@ -131,7 +131,9 @@ PEG concept.
 
 PEGTL (http://code.google.com/p/pegtl/), by Dr. Colin Hirsch, was my first
 exposure to PEGs, and immediately piqued my interest in the topic. After
-implementing two libraries similar to PEGTL, i felt compelled to try it
+implementing
+<a href='http://fossil.wanderinghorse.net/repos/parse0x/'>two</a>
+<a href='http://fossil.wanderinghorse.net/repos/parsepp/'>libraries</a> similar to PEGTL, i felt compelled to try it
 yet again, this time in plain old C.
 
 Christopher Clark implemented the hashtable code used extensively by
@@ -139,6 +141,9 @@ pegc.
 
 Some of the utility code (e.g. vappendf.{c,h}) is based on public domain
 code written mostly by other people.
+
+This Wikipedia page was really helpful: http://en.wikipedia.org/wiki/Parsing_expression_grammar
+
 ************************************************************************/
 
 #include <stdarg.h>
@@ -619,7 +624,9 @@ extern "C" {
 
     /**
        Returns true if (r && r->rule). Note that it does not
-       know about rule-specific validity checks.
+       know about rule-specific validity checks. Some rule
+       factory functions return an "invalid rule" on error,
+       and this routine can be used to check for that.
     */
     bool pegc_is_rule_valid( PegcRule const * r );
 
@@ -1166,7 +1173,7 @@ extern "C" {
        error message to msg. The msg string is not copied until the rule
        is triggered, so it must outlive the returned rule.
     */
-    PegcRule pegc_r_error( pegc_parser * st, char const * msg );
+    PegcRule pegc_r_error( char const * msg );
 
     /**
        Creates a rule which always returns false, never consumes, and
