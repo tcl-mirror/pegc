@@ -252,16 +252,16 @@ extern "C" {
     extern const pegc_cursor pegc_cursor_init;
 
     /**
-       Initializes it to point at the range [begin,end) and sets
+       Initializes curs to point at the range [begin,end) and sets
        it->pos set to begin. Returns false and does nothing if
-       (end<begin). As a special case, if end is 0 then strlen(begin)
-       will be used
+       (end<begin). As a special case, if begin is not 0 and end is 0
+       then strlen(begin) will be used to calculate the length.
 
        When re-mapping a parser to a different input source than
        previously used, be sure to call pegc_set_error() to clear the
        error state, or most parse operations will fail.
     */
-    bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end );
+    bool pegc_init_cursor( pegc_cursor * curs, pegc_const_iterator begin, pegc_const_iterator end );
 
     /**
        pegc_parser is the parser class used by the pegc API. It is an
@@ -318,10 +318,8 @@ extern "C" {
     */
     bool pegc_create_parser( pegc_parser ** st, char const * inp, long len );
 
-
-
     /**
-       Initializes st's input. This effectively invalidates any
+       Initializes st's input range and clears the error state. This effectively invalidates any
        current parse, as the input range has changed. The input range
        must outlive st.
 
