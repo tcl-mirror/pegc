@@ -389,7 +389,7 @@ bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length )
     return pegc_set_error( st, 0, 0 )
 	&& pegc_init_cursor( &st->cursor, begin,
 			     (length < 0)
-			     ? 0
+			     ? (pegc_const_iterator)0
 			     : (begin + length) );
 }
 
@@ -449,7 +449,7 @@ pegc_const_iterator pegc_latin1(int ch)
 	}
     }
     char const * r = ( (ch < 0) || (ch>255) )
-	? 0
+	? (pegc_const_iterator)0
 	: (latin1 + (2*ch));
     return r;
 }

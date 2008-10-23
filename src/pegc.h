@@ -53,10 +53,36 @@ turn generates PEGC parser code.
 
 @section sec_features_misfeatures Features and Misfeatures
 
-The main feature of pegc is the ability to create parsers
-in C code using "structural composition." That is, "composing"
-grammars by chaining rule objects together.
+pegc's main features include:
 
+- The ability to create parsers in C code using "structural composition."
+That is, "composing" grammars by chaining rule objects together.
+
+- Does not use a code generator.
+
+
+pegc's misfeatures include:
+
+- Can only handle ascii and latin-1 input. The internals try not to be
+too dependent on the character type (instead using typedefs for the
+supported char type), but some routines explicitly require a certain
+character type (e.g. those few which use strlen()).
+
+- It requires buffering all input before parsing begins. It
+would be very interesting to have a mechanism which allows it to
+stream data, but knowing at which point(s) we can discard old input
+is a difficult problem.
+
+- Converting tokens to client-side types (e.g. parsing/unescaping
+quoted strings or converting tokens to integers) can be tricky
+in terms of where/when to hook into the parser. This is more
+complicated by the fact that we don't have structs with real
+member functions and inheritance.
+
+- Due to the lack of exceptions in C, it is possible that a parse
+continues even after a rule has determined that the parse cannot
+succeed. To help avoid this, all but the most trivial core rules check
+the error state before doing anything.
 
 
 @section sec_apinotes API Notes and Conventions:
@@ -126,7 +152,9 @@ pegc has no external dependencies other than the standard C
 library. That said, some code relies on features which are not part of the
 C89 standard, ARE part of the C99 standard, but are supported by default
 on almost all C compilers (whether or not running in C99 mode). The notable
-examples are variable-length arrays, e.g.:
+examples are:
+
+variable-length arrays, e.g.:
 
 @code
 const int foo = 10;

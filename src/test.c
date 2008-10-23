@@ -32,9 +32,10 @@ int test_one()
     pegc_parser * st;
     pegc_create_parser( &st, src, -1 );
     //pegc_add_match_listener( st, my_match_listener, st );
-    const unsigned int rulecount = 50;
+#define rulecount 50
     PegcRule Rules[rulecount];
     memset( Rules, 0, rulecount * sizeof(PegcRule) );
+#undef rulecount
 
     unsigned int atRule = 0;
 #define NR Rules[atRule++]
@@ -59,6 +60,7 @@ int test_one()
     NR = pegc_r(0,0); // end of list
 #undef ACPMF
 #undef NR
+
 
     PegcRule * R = Rules;
     pegc_const_iterator at = 0;
