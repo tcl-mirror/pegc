@@ -120,7 +120,7 @@ parser. Rules have, by convention, no non-const state, so it is safe
 to use them in multiple parts of a given grammar.  For example, if
 you need a certain list of rules in several places in your grammar, it
 is wise to create that list only once and reference that copy
-throughout the grammar, instead of calling pegc_r_list_a() (or
+throughout the grammar, instead of calling pegc_r_list_ap() (or
 similar) each time an identical rule is needed.  Failing to follow
 this guideline will result in significantly larger memory costs for
 the parser. Note that most allocation happens during the construction
@@ -927,15 +927,16 @@ extern "C" {
        consume. proxy must not be 0 and must outlive the returned
        object.
     */
-    //PegcRule pegc_r_at( PegcRule const * proxy );
-    PegcRule pegc_r_at( PegcRule const * proxy );
+    PegcRule pegc_r_at_p( PegcRule const * proxy );
+    PegcRule pegc_r_at_v( pegc_parser * st, PegcRule const proxy );
 
     /**
        The converse of pegc_r_at(), this returns true only if the
        input does not match the given proxy rule. This rule never
        consumes.
     */
-    PegcRule pegc_r_notat( PegcRule const * proxy );
+    PegcRule pegc_r_notat_p( PegcRule const * proxy );
+    PegcRule pegc_r_notat_v( pegc_parser * st, PegcRule const proxy );
 
     /**
        Creates a rule which performs either an OR operation (if orOp
@@ -960,49 +961,59 @@ extern "C" {
 
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
 
-       Of the various pegc_r_list_X() implementations, this one is
+       Of the various pegc_r_plist_X() implementations, this one is
        most efficient (the others synthesize an array, which causes
        extra allocations, and call this routine).  ).
     */
-    PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li );
+    PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const ** li );
 
     /**
-       Works like pegc_r_list_a() but requires a NULL-terminated list of
+       Works like pegc_r_list_ap() but requires a NULL-terminated list of
        (PegcRule const *).
 
        Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
     */
-    PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... );
+    PegcRule pegc_r_list_ep( pegc_parser * st, bool orOp, ... );
+    /**
+       Functionally equivalent to pegc_r_list_vv(), but takes (...)
+       instead of a va_list.
+    */
+    PegcRule pegc_r_list_ev( pegc_parser * st, bool orOp, ... );
 
     /**
-       Works like pegc_r_list_a() but requires a NULL-terminated list of
+       Works like pegc_r_list_vp() but requires a NULL-terminated list of
        (PegcRule const *). If the list cannot be constructed for some
        reason then an invalid rule is returned.
 
        Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
     */
-    PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap );
+    PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap );
 
     /**
-       Convenience form of pegc_r_list_e( st, true, lhs, rhs, 0 ).
+       Functionally identical to pegc_r_list_vv() except that the list
+       of arguments must contain only PegcRule objects (not pointers
+       to objects!). The list must be terminated with an invalid rule
+       (one with a null .rule member).
     */
-    PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
+    PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap );
 
     /**
-       Like pegc_r_or(), but requires a null-terminated list of (PegcRule const *).
+       Convenience form of pegc_r_list_ep( st, true, ... );
     */
-    PegcRule pegc_r_or_e( pegc_parser * st, ... );
+    PegcRule pegc_r_or_ep( pegc_parser * st, ... );
+    /**
+       Convenience form of pegc_r_list_ev(st,true,...).
+    */
+    PegcRule pegc_r_or_ev( pegc_parser * st, ... );
 
     /**
-       Convenience form of pegc_r_list_e( st, false, lhs, rhs, 0 ).
+       Convenience form of pegc_r_list_ep(st,false,...);
     */
-    PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs );
-
+    PegcRule pegc_r_and_ep( pegc_parser * st, ... );
     /**
-       Like pegc_r_and(), but requires a null-terminated list of (PegcRule const *).
+       Convenience form of pegc_r_list_ev(st,false,...).
     */
-    PegcRule pegc_r_and_e( pegc_parser * st, ... );
-
+    PegcRule pegc_r_and_ev( pegc_parser * st, ... );
 
     /**
        Typedef for Action functions. Actions are created using

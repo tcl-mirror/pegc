@@ -1148,34 +1148,35 @@ static bool PegcRule_mf_at( PegcRule const * self, pegc_parser * st )
     return rc;
 }
 
-PegcRule pegc_r_at( PegcRule const * proxy )
-//PegcRule pegc_r_at( PegcRule const * proxy )
+PegcRule pegc_r_at_p( PegcRule const * proxy )
 {
-    if( !proxy ) return PegcRule_invalid;
+    if( pegc_is_rule_valid(proxy) ) return PegcRule_invalid;
     PegcRule r = pegc_r( PegcRule_mf_at, 0 );
-    r.proxy = proxy;
+    r.proxy = proxy; //pegc_copy_r(st, proxy);
     return r;
 }
-
+PegcRule pegc_r_at_v( pegc_parser * st, PegcRule const proxy )
+{
+    return pegc_r_at_p( pegc_copy_r(st,proxy) );
+}
 static bool PegcRule_mf_notat( PegcRule const * self, pegc_parser * st )
 {
-    if( !st || pegc_has_error(st) || !self ) return false;
-#if 0
-    pegc_const_iterator orig = pegc_pos(st);
-    bool ret = ! PegcRule_mf_at(self,st);
-    pegc_set_pos(st,orig);
-    return ret;
-#else
-    return  ! PegcRule_mf_at(self,st);
-#endif
+    return st && self && !pegc_has_error(st)
+	&& ! PegcRule_mf_at(self,st);
 }
 
-PegcRule pegc_r_notat( PegcRule const * proxy )
+//PegcRule pegc_r_notat( pegc_parser * st, PegcRule const proxy )
+PegcRule pegc_r_notat_p( PegcRule const * proxy )
 {
-    if( ! proxy ) return PegcRule_invalid;
+    if( ! pegc_is_rule_valid(proxy) ) return PegcRule_invalid;
     PegcRule r = pegc_r( PegcRule_mf_notat, 0 );
-    r.proxy = proxy;
+    r.proxy = proxy; // pegc_copy_r( st, proxy );
     return r;
+}
+
+PegcRule pegc_r_notat_v( pegc_parser * st, PegcRule const proxy )
+{
+    return pegc_r_notat_p( pegc_copy_r(st,proxy) );
 }
 
 
@@ -1216,7 +1217,7 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
-PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li )
+PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const ** li )
 {
     if( ! st || !li ) return PegcRule_invalid;
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, 0 );
@@ -1237,7 +1238,7 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li )
 	{ /* this might need to alloc. */
 	    MARKER;
 	    fprintf(stderr,
-		    "%s:%d:pegc_r_list_a() serious error: calloc() of %d (PegcRule*) failed!\n",
+		    "%s:%d:pegc_r_list_ap() serious error: calloc() of %d (PegcRule*) failed!\n",
 		    __FILE__,__LINE__,count);
 	}
 	return PegcRule_invalid;
@@ -1254,7 +1255,7 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li )
     return r;
 }
 
-PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
+PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
     const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
@@ -1276,7 +1277,7 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
 	    }
 	    else
 	    {
-		void * re = realloc( li, sizeof(PegcRule*) * (count + 1)  );
+		void * re = realloc( li, sizeof(PegcRule*) * count  );
 		if( ! re ) break;
 		li = (PegcRule const **)re;
 	    }
@@ -1289,57 +1290,148 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
 	return PegcRule_invalid;
     }
     li[pos] = 0;
-    PegcRule r = pegc_r_list_a( st, orOp, li );
-    pegc_free(li);
+    PegcRule r = pegc_r_list_ap( st, orOp, li );
+    free(li);
     return r;
 }
 
 
-PegcRule pegc_r_list_e( pegc_parser * st, bool orOp, ... )
+PegcRule pegc_r_list_ep( pegc_parser * st, bool orOp, ... )
 {
     va_list vargs;
     va_start( vargs, orOp );
-    PegcRule ret = pegc_r_list_v( st, orOp, vargs );
+    PegcRule ret = pegc_r_list_vp( st, orOp, vargs );
     va_end(vargs);
     return ret;
 }
 
-PegcRule pegc_r_or( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs )
-{
-    if( !st || !lhs || ! rhs )
-    {
-	return PegcRule_failure;
-    }
-    return pegc_r_list_e( st, true, lhs, rhs, 0 );
-}
-
-PegcRule pegc_r_or_e( pegc_parser * st, ... )
+PegcRule pegc_r_or_ep( pegc_parser * st, ... )
 {
     va_list vargs;
     va_start( vargs, st );
-    PegcRule ret = pegc_r_list_v( st, true, vargs );
+    PegcRule ret = pegc_r_list_vp( st, true, vargs );
     va_end(vargs);
     return ret;
 }
 
-PegcRule pegc_r_and( pegc_parser * st, PegcRule const * lhs, PegcRule const * rhs )
-{
-    if( !st || ! lhs || ! rhs )
-    {
-	return PegcRule_failure;
-    }
-    return pegc_r_list_e( st, false, lhs, rhs, 0 );
-}
-
-PegcRule pegc_r_and_e( pegc_parser * st, ... )
+PegcRule pegc_r_and_ep( pegc_parser * st, ... )
 {
     va_list vargs;
     va_start( vargs, st );
-    PegcRule ret = pegc_r_list_v( st, false, vargs );
+    PegcRule ret = pegc_r_list_vp( st, false, vargs );
     va_end(vargs);
     return ret;
 }
 
+
+static bool PegcRule_mf_or_v( PegcRule const * self, pegc_parser * st )
+{
+    if( !self ) return false;
+    pegc_const_iterator orig = pegc_pos(st);
+    PegcRule const * li = (PegcRule const *)self->data;
+    int i = 0;
+    for( ; li && li[i].rule; ++i )
+    {
+	//MARKER;
+	if( li[i].rule( &li[i], st ) )
+	{
+	    pegc_set_match( st, orig, pegc_pos(st), true );
+	    return true;
+	}
+    }
+    //MARKER;
+    pegc_set_pos(st,orig);
+    return false;
+}
+
+static bool PegcRule_mf_and_v( PegcRule const * self, pegc_parser * st )
+{
+    if( !self ) return false;
+    pegc_const_iterator orig = pegc_pos(st);
+    PegcRule const * li = (PegcRule const *)self->data;
+    if(!li) return false;
+    int i = 0;
+    for( ; li[i].rule; ++i )
+    {
+	if( ! li[i].rule( &li[i], st ) )
+	{
+	    pegc_set_pos(st,orig);
+	    return false;
+	}
+    }
+    pegc_set_match( st, orig, pegc_pos(st), true );
+    return true;
+}
+
+PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
+{
+    MARKER; printf("THIS IS UNTESTED CODE!\n");
+    if( !st ) return PegcRule_invalid;
+    const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
+    unsigned int count = 0;
+    PegcRule * li = 0;
+    unsigned int pos = 0;
+    while( true )
+    {
+	PegcRule const r = va_arg(ap,PegcRule const);
+	if( ! pegc_is_rule_valid(&r) ) break;
+	if( pos == count )
+	{ /* (re)allocate list */
+	    count += blockSize;
+	    MARKER;printf("(re)allocating list for %u items.\n",count);
+	    if( ! li )
+	    {
+		li = calloc( count, sizeof(PegcRule) );
+		if( ! li ) break;
+	    }
+	    else
+	    {
+		void * re = realloc( li, sizeof(PegcRule) * (count)  );
+		if( ! re ) break;
+		li = (PegcRule *)re;
+	    }
+	}
+	if( ! li ) break;
+	li[pos++] = r;
+    }
+    if( ! pos || !li )
+    {
+	if(li) pegc_free(li);
+	return PegcRule_invalid;
+    }
+    li[pos] = PegcRule_invalid;
+    MARKER;printf("Added %d item(s) to rule list.\n",pos);
+
+    pegc_gc_add( st, li, pegc_free );
+    PegcRule r = pegc_r( orOp ? PegcRule_mf_or_v : PegcRule_mf_and_v, li );
+    return r;
+}
+
+PegcRule pegc_r_list_ev( pegc_parser * st, bool orOp, ... )
+{
+    va_list vargs;
+    va_start( vargs, orOp );
+    PegcRule ret = pegc_r_list_vv( st, orOp, vargs );
+    va_end(vargs);
+    return ret;
+}
+
+PegcRule pegc_r_or_ev( pegc_parser * st, ... )
+{
+    va_list vargs;
+    va_start( vargs, st );
+    PegcRule ret = pegc_r_list_vv( st, true, vargs );
+    va_end(vargs);
+    return ret;
+}
+PegcRule pegc_r_and_ev( pegc_parser * st, ... )
+{
+    va_list vargs;
+    va_start( vargs, st );
+    PegcRule ret = pegc_r_list_vv( st, false, vargs );
+    va_end(vargs);
+    return ret;
+}
 
 static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
 {
@@ -1606,7 +1698,7 @@ const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
 static bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
 {
     pegc_const_iterator orig = pegc_pos(st);
-    if( self->proxy && self->proxy->rule( self->proxy, st ) )
+    if( self->proxy && self->proxy->rule && self->proxy->rule( self->proxy, st ) )
     {
 	//DUMPPOS(st);
 	pegc_set_match( st, orig, pegc_pos(st), true );
@@ -1634,22 +1726,16 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	pegc_gc_register( st, (void *)PegcRule_mf_int_dec_strict, 0, r, 0 );
 	//MARKER;printf("Creating shared proxy rule for pegc_r_int_dec_strict()\n");
 	/**
-	   Reminder: we have to copy the rules here because we need
-	   the sub-rules to be valid pointers after this routine
-	   returns.
-	*/
-	PegcRule const * integer = &PegcRule_int_dec;
-	/**
 	   After we've matched digits we need to ensure that the next
 	   character is [what we consider to be] legal.
 	*/
-#define CP(X) pegc_copy_r(st,X)
-	PegcRule const * punct = CP(pegc_r_oneof("._",true));
-	PegcRule const * illegaltail = CP(pegc_r_or_e( st, &PegcRule_alpha, punct, 0 ));
-	PegcRule const * next = CP(pegc_r_notat( illegaltail ) );
-	PegcRule const * end = CP(pegc_r_or_e( st, &PegcRule_eof, next, 0 ) );
-	r->proxy = CP(pegc_r_and_e( st, integer, end, 0 ));
-#undef CP
+	PegcRule const aend = PegcRule_invalid;
+	PegcRule const punct = pegc_r_oneof("._",true);
+	PegcRule const illegaltail = pegc_r_or_ev( st, PegcRule_alpha, punct, aend );
+	PegcRule const next = pegc_r_notat_v( st, illegaltail );
+	PegcRule const end = pegc_r_or_ev( st, PegcRule_eof, next, aend );
+	PegcRule const R = pegc_r_and_ev( st, PegcRule_int_dec, end, aend );
+	r->proxy = pegc_copy_r(st,R);
     }
     /**
        ^^^ instead of setting r.proxy we could just do

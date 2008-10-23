@@ -39,10 +39,11 @@ int test_one()
 
     unsigned int atRule = 0;
 #define NR Rules[atRule++]
+    PegcRule const end = PegcRule_invalid;
     NR = pegc_r_oneof("abcxyz",false);
     PegcRule const rH = pegc_r_char( 'h', true );
     PegcRule const rI = pegc_r_char( 'i', true );
-    PegcRule const rHI = pegc_r_or( st, &rI, &rH );
+    PegcRule const rHI = pegc_r_or_ep( st, &rI, &rH, 0 );
     PegcRule rHIPlus = pegc_r_plus(&rHI);
     NR = pegc_r_action_i( st, &rHIPlus, my_pegc_action, 0 );
     NR = pegc_r_star( &PegcRule_blank );
@@ -54,7 +55,7 @@ int test_one()
 	//pegc_r_opt(&PegcRule_alpha)
 	;
 #endif
-    NR = pegc_r_notat(&PegcRule_digit);
+    NR = pegc_r_notat_p(&PegcRule_digit);
     NR = pegc_r_action_i( st, &starAlpha, my_pegc_action, 0 );
     //NR = *pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
@@ -95,15 +96,18 @@ int test_two()
 {
     MARKER; printf("test two...\n");
     char const * src = "hiaF!";
-    char const * x = src;
-    for( ; *x; ++x )
+    if( 0 )
     {
-	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
+	char const * x = src;
+	for( ; *x; ++x )
+	{
+	    printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
+	}
     }
 
 #define TRY_STRICT 1
 #if TRY_STRICT
-    src = "-3492"; //" . xyz . asa";
+    src = "-3492 . xyz . asa";
 #else
     src = "-3492"; // ".323asa";
 #endif
@@ -208,7 +212,9 @@ int test_strings()
     char * tgt = 0;
     PegcRule const QD = pegc_r_string_quoted( P, '"', '\\', &tgt );
     PegcRule const QS = pegc_r_string_quoted( P, '\'', '!', &tgt );
-    PegcRule const R = pegc_r_list_e( P, true, &QD, &QS, 0 );
+    //PegcRule const R = pegc_r_list_ev( P, true, QD, QS, PegcRule_invalid );
+    PegcRule const R = pegc_r_list_ep( P, true, &QD, &QS, &PegcRule_invalid );
+    //PegcRule const R = pegc_r_or( P, &QD, &QS );
     int rc = 0;
     int i = 0;
     for( i = 0 ; src[i]; ++i )
@@ -287,6 +293,9 @@ int main( int argc, char ** argv )
     if(!rc) rc = test_three();
     if(!rc) rc = test_strings();
     if(!rc) rc = test_actions();
-    printf("Done rc=%d.\n",rc);
+    printf("Done rc=%d=[%s].\n",rc,
+	   (0==rc)
+	   ? "You win :)"
+	   : "You lose :(");
     return rc;
 }
