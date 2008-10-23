@@ -368,7 +368,7 @@ extern "C" {
 
        Note that the library internally allocates some storage
        associated with the parser for certain operations (e.g.  see
-       pegc_r_action() and pegc_r_list()). That memory is not freed
+       pegc_r_action_i() and pegc_r_list()). That memory is not freed
        until this function is called. Thus if parsers are not properly
        finalized, leak detection tools may report that this code
        leaks resources.
@@ -977,13 +977,13 @@ extern "C" {
 
     /**
        Typedef for Action functions. Actions are created using
-       pegc_r_action() and are triggered when their proxy rule
+       pegc_r_action_i() and are triggered when their proxy rule
        matches.
 
        Actions can act on client-side data in two ways:
 
        - By passing a data object as the 4th paramter to
-       pegc_r_action(). This approach is useful if different
+       pegc_r_action_i(). This approach is useful if different
        subparsers need different types of state.
 
        - By calling pegc_set_client_data() and accessing it from the
@@ -995,10 +995,11 @@ extern "C" {
        updates of the state from actions, however. In my experience,
        actions should not, as a rule, change the parser state.
     */
-    typedef void (*pegc_action)( pegc_parser const * st, void * clientData );
+    typedef void (*pegc_action_f)( pegc_parser const * st, void * clientData );
+
 
     /*
-      Creates a new Action. If rule matches then
+      Creates rule which, when it matches, triggers an action immediately. If rule matches then
       onMatch(st,clientData) is called. onMatch can fetch the matched
       string using pegc_get_match_string() or pegc_get_match_cursor().
 
@@ -1010,10 +1011,48 @@ extern "C" {
       accumulate parsed tokens in a client-side structure, convert
       tokens to (e.g.) integers, or whatever the client needs to do.
      */
-    PegcRule pegc_r_action( pegc_parser * st,
-			    PegcRule const * rule,
-			    pegc_action onMatch,
-			    void * clientData );
+    PegcRule pegc_r_action_i( pegc_parser * st,
+			      PegcRule const * rule,
+			      pegc_action_f onMatch,
+			      void * clientData );
+
+    /**
+       A callback type for delayed actions.
+
+       - st: the parser. The ONLY reason it is non-const is so that an
+       action can call pegc_set_error(). There *might* be useful
+       reasons for changing the parser during an action, but it sounds
+       dangerous to me.
+
+       - match: a pointer to the range matched by the rule which
+       triggers this callback. Note that it is a substring pointing
+       back at st's original input source, so it is probably not
+       null-terminated.
+
+       - clientData: arbitrary client-side data, passed as the 4th
+       argument to pegc_r_action_d().
+    */
+    typedef bool (*pegc_action_d_f)( pegc_parser * st,
+				     pegc_cursor const *match,
+				     void * clientData );
+
+    /**
+       Creates a rule implementing a delayed actions. That is,
+       actions which are queued when a rule matches, but not executed
+       until the user specifies (i.e. after a successfull parse).
+
+       Neither st nor rule may be null. onMatch may be 0, but there's not
+       much use for that. The clientData pointer is ignored by this code but
+       is passed on to onMatch when delayed actions are trigged.
+
+       Use pegc_trigger_actions() to trigger all queued actions.
+    */
+    PegcRule pegc_r_action_d( pegc_parser * st,
+			      PegcRule const * rule,
+			      pegc_action_d_f onMatch,
+			      void * clientData );
+    
+    bool pegc_trigger_actions( pegc_parser * st );
 
     /**
        Creates a rule which matches between min and max

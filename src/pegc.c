@@ -45,7 +45,8 @@ extern "C" {
 */
 static bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
 
-const pegc_cursor pegc_cursor_init = { 0, 0, 0 };
+#define PEGC_CURSOR_INIT { 0, 0, 0 }
+const pegc_cursor pegc_cursor_init = PEGC_CURSOR_INIT;
 #define PEGC_INIT_RULE(F,D) {	\
      F /* rule */,\
      D /* data */,\
@@ -90,9 +91,50 @@ struct pegc_match_listener_data
     struct pegc_match_listener_data * next;
 };
 typedef struct pegc_match_listener_data pegc_match_listener_data;
+const static pegc_match_listener_data pegc_match_listener_data_init = {0,0,0};
 
-const static pegc_match_listener_data
-pegc_match_listener_data_init = {0,0,0};
+
+
+/**
+   PegcAction is a type for implementing delayed actions. That is, actions
+   which are queued when a rule matches, but not executed until the user
+   specifies (i.e. after a successfull parse).
+   
+   PegcActions should not be instantiated directly by client code. Use
+   pegc_r_action_d() to create 
+*/
+struct PegcAction
+{
+    /**
+       Implementation function for this object.
+    */
+    pegc_action_d_f action;
+    /**
+       Arbitrary client data, to be passed as the 3rd argument to the action.
+    */
+    void * data;
+    /**
+       The range of the matching characters, as determined by the rule associated
+       with this action.
+    */
+    pegc_cursor match;
+};
+typedef struct PegcAction PegcAction;
+    
+//#define PEGC_ACTION_INIT {0,0,PEGC_CURSOR_INIT} /* compile error? */
+#define PEGC_ACTION_INIT {0,0}
+static const PegcAction PegcAction_init = PEGC_ACTION_INIT;
+struct pegc_actions
+{
+    struct pegc_actions * left;
+    struct pegc_actions * right;
+    PegcAction action;
+};
+typedef struct pegc_actions pegc_actions;
+//#define PEGC_ACTIONS_INIT {0,0,PEGC_ACTION_INIT}
+#define PEGC_ACTIONS_INIT {0,0}
+static const pegc_actions pegc_actions_init = PEGC_ACTIONS_INIT;
+
 
 /**
    The main parser state type.
@@ -106,6 +148,7 @@ struct pegc_parser
     */
     pegc_cursor match;
     pegc_match_listener_data * listeners;
+    pegc_actions * actions;
     /**
        These hashtables are used to pass private data between routines
        and for garbage collection.
@@ -130,6 +173,7 @@ pegc_parser_init = { 0, /* name */
 		    {0,0,0}, /* cursor */
 		    {0,0,0}, /* match */
 		     0, /* listeners */
+		     0, /* actions */
 		    { /* hashes */
 		    0, /* hashes */
 		    0, /* rulelists */
@@ -315,7 +359,7 @@ bool pegc_gc_add( pegc_parser * st, void * item, void (*dtor)(void*) )
 */
 struct pegc_action_info
 {
-    pegc_action action;
+    pegc_action_f action;
     void * data;
 };
 typedef struct pegc_action_info pegc_action_info;
@@ -415,6 +459,14 @@ bool pegc_destroy_parser( pegc_parser * st )
 	hashtable_destroy( st->hashes.hashes );
 	st->hashes.hashes = 0;
     }
+#if 0
+    while( st->actions )
+    {
+	pegc_actions * p = st->actions->right;
+	pegc_free(st->actions);
+	st->actions = p;
+    }
+#endif
     pegc_match_listener_data * x = st->listeners;
     while( x )
     {
@@ -1297,6 +1349,85 @@ PegcRule pegc_r_and_e( pegc_parser * st, ... )
     return ret;
 }
 
+
+static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
+{
+    if( !st || pegc_has_error(st) || !self || !self->proxy || !self->data ) return false;
+    pegc_const_iterator orig = pegc_pos(st);
+    MARKER; printf("trying rule for delayed action @%p\n", self->data);
+    if( ! self->proxy->rule( self->proxy, st ) ) return false;
+    PegcAction * theact = (PegcAction*) pegc_gc_search(st,self->data);
+    MARKER; printf("setting up delayed action @%p\n", theact);
+    if( ! theact ) return false;
+    pegc_actions * info = (pegc_actions*)malloc(sizeof(pegc_actions));
+    if( ! info )
+    { /* we should report an error, but we don't want to malloc now! */
+	return false;
+    }
+    pegc_gc_add( st, info, pegc_free );
+    *info = pegc_actions_init;
+    info->action = *theact;
+    info->action.match.begin = orig;
+    info->action.match.end = pegc_pos(st);
+    if( ! st->actions )
+    {
+	st->actions = info;
+    }
+    else
+    {
+	info->left = st->actions;
+	st->actions->right = info;
+	st->actions = info;
+    }
+    return true;
+}
+
+PegcRule pegc_r_action_d( pegc_parser * st,
+			  PegcRule const * rule,
+			  pegc_action_d_f onMatch,
+			  void * clientData )
+{
+    if( ! st || !rule ) return PegcRule_invalid;
+    //MARKER;
+    PegcAction * act = (PegcAction*)malloc(sizeof(PegcAction));
+    if( ! act ) return PegcRule_invalid;
+    pegc_gc_add( st, act, pegc_free );
+    act->action = onMatch;
+    act->data = clientData;
+    PegcRule r = pegc_r( PegcRule_mf_action_d, act );
+    r.proxy = rule;
+    return r;
+}
+
+bool pegc_trigger_actions( pegc_parser * st )
+{
+    MARKER;
+    if( pegc_has_error(st) ) return false;
+    MARKER;
+    pegc_actions const * a = st->actions;
+    if( ! a ) return false;
+    MARKER;
+    while( a && a->left ) a = a->left;
+    bool ret = true;
+    while( a )
+    {
+	pegc_actions * nc = pegc_gc_search( st, a );
+	if( ! nc )
+	{
+	    pegc_set_error( st, "pegc_trigger_actions(): action for @%p not found!",a);
+	    return false;
+	}
+	if( a->action.action
+	    &&
+	    !a->action.action( st, &a->action.match, nc->action.data ) )
+	{
+	    return false;
+	}
+	a = a->right;
+    }
+    return ret;
+}
+
 static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
 {
     if( !st || pegc_has_error(st) || !self || !self->proxy ) return false;
@@ -1318,9 +1449,9 @@ static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
     return false;
 }
 
-PegcRule pegc_r_action( pegc_parser * st,
+PegcRule pegc_r_action_i( pegc_parser * st,
 			PegcRule const * rule,
-			pegc_action onMatch,
+			pegc_action_f onMatch,
 			void * clientData )
 {
     //MARKER;
@@ -1544,7 +1675,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
     */
 #if 0
     return r ? *r : PegcRule_invalid;
-#else
+#elseif 0
     return r ? *((PegcRule const *)r) : PegcRule_invalid;
     /*
       ^^^ This cast is to get around a completely stupid warning from
@@ -1565,6 +1696,10 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
     const, whereas *r is not. This confuses the compiler, though in my
     opinion that's a compiler bug.
     */
+#else
+    /** This variation seems to work in all the compilers. */
+    if( r ) return *r;
+    else return PegcRule_invalid;
 #endif
 
 }

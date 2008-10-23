@@ -44,7 +44,7 @@ int test_one()
     PegcRule const rI = pegc_r_char( 'i', true );
     PegcRule const rHI = pegc_r_or( st, &rI, &rH );
     PegcRule rHIPlus = pegc_r_plus(&rHI);
-    NR = pegc_r_action( st, &rHIPlus, my_pegc_action, 0 );
+    NR = pegc_r_action_i( st, &rHIPlus, my_pegc_action, 0 );
     NR = pegc_r_star( &PegcRule_blank );
 #if 0
     PegcRule const starAlpha = pegc_r_star(&PegcRule_alpha);
@@ -55,7 +55,7 @@ int test_one()
 	;
 #endif
     NR = pegc_r_notat(&PegcRule_digit);
-    NR = pegc_r_action( st, &starAlpha, my_pegc_action, 0 );
+    NR = pegc_r_action_i( st, &starAlpha, my_pegc_action, 0 );
     //NR = *pegc_r_string("world",false); // will fail
     NR = pegc_r(0,0); // end of list
 #undef ACPMF
@@ -100,6 +100,7 @@ int test_two()
     {
 	printf("pegc_latin1(%d/%c) = %s\n",(int)*x, *x, pegc_latin1(*x));
     }
+
 #define TRY_STRICT 1
 #if TRY_STRICT
     src = "-3492"; //" . xyz . asa";
@@ -241,6 +242,41 @@ int test_strings()
     return rc;
 }
 
+static bool my_delayed_action( pegc_parser * st,
+			       pegc_cursor const *match,
+			       void * clientData )
+{
+    MARKER;printf("match=%p, clientData=%p\n",match,clientData);
+
+    return true;
+}
+
+int test_actions()
+{
+    char const * src = "abcdef";
+    pegc_parser * st;
+    pegc_create_parser( &st, src, -1 );
+    PegcRule const ABC = pegc_r_string("abc",false);
+    PegcRule const ActI = pegc_r_action_i( st, &ABC, my_pegc_action, 0 );
+    PegcRule const ActD = pegc_r_action_d( st, &ActI, my_delayed_action, 0 );
+    int rc = 1;
+    if( pegc_parse( st, &ActD ) )
+    {
+	MARKER;printf("rc=%d\n",rc);
+	char * m = pegc_get_match_string(st);
+	MARKER; printf( "matched string=[%s]\n",m);
+	free(m);
+	rc = pegc_trigger_actions(st) ? 0 : 1;
+	MARKER;printf("rc=%d\n",rc);
+    }
+    else
+    {
+	MARKER; printf("Action Match failed :(\n");
+    }
+    pegc_destroy_parser(st);
+    return rc;
+}
+
 
 int main( int argc, char ** argv )
 {
@@ -249,6 +285,7 @@ int main( int argc, char ** argv )
     if(!rc) rc = test_two();
     if(!rc) rc = test_three();
     if(!rc) rc = test_strings();
+    if(!rc) rc = test_actions();
     printf("Done rc=%d.\n",rc);
     return rc;
 }
