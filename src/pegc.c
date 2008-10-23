@@ -25,6 +25,7 @@ extern "C" {
 #include "hashtable_utility.h"
 #include "vappendf.h"
 #include "clob.h"
+#include "whgc.h"
 
 /**
    Always returns false and does nothing.
@@ -60,12 +61,12 @@ unsigned int pegc_strlen( pegc_const_iterator c )
 }
 
 /**
-   Allocates and initializes (count+1) rules, with the +1
-   rule intended for use as an end-of-list marker.
+   Allocates (count+1) rules, with the +1 rule intended for use as an
+   end-of-list marker.
 */
 static PegcRule ** pegc_alloc_rules_ptr( unsigned int count )
 {
-    PegcRule ** li = (PegcRule **)calloc(count+1,2*sizeof(PegcRule*));
+    PegcRule ** li = (PegcRule **)calloc(count+1,sizeof(PegcRule));
     //MARKER;
     if( li )
     {
@@ -143,6 +144,10 @@ struct pegc_parser
     pegc_match_listener_data * listeners;
     pegc_actions * actions;
     /**
+       Generic garbage collector.
+    */
+    whgc_context * gc;
+    /**
        These hashtables are used to pass private data between routines
        and for garbage collection.
     */
@@ -167,6 +172,7 @@ pegc_parser_init = { 0, /* name */
 		    {0,0,0}, /* match */
 		     0, /* listeners */
 		     0, /* actions */
+		     0, /* gc */
 		    { /* hashes */
 		    0, /* hashes */
 		    0, /* rulelists */
@@ -256,13 +262,7 @@ static void pegc_free_value( void * k )
 */
 static void pegc_register_hashtable( pegc_parser * st, hashtable * h )
 {
-    if( ! st->hashes.hashes )
-    {
-	st->hashes.hashes = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr );
-	hashtable_set_dtors( st->hashes.hashes, pegc_free_hashtable, 0 );
-    }
-    //MARKER;printf("Registering hashtable @%p\n",h);
-    hashtable_insert(st->hashes.hashes, h, h);
+    pegc_gc_add( st, h, pegc_free_hashtable );
 }
 
 
@@ -277,62 +277,29 @@ static void pegc_register_hashtable( pegc_parser * st, hashtable * h )
     if( ! P->hashes.H ) { \
 	P->hashes.H = hashtable_create(10, pegc_hash_void_ptr, pegc_hash_cmp_void_ptr ); \
 	hashtable_set_dtors( P->hashes.H, DK, DV ); \
-	pegc_register_hashtable(P,P->hashes.H); \
+	pegc_register_hashtable( P, P->hashes.H ); \
     }
-
-/**
-   Holder for generic gc data.
-*/
-struct pegc_gc_entry
-{
-    void * key;
-    void * value;
-    void (*keyDtor)(void*);
-    void (*valueDtor)(void*);
-};
-typedef struct pegc_gc_entry pegc_gc_entry;
-
-/**
-   Destructor for use with the hashtable API. Frees
-   pegc_gc_entry objects.
-*/
-static void pegc_hashtable_free_gc_entry( void * v )
-{
-    pegc_gc_entry * e = (pegc_gc_entry*)v;
-    if( ! e ) return;
-    //MARKER;printf("Freeing GC item @%p\n",e);
-    if( e->keyDtor ) (*(e->keyDtor))(e->key);
-    if( e->valueDtor ) (*(e->valueDtor))(e->value);
-    pegc_free(e);
-}
 
 bool pegc_gc_register( pegc_parser * st,
 		       void * key, void (*keyDtor)(void*),
 		       void * value, void (*valDtor)(void*) )
 {
     if( ! st || !key ) return false;
-    PEGC_HASH_INIT(st,gc,0,pegc_hashtable_free_gc_entry);
-    if( ! st->hashes.gc ) return false;
-    if( 0 != hashtable_search(st->hashes.gc, key) )
+    if( ! st->gc )
+    {
+        st->gc = whgc_create_context(st);
+    }
+    if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {
 	return false;
     }
-    pegc_gc_entry * e = (pegc_gc_entry*)malloc(sizeof(pegc_gc_entry));
-    if( ! e ) return false;
-    e->key = key;
-    e->keyDtor = keyDtor;
-    e->value = value;
-    e->valueDtor = valDtor;
-    //MARKER;printf("Registering GC item @%p: @%p = @%p\n",e,key,value);
-    hashtable_insert( st->hashes.gc, key, e );
     return true;
 }
 
 void * pegc_gc_search( pegc_parser const * st, void const * key )
 {
-    if( ! st || !key || !st->hashes.gc ) return 0;
-    pegc_gc_entry * e = (pegc_gc_entry*)hashtable_search( st->hashes.gc, key );
-    return e ? e->value : 0;
+    if( !st || !key || !st->gc ) return 0;
+    return whgc_search( st->gc, key );
 }
 
 /**
@@ -447,11 +414,18 @@ bool pegc_destroy_parser( pegc_parser * st )
 {
     if( ! st ) return false;
     pegc_set_error( st, 0, 0 );
+    if( st->gc )
+    {
+        whgc_destroy_context( st->gc );
+        st->gc = 0;
+    }
+#if 0
     if( st->hashes.hashes )
     {
 	hashtable_destroy( st->hashes.hashes );
 	st->hashes.hashes = 0;
     }
+#endif
 #if 0
     while( st->actions )
     {
@@ -1365,7 +1339,6 @@ static bool PegcRule_mf_and_v( PegcRule const * self, pegc_parser * st )
 
 PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 {
-    MARKER; printf("THIS IS UNTESTED CODE!\n");
     if( !st ) return PegcRule_invalid;
     const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
     unsigned int count = 0;
@@ -1378,7 +1351,7 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 	if( pos == count )
 	{ /* (re)allocate list */
 	    count += blockSize;
-	    MARKER;printf("(re)allocating list for %u items.\n",count);
+	    //MARKER;printf("(re)allocating list for %u items.\n",count);
 	    if( ! li )
 	    {
 		li = calloc( count, sizeof(PegcRule) );
@@ -1400,8 +1373,7 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 	return PegcRule_invalid;
     }
     li[pos] = PegcRule_invalid;
-    MARKER;printf("Added %d item(s) to rule list.\n",pos);
-
+    //MARKER;printf("Added %d item(s) to rule list.\n",pos);
     pegc_gc_add( st, li, pegc_free );
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or_v : PegcRule_mf_and_v, li );
     return r;
@@ -2049,8 +2021,6 @@ PegcRule pegc_r_string_quoted( pegc_parser * st,
     //MARKER; printf("Register dest %c-style string @%p / %p / %p\n", sd->quote,sd, sd->dest, *sd->dest);
     return pegc_r( PegcRule_mf_string_quoted, sd );
 }
-
-
 
 #undef MARKER
 #undef PEGC_INIT_RULE

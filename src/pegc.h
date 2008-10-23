@@ -14,7 +14,7 @@ utility code is released under a BSD license (see hashtable*.{c,h} for details).
 
 Home page: http://fossil.wanderinghorse.net/repos/pegc/
 
-@section sec_about About
+@section sec_about_pegc About
 
 pegc attempts to implement a model of parser which has become quite
 popular in C++, but attempts to do so within the limitations of C (e.g. lack of type
