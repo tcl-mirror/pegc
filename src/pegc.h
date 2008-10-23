@@ -1014,29 +1014,53 @@ extern "C" {
        Convenience form of pegc_r_list_ev(st,false,...).
     */
     PegcRule pegc_r_and_ev( pegc_parser * st, ... );
-
     /**
-       Typedef for Action functions. Actions are created using
-       pegc_r_action_i() and are triggered when their proxy rule
-       matches.
+       A callback type for semantic actions - functions which are
+       called when their proxy rule matches. "Immediate" actions, created with pegc_r_action_i(), are triggered
+       as soon as a match is found.
+
+       "Delayed" rules, generated with pegc_r_action_d(), are queued
+       on every match and executed ia pegc_trigger_actions() (presumably
+       after the parser has successfully handled an entire grammar).
+
+       The arguments are:
+
+       - st: the parser. The ONLY reason it is non-const is so that an
+       action can call pegc_set_error(). There *might* be useful
+       reasons for changing the parser during an action, but it sounds
+       dangerous to me.
+
+       - match: a pointer to the range matched by the rule which
+       triggered this callback. For delayed actions this is different
+       from pegc_get_match_cursor(), as that routine points to the
+       current match whereas for delayed actions this parameter points
+       to the match made by the triggering rule. Note that the match
+       range is a substring pointing back at st's original input
+       source, so it is probably not null-terminated (only matches at
+       EOF will be null terminated). A match cursor can be converted
+       to a c-style string with pegc_cursor_tostring().
+
+       - clientData: arbitrary client-side data, as passed to
+       pegc_r_action_d() or pegc_r_action_i().
+
+       If an action returns false then the effect is the same as a rule
+       returning false
+
+
 
        Actions can act on client-side data in two ways:
 
-       - By passing a data object as the 4th paramter to
-       pegc_r_action_i(). This approach is useful if different
-       subparsers need different types of state.
+       - By passing a data object (the clientData parameter) to
+       pegc_r_action_i() or pegc_r_action_d(). This approach is useful
+       if different subparsers need different types of state.
 
        - By calling pegc_set_client_data() and accessing it from the
        action. If all actions access the same shared state, this is
        the simplest approach.
-
-       Under consideration: make st non-const so that actions can set
-       the error state. This leaves much room for inappropriate
-       updates of the state from actions, however. In my experience,
-       actions should not, as a rule, change the parser state.
     */
-    typedef void (*pegc_action_i_f)( pegc_parser const * st, void * clientData );
-
+    typedef bool (*pegc_action_f)( pegc_parser * st,
+				   pegc_cursor const *match,
+				   void * clientData );
 
     /*
       Creates rule which, when it matches, triggers an action immediately. If rule matches then
@@ -1053,36 +1077,9 @@ extern "C" {
      */
     PegcRule pegc_r_action_i( pegc_parser * st,
 			      PegcRule const * rule,
-			      pegc_action_i_f onMatch,
+			      pegc_action_f onMatch,
 			      void * clientData );
 
-    /**
-       A callback type for delayed actions. They are added to a
-       parser via rules generated with pegc_r_action_d() and are
-       called via pegc_trigger_actions().
-
-       The arguments are:
-
-       - st: the parser. The ONLY reason it is non-const is so that an
-       action can call pegc_set_error(). There *might* be useful
-       reasons for changing the parser during an action, but it sounds
-       dangerous to me.
-
-       - match: a pointer to the range matched by the rule which
-       triggered this callback. This is different from
-       pegc_get_match_cursor() - that routine points to the current
-       match whereas this parameter points to the match made by the
-       triggering rule. Note that the match range is a substring
-       pointing back at st's original input source, so it is probably
-       not null-terminated (only matches at EOF will be null
-       terminated).
-
-       - clientData: arbitrary client-side data, passed as the 4th
-       argument to pegc_r_action_d().
-    */
-    typedef bool (*pegc_action_d_f)( pegc_parser * st,
-				     pegc_cursor const *match,
-				     void * clientData );
 
     /**
        Creates a rule implementing a delayed actions. That is,
@@ -1103,7 +1100,7 @@ extern "C" {
     */
     PegcRule pegc_r_action_d( pegc_parser * st,
 			      PegcRule const * rule,
-			      pegc_action_d_f onMatch,
+			      pegc_action_f onMatch,
 			      void * clientData );
     
     /**

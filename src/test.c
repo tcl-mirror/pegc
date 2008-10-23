@@ -10,11 +10,14 @@
 #define MARKER printf("MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-void my_pegc_action( pegc_parser const * st, void * unused )
+bool my_pegc_action( pegc_parser * st,
+		     pegc_cursor const *match,
+		     void * unused )
 {
-    char * c = pegc_get_match_string(st);
+    char * c = pegc_cursor_tostring(*match);
     MARKER; printf( "my_pegc_action got a match: [%s]\n", c ? c : "<EMPTY>");
     free(c);
+    return true;
 }
 
 void my_match_listener( pegc_parser const * st, void * d )

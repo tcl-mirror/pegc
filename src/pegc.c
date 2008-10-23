@@ -101,7 +101,7 @@ struct PegcAction
     /**
        Implementation function for this object.
     */
-    pegc_action_d_f action;
+    pegc_action_f action;
     /**
        Arbitrary client data, to be passed as the 3rd argument to the action.
     */
@@ -352,7 +352,7 @@ bool pegc_gc_add( pegc_parser * st, void * item, void (*dtor)(void*) )
 */
 struct pegc_action_info
 {
-    pegc_action_i_f action;
+    pegc_action_f action;
     void * data;
 };
 typedef struct pegc_action_info pegc_action_info;
@@ -1467,7 +1467,7 @@ static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
 
 PegcRule pegc_r_action_d( pegc_parser * st,
 			  PegcRule const * rule,
-			  pegc_action_d_f onMatch,
+			  pegc_action_f onMatch,
 			  void * clientData )
 {
     if( ! st || !rule ) return PegcRule_invalid;
@@ -1520,17 +1520,20 @@ static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
 	//MARKER; printf("action = %p\n", act);
 	if( act )
 	{
-	    act->action( st, act->data );
+	    rc = act->action( st, &st->match, act->data );
 	}
-	return true;
+	// Treat an empty action as true?
     }
-    pegc_set_pos( st, orig );
-    return false;
+    if( ! rc )
+    {
+	pegc_set_pos( st, orig );
+    }
+    return rc;
 }
 
 PegcRule pegc_r_action_i( pegc_parser * st,
 			PegcRule const * rule,
-			pegc_action_i_f onMatch,
+			pegc_action_f onMatch,
 			void * clientData )
 {
     //MARKER;
