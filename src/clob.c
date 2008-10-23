@@ -678,7 +678,8 @@ long clob_importer_FILE( Clob * dest, void * arg )
 	FILE * fp = (FILE *) arg;
 	if( ! fp ) return ClobRC.ArgError;
 	long oldUsed = clob_size(dest);
-	const long blocksize = 4096;
+	/*const long blocksize = 4096;*/
+#define blocksize 4096
 	long rdsz = 0;
 	char * bcbuf[blocksize];
 	int rc;
@@ -692,6 +693,7 @@ long clob_importer_FILE( Clob * dest, void * arg )
 		    return rc;
 		}
 	}
+#undef blocksize
 	return clob_size(dest) - oldUsed;
 }
 
