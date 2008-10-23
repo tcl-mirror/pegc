@@ -60,6 +60,11 @@ That is, "composing" grammars by chaining rule objects together.
 
 - Does not use a code generator.
 
+- Supports both "instant" and "delayed" actions in a grammar. Actions are
+client-side functions which are called in response to a successful match.
+Instant actions are called at match-time and delayed actions may optionally
+be called by the client (presumably after a successful parse of a complete
+grammar).
 
 pegc's misfeatures include:
 
@@ -221,6 +226,7 @@ This Wikipedia page was really helpful: http://en.wikipedia.org/wiki/Parsing_exp
 ************************************************************************/
 
 #include <stdarg.h>
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -358,6 +364,22 @@ extern "C" {
        parseable).
     */
     bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length );
+
+    /**
+       An abstraction over strlen() for potential use if this library is
+       ever refactored to support string types other than (char *).
+
+       Returns the length of c, stopping when a literal null or a null
+       character, or n characters have been traversed. A value of 0 for n
+       means "unlimited" (i.e. only stop at a null).
+
+    */
+    unsigned int pegc_strnlen( unsigned int n, pegc_const_iterator c );
+
+    /**
+       Equivalent to pegc_strnlen(0,c).
+    */
+    unsigned int pegc_strlen( pegc_const_iterator c );
 
     /**
        Clears the parser's internal state, freeing any resources
@@ -502,7 +524,7 @@ extern "C" {
        bounds, or if n is 0, then false is returned and there are no
        side-effects, otherwise true is returned.
     */
-    bool pegc_advance( pegc_parser * st, long n );
+    bool pegc_advance( pegc_parser * st, int n );
 
     /**
        Equivalent to pegc_advance(st,1).
@@ -559,9 +581,15 @@ extern "C" {
     pegc_cursor pegc_get_match_cursor( pegc_parser const * st );
 
     /**
-       Returns a copy of the current match string, or 0 if there
-       is no match or there is a length-zero match. The caller
-       is responsible for deallocating it using free().
+       Returns a copy of the string delimited by curs, or 0 if there
+       is no match or there is a length-zero match. The caller is
+       responsible for deallocating the returned string using free().
+    */
+    char * pegc_cursor_tostring( pegc_cursor const curs );
+
+
+    /**
+       Equivalent to pegc_cursor_tostring( pegc_get_match_cursor(st) ).
     */
     pegc_iterator pegc_get_match_string( pegc_parser const * st );
 
@@ -975,6 +1003,7 @@ extern "C" {
     */
     PegcRule pegc_r_and_e( pegc_parser * st, ... );
 
+
     /**
        Typedef for Action functions. Actions are created using
        pegc_r_action_i() and are triggered when their proxy rule
@@ -995,7 +1024,7 @@ extern "C" {
        updates of the state from actions, however. In my experience,
        actions should not, as a rule, change the parser state.
     */
-    typedef void (*pegc_action_f)( pegc_parser const * st, void * clientData );
+    typedef void (*pegc_action_i_f)( pegc_parser const * st, void * clientData );
 
 
     /*
@@ -1013,11 +1042,15 @@ extern "C" {
      */
     PegcRule pegc_r_action_i( pegc_parser * st,
 			      PegcRule const * rule,
-			      pegc_action_f onMatch,
+			      pegc_action_i_f onMatch,
 			      void * clientData );
 
     /**
-       A callback type for delayed actions.
+       A callback type for delayed actions. They are added to a
+       parser via rules generated with pegc_r_action_d() and are
+       called via pegc_trigger_actions().
+
+       The arguments are:
 
        - st: the parser. The ONLY reason it is non-const is so that an
        action can call pegc_set_error(). There *might* be useful
@@ -1025,9 +1058,13 @@ extern "C" {
        dangerous to me.
 
        - match: a pointer to the range matched by the rule which
-       triggers this callback. Note that it is a substring pointing
-       back at st's original input source, so it is probably not
-       null-terminated.
+       triggered this callback. This is different from
+       pegc_get_match_cursor() - that routine points to the current
+       match whereas this parameter points to the match made by the
+       triggering rule. Note that the match range is a substring
+       pointing back at st's original input source, so it is probably
+       not null-terminated (only matches at EOF will be null
+       terminated).
 
        - clientData: arbitrary client-side data, passed as the 4th
        argument to pegc_r_action_d().
@@ -1039,19 +1076,34 @@ extern "C" {
     /**
        Creates a rule implementing a delayed actions. That is,
        actions which are queued when a rule matches, but not executed
-       until the user specifies (i.e. after a successfull parse).
+       until the user specifies (i.e. after a successful parse).
 
-       Neither st nor rule may be null. onMatch may be 0, but there's not
-       much use for that. The clientData pointer is ignored by this code but
-       is passed on to onMatch when delayed actions are trigged.
+       Neither st nor rule may be null. onMatch may be 0, but there's
+       not much use for that. The clientData pointer is ignored by
+       this code but is passed on to onMatch when delayed actions are
+       trigged.
 
-       Use pegc_trigger_actions() to trigger all queued actions.
+       The returned rule is invalid if !st or !rule, or allocation of
+       internal data fails. Otherwise the rule will match if the rule
+       argument matches.
+
+       Use pegc_trigger_actions() to trigger all queued actions. )Normally
+       it should be called only after a successful parse.)
     */
     PegcRule pegc_r_action_d( pegc_parser * st,
 			      PegcRule const * rule,
 			      pegc_action_d_f onMatch,
 			      void * clientData );
     
+    /**
+       Causes queued actions to be activated, in the order they were
+       queued. This function returns true if there are no queued
+       actions or if all queued actions return. If an action returns
+       false then this function stops processing actions and returns
+       false. If st is null or pegc_has_error() returns true then this
+       routine returns false. On a severe error (e.g. internal errors)
+       pegc_set_error() is called and false is returned.
+    */
     bool pegc_trigger_actions( pegc_parser * st );
 
     /**
@@ -1307,6 +1359,11 @@ extern "C" {
        EOL.
     */
     extern const PegcRule PegcRule_bol;
+
+    /**
+       This rule never consumes and returns !pegc_has_error().
+    */
+    extern const PegcRule PegcRule_has_error;
 
     /**
        Creates a rule which always returns false and sets the parser

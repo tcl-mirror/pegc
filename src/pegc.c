@@ -24,20 +24,6 @@ extern "C" {
 #include "hashtable.h"
 #include "hashtable_utility.h"
 #include "vappendf.h"
-/**
-   We only use the clob API for dynamic allocation of error strings.
-   If i could settle on having pre-alloced, fixed-length error
-   string storage i could:
-
-   a) get rid of this dep.
-
-   b) report error strings on alloc error (b/c we don't need to
-   allocate the error string).
-
-   Alternately, we could use the clob API and pre-alloc our error
-   buffer there. That would allow us to take advantage of clob's
-   printf-like API without relying on snprintf() and co.
-*/
 #include "clob.h"
 
 /**
@@ -56,25 +42,52 @@ const pegc_cursor pegc_cursor_init = PEGC_CURSOR_INIT;
 const PegcRule PegcRule_init = PEGC_INIT_RULE(PegcRule_mf_failure,0);
 const PegcRule PegcRule_invalid = PEGC_INIT_RULE(0,0);
 
+unsigned int pegc_strnlen( unsigned int n, pegc_const_iterator c )
+{
+    unsigned int ret = 0;
+    while( c && *c )
+    {
+	if( (n>0) && (ret == n) ) break;
+	++ret;
+	++c;
+    }
+    return ret;
+}
+
+unsigned int pegc_strlen( pegc_const_iterator c )
+{
+    return pegc_strnlen( 0, c );
+}
+
 /**
    Allocates and initializes (count+1) rules, with the +1
-   rule intended for use as an end-of-list marker. Each rule
-   in the returned array is initalized to an empty rule.
+   rule intended for use as an end-of-list marker.
 */
 static PegcRule ** pegc_alloc_rules( unsigned int count )
 {
     PegcRule ** li = (PegcRule **)calloc(count+1,sizeof(PegcRule));
+    //MARKER;
     if( li )
     {
-#if 1
+#if 0
 	PegcRule * x = li[0];
-	while( x )
+	MARKER; printf("%p %p\n", li, x );
+	unsigned int i = 0;
+	for( ; i <= count; ++i )
 	{
+	    MARKER; printf("%p %p\n", li, x );
+	    *x = PegcRule_invalid;
+	    ++x;
+	    MARKER;
+	}
+#endif
+#if 0
+	while(x)
+	{
+	    MARKER;
 	    *x = PegcRule_invalid;
 	    ++x;
 	}
-#else
-	memset( li, 0, (count + 1) * sizeof(PegcRule) );
 #endif
     }
     return li;
@@ -359,7 +372,7 @@ bool pegc_gc_add( pegc_parser * st, void * item, void (*dtor)(void*) )
 */
 struct pegc_action_info
 {
-    pegc_action_f action;
+    pegc_action_i_f action;
     void * data;
 };
 typedef struct pegc_action_info pegc_action_info;
@@ -421,7 +434,7 @@ static void * pegc_funcptr_search( pegc_parser const * st, void const * key )
 
 bool pegc_init_cursor( pegc_cursor * it, pegc_const_iterator begin, pegc_const_iterator end )
 {
-    if( begin && (0 == end) ) end = (begin + strlen(begin));
+    if( begin && (0 == end) ) end = (begin + pegc_strlen(begin));
     if( !it || (end < begin) ) return false;
     it->begin = it->pos = begin;
     it->end = end;
@@ -626,7 +639,7 @@ bool pegc_set_pos( pegc_parser * st, pegc_const_iterator p )
 }
 
 
-bool pegc_advance( pegc_parser * st, long n )
+bool pegc_advance( pegc_parser * st, int n )
 {
     return ( 0 == n )
 	? false
@@ -678,12 +691,11 @@ pegc_cursor pegc_get_match_cursor( pegc_parser const * st )
     return cur;
 }
 
-pegc_iterator pegc_get_match_string( pegc_parser const * st )
+char * pegc_cursor_tostring( pegc_cursor const cur )
 {
-    pegc_cursor cur = pegc_get_match_cursor(st);
-    if( !st
-	|| !cur.begin
-	|| !*cur.begin
+    if( !cur.begin
+	||!*(cur.begin)
+	||(cur.end<=cur.begin)
 	)
     {
 	return 0;
@@ -700,6 +712,11 @@ pegc_iterator pegc_get_match_string( pegc_parser const * st )
     }
     *at = '\0';
     return ret;
+}
+
+pegc_iterator pegc_get_match_string( pegc_parser const * st )
+{
+    return pegc_cursor_tostring( pegc_get_match_cursor(st) );
 }
 
 bool pegc_set_match( pegc_parser * st, pegc_const_iterator begin, pegc_const_iterator end, bool movePos )
@@ -755,7 +772,7 @@ bool pegc_matches_chari( pegc_parser const * st, int ch )
 bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long strLen, bool caseSensitive )
 {
     if( !st || pegc_has_error(st) ) return false;
-    if( strLen < 0 ) strLen = strlen(str);
+    if( strLen < 0 ) strLen = pegc_strlen(str);
     //MARKER; printf("Trying to match %ld chars of a string.\n",strLen);
     if( ! pegc_in_bounds(st, pegc_pos(st)+strLen-1) ) return false;
     //MARKER; printf("Trying to match %ld chars of a string.\n",strLen);
@@ -786,22 +803,20 @@ PegcRule pegc_r( PegcRule_mf rule, void const * data )
     return r;
 }
 
+static bool PegcRule_mf_has_error( PegcRule const * ARG_UNUSED(self), pegc_parser * st )
+{
+    return !pegc_has_error(st);
+}
+const PegcRule PegcRule_haserror = PEGC_INIT_RULE(PegcRule_mf_has_error,0);
+
 static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
 {
     //MARKER;printf("self=%p, self->data=%p\n",self,self->data);
     if( !self || !self->data || !pegc_isgood( st ) ) return false;
-    //MARKER;
-#if 0
-    unsigned int const * range = (unsigned int const *) self->data;
-    if( ! range ) return false;
-    int min = range[0];
-    int max = range[1];
-#else
     unsigned int evil = (unsigned int)self->data;
     int min = ((evil >> 8) & 0x00ff);
     int max = (evil & 0x00ff);
     //MARKER;printf("min=%c, max=%c, evil=%x\n",min,max,evil);
-#endif
     pegc_const_iterator orig = pegc_pos(st);
     if( (*orig >= min) && (*orig <= max) )
     {
@@ -836,7 +851,7 @@ static bool PegcRule_mf_char_spec( PegcRule const * self, pegc_parser * st )
     if( ! pegc_isgood( st ) || ! self ) return false;
     char const * spec = (char const *) self->data;
     pegc_const_iterator orig = pegc_pos(st);
-    //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,spec,strlen(spec));
+    //MARKER;printf("inChar=%c format=%s strlen==%d\n",*orig,spec,pegc_strlen(spec));
     char ch[] = {0,0};
     int rc = sscanf(pegc_pos(st), spec, ch);
     //MARKER;printf("inChar=%c sscanf rc=%d, ch=%s\n",*orig,rc,ch);
@@ -848,7 +863,7 @@ static bool PegcRule_mf_char_spec( PegcRule const * self, pegc_parser * st )
 PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec )
 {
     if( ! st || !spec || (*spec != '[') ) return PegcRule_invalid;
-    const int fmtSize = strlen(spec) + 5;
+    const int fmtSize = pegc_strlen(spec) + 5;
     char * fmt = mnprintf( fmtSize, "%%1%s", spec );
     if( ! fmt ) return PegcRule_invalid;
     pegc_gc_add( st, fmt, pegc_free_value );
@@ -903,10 +918,6 @@ bool pegc_is_rule_valid( PegcRule const * r )
     return r && r->rule;
 }
 
-/**
-   Always returns true and does nothing.
-*/
-bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st );
 
 /**
    Requires that self->data be a pegc_const_iterator. Matches if any
@@ -934,7 +945,7 @@ bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st );
 /**
    Requires that self->data be a pegc_const_iterator. Matches if
    that string case-sensitively matches the next
-   strlen(thatString) bytes of st.
+   pegc_strlen(thatString) bytes of st.
 */
 bool PegcRule_mf_string( PegcRule const * self, pegc_parser * st );
 
@@ -978,7 +989,7 @@ bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
     return false;
 }
 const PegcRule PegcRule_failure = PEGC_INIT_RULE(PegcRule_mf_failure,0);
-bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
+static bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
 {
     return true;
 }
@@ -992,7 +1003,7 @@ static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, boo
     if( !*p ) return false;
     pegc_const_iterator str = (pegc_const_iterator)self->data;
     if( ! str ) return false;
-    int len = strlen(str);
+    unsigned int len = pegc_strlen(str);
     int i = 0;
     for( ; (i < len); ++i )
     {
@@ -1035,7 +1046,7 @@ static bool PegcRule_mf_string_impl( PegcRule const * self, pegc_parser * st, bo
     if( ! pegc_isgood(st) || !self ) return false;
     pegc_const_iterator str = (pegc_const_iterator)self->data;
     if( ! str ) return false;
-    int len = strlen(str);
+    unsigned int len = pegc_strlen(str);
     pegc_const_iterator p = pegc_pos(st);
     bool b = pegc_matches_string( st, str, len, caseSensitive );
     //MARKER; printf("matches? == %d\n", b);
@@ -1401,14 +1412,10 @@ PegcRule pegc_r_action_d( pegc_parser * st,
 
 bool pegc_trigger_actions( pegc_parser * st )
 {
-    MARKER;
     if( pegc_has_error(st) ) return false;
-    MARKER;
     pegc_actions const * a = st->actions;
     if( ! a ) return false;
-    MARKER;
     while( a && a->left ) a = a->left;
-    bool ret = true;
     while( a )
     {
 	pegc_actions * nc = pegc_gc_search( st, a );
@@ -1425,7 +1432,7 @@ bool pegc_trigger_actions( pegc_parser * st )
 	}
 	a = a->right;
     }
-    return ret;
+    return true;
 }
 
 static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
@@ -1451,7 +1458,7 @@ static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
 
 PegcRule pegc_r_action_i( pegc_parser * st,
 			PegcRule const * rule,
-			pegc_action_f onMatch,
+			pegc_action_i_f onMatch,
 			void * clientData )
 {
     //MARKER;

@@ -246,8 +246,9 @@ static bool my_delayed_action( pegc_parser * st,
 			       pegc_cursor const *match,
 			       void * clientData )
 {
-    MARKER;printf("match=%p, clientData=%p\n",match,clientData);
-
+    char * m = pegc_cursor_tostring(*match);
+    MARKER;printf("match=%p [%s], clientData=%p\n",match,m,clientData);
+    free(m);
     return true;
 }
 
