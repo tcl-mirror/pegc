@@ -63,32 +63,12 @@ unsigned int pegc_strlen( pegc_const_iterator c )
    Allocates and initializes (count+1) rules, with the +1
    rule intended for use as an end-of-list marker.
 */
-static PegcRule ** pegc_alloc_rules( unsigned int count )
+static PegcRule ** pegc_alloc_rules_ptr( unsigned int count )
 {
-    PegcRule ** li = (PegcRule **)calloc(count+1,sizeof(PegcRule));
+    PegcRule ** li = (PegcRule **)calloc(count+1,2*sizeof(PegcRule*));
     //MARKER;
     if( li )
     {
-#if 0
-	PegcRule * x = li[0];
-	MARKER; printf("%p %p\n", li, x );
-	unsigned int i = 0;
-	for( ; i <= count; ++i )
-	{
-	    MARKER; printf("%p %p\n", li, x );
-	    *x = PegcRule_invalid;
-	    ++x;
-	    MARKER;
-	}
-#endif
-#if 0
-	while(x)
-	{
-	    MARKER;
-	    *x = PegcRule_invalid;
-	    ++x;
-	}
-#endif
     }
     return li;
 }
@@ -1085,8 +1065,8 @@ static bool PegcRule_mf_char_impl( PegcRule const * self, pegc_parser * st, bool
 	return true;
     }
     return false;
-
 }
+
 bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_char_impl(self,st,true);
@@ -1250,7 +1230,7 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const ** li )
 	}
     }
     if( ! count ) return r;
-    PegcRule const ** list = (PegcRule const **)pegc_alloc_rules( count );
+    PegcRule const ** list = (PegcRule const **)pegc_alloc_rules_ptr( count );
     if( ! list )
     {
 	if(0)
@@ -1291,7 +1271,7 @@ PegcRule pegc_r_list_v( pegc_parser * st, bool orOp, va_list ap )
 	    //MARKER;printf("(re)allocating list for %u items.\n",count);
 	    if( ! li )
 	    {
-		li = (PegcRule const **)pegc_alloc_rules( count );
+		li = (PegcRule const **)pegc_alloc_rules_ptr( count );
 		if( ! li ) break;
 	    }
 	    else
