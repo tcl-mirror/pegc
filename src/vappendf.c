@@ -62,6 +62,38 @@ typedef long double LONGDOUBLE_TYPE;
 #endif
 
 /*
+Most C compilers handle variable-sized arrays, so we enable
+that by default. Some (e.g. tcc) do not, so we provide a way
+to disable it: set VAPPENDF_HAVE_VARARRAY to 0
+
+One approach would be to look at:
+
+  defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+
+but some compilers support variable-sized arrays even when not
+explicitly running in c99 mode.
+*/
+#if !defined(VAPPENDF_HAVE_VARARRAY)
+#  if defined(__TINYC__)
+#    define VAPPENDF_HAVE_VARARRAY 0
+#  else
+#    define VAPPENDF_HAVE_VARARRAY 1
+#  endif
+#endif
+
+/**
+VAPPENDF_CHARARRAY is a helper to allocate variable-sized arrays.
+This exists mainly so this code can compile with the tcc compiler.
+*/
+#if VAPPENDF_HAVE_VARARRAY
+#  define VAPPENDF_CHARARRAY(V,N) char V[N]
+#  define VAPPENDF_CHARARRAY_FREE(V)
+#else
+#  define VAPPENDF_CHARARRAY(V,N) char * V = (char *)malloc(N)
+#  define VAPPENDF_CHARARRAY_FREE(V) free(V)
+#endif
+
+/*
 ** Conversion types fall into various categories as defined by the
 ** following enumeration.
 */
@@ -353,7 +385,7 @@ static long spech_urlencode( vappendf_appender pf,
     long ret = 0;
     char ch = *str;
     char const * hex = "0123456789ABCDEF";
-    const int xbufsz = 10;
+#define xbufsz 10
     char xbuf[xbufsz];
     memset( xbuf, 0, xbufsz );
     int slen = 0;
@@ -371,6 +403,7 @@ static long spech_urlencode( vappendf_appender pf,
             ret += pf( pfArg, xbuf, slen );
         }
     }
+#undef xbufsz
     return ret;
 }
 
@@ -407,8 +440,7 @@ static long spech_urldecode( vappendf_appender pf,
     long ret = 0;
     char ch = 0;
     char ch2 = 0;
-    const int xbufsz = 4;
-    char xbuf[xbufsz];
+    char xbuf[4];
     int decoded;
     ch = *str;
     while( ch )
@@ -605,17 +637,21 @@ long vappendf(
   etByte flag_exp;           /* True to force display of the exponent */
   int nsd;                   /* Number of significant digits returned */
 #endif
+
+
   /* VAPPENDF_RETURN, VAPPENDF_ACCUM, and VAPPENDF_SPACES
      are internal helpers.
   */
 #define VAPPENDF_RETURN if( zExtra ) free(zExtra); return outCount;
 #define VAPPENDF_ACCUM if( pfrc<0 ) { VAPPENDF_RETURN; } else outCount += pfrc;
-#define VAPPENDF_SPACES(N) if(1){                       \
-	    char zSpaces[N];                   \
-	    memset( zSpaces,' ',N);	       \
-	    pfrc = pfAppend(pfAppendArg, zSpaces, N); \
-	    VAPPENDF_ACCUM; \
-	 }
+#define VAPPENDF_SPACES(N) \
+if(1){				       \
+    VAPPENDF_CHARARRAY(zSpaces,N);		      \
+    memset( zSpaces,' ',N);			      \
+    pfrc = pfAppend(pfAppendArg, zSpaces, N);	      \
+    VAPPENDF_ACCUM;				      \
+    VAPPENDF_CHARARRAY_FREE(zSpaces);		      \
+}
 
 /*   char const * zSpaces = " "; */
 /*   const int zSpacesLen = strlen( zSpaces ); */
