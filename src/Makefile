@@ -12,19 +12,35 @@ PACKAGE.VERSION := $(shell date +%Y%m%d)
 #CFLAGS += -std=c99
 #CFLAGS += -xc99=all # SUN CC
 
-#LLIST_GENERATOR := ./makeLinkList.sh
-#LLIST_TEMPLATES := pegc_llist.h pegc_llist.c
-#pegc_llist_long.h: Makefile $(LLIST_GENERATOR) $(LLIST_TEMPLATES)
-#	bash $(LLIST_GENERATOR) pegc_llist_long long
-#pegc_llist_long.c: pegc_llist_long.h
-#pegc_llist_long.o: pegc_llist_long.c pegc_llist_long.h
-
 INCLUDES += -I.
-HASH_OBJ := $(patsubst %,%.o,hashtable hashtable_itr hashtable_utility)
-PEGC_OBJ := clob.o pegc.o vappendf.o whgc.o $(HASH_OBJ)
-test.BIN.OBJECTS = $(PEGC_OBJ) test.o
 
+########################################################################
+# Hashtable lib:
+HASH_OBJ := $(patsubst %,%.o,hashtable hashtable_itr hashtable_utility)
+libhashtable.LIB.OBJECTS = $(HASH_OBJ)
+$(call ShakeNMake.CALL.RULES.LIBS,libhashtable)
+
+########################################################################
+# GC lib:
+WHGC_OBJ := whgc.o
+libwhgc.LIB.OBJECTS = $(WHGC_OBJ) $(HASH_OBJ)
+$(call ShakeNMake.CALL.RULES.LIBS,libwhgc)
+$(libwhgc.LIB): $(libhashtable.LIB)
+
+########################################################################
+# pegc lib:
+libpegc.LIB.OBJECTS := clob.o vappendf.o pegc.o
+ifeq (1,0)
+  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS) $(libhashtable.LIB.OBJECTS)
+else
+  libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libhashtable.LIB)
+endif
+$(call ShakeNMake.CALL.RULES.LIBS,libpegc)
+$(libpegc.LIB): $(libwhgc.LIB)
+test.BIN.LDFLAGS := $(libpegc.LIB)
+test.BIN.OBJECTS := test.o
 $(call ShakeNMake.CALL.RULES.BINS,test)
+$(test.BIN): $(libpegc.LIB)
 bins: test.BIN
 
 CLEAN_FILES += *~
