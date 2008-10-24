@@ -30,7 +30,7 @@ $(libwhgc.LIB): $(libhashtable.LIB)
 ########################################################################
 # pegc lib:
 libpegc.LIB.OBJECTS := clob.o vappendf.o pegc.o
-ifeq (1,0)
+ifeq (1,1)
   libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS) $(libhashtable.LIB.OBJECTS)
 else
   libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libhashtable.LIB)
