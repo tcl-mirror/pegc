@@ -28,9 +28,12 @@ extern "C" {
 #endif /* __cplusplus */
 
     /*!
-      @page page_whgc whgc
+      @page page_whgc whgc: the WanderingHorse.net Garbage Collector
 
-      @section sec_about_whgc About
+      @section sec_about_whgc About whgc
+
+      whgc (the WanderingHorse.net Garbage Collector) is a simple garbage
+      collector for C.
 
        Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
@@ -38,13 +41,20 @@ extern "C" {
        borrowed utility code is released under a BSD license (see
        hashtable*.{c,h} for details).
 
-       Home page: http://fossil.wanderinghorse.net/repos/pegc/
+       Home page: whgc is part of the pegc project:
+       http://fossil.wanderinghorse.net/repos/pegc/
 
        whgc is a small garbage collection library for C. It was
        originally developed to provide predictable cleanup for C
        structs which contained pointers to dynamically allocated
        objects. The solution to that particular application turned out
-       to be pretty generic, so it was refactored into whgc.
+       to be fairly generic, so it was refactored into whgc.
+
+       The main feature of whgc is that it allows one to bind key/value
+       pairs to a context object. When that object is destroyed,
+       client-defined destructor functions will be called on for all
+       of the keys and values. This greatly simplifies management of
+       dynamically allocated memory in some contexts.
     */
 
     /**
@@ -69,12 +79,14 @@ extern "C" {
     typedef void (*whgc_dtor_f)(void*);
 
     /**
-       Registers an arbitrary key and value with the garbage
+       Registers an arbitrary key and value with the given garbage
        collector, such that whgc_destroy_context(st) will clean up the
-       resources using the given destructor functions.
+       resources using the given destructor functions (which may be 0,
+       meaning "do not destroy").
 
        The key parameter is used as a literal hash key (that is, the
-       pointer's value is its hash value).
+       pointer's value is its hash value). Thus for two keys to be
+       equal they must have the same address.
 
        If keyDtor is not 0 then during cleanup keyDtor(key) is
        called. Likewise, if valDtor is not 0 then valDtor(value) is
@@ -95,13 +107,18 @@ extern "C" {
        same context. Doing so will cause false to be returned.
 
        Note that the destruction order of items cleaned up using this
-       mechanism is undefined.
+       mechanism is technically undefined. Currently it is in reverse
+       order of their registration, but this has a significant overhead
+       (+3 pointers per entry), so it might be removed.
     */
-    bool whgc_register( whgc_context * ,
+    bool whgc_register( whgc_context * cx,
 			void * key, whgc_dtor_f keyDtor,
 			void * value, whgc_dtor_f valDtor );
 
-    bool whgc_add( whgc_context *, void * key, whgc_dtor_f keyDtor );
+    /**
+       Convenience form of whgc_register(cx,key,keyDtor,key,0).
+    */
+    bool whgc_add( whgc_context *cx, void * key, whgc_dtor_f keyDtor );
 
     /**
        Frees all resources associated with the given context.
@@ -114,7 +131,7 @@ extern "C" {
 
     /**
        Searches the given context for the given key. Returns 0 if the
-       key is not found.
+       key is not found. Ownership of the returned objet is not changed.
     */
     void * whgc_search( whgc_context const * cx, void const * key );
 

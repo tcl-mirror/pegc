@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h> /* memset() */
 #include "whgc.h"
 
 #include "hashtable.h"
@@ -24,11 +25,37 @@ extern "C" {
 typedef hashval_t (*whgc_hash_f)(void const *key);
 typedef int (*whgc_hash_cmp_f)(void const * lhs,void const *rhs);
 
+/**
+   Holder for generic gc data.
+*/
+struct whgc_gc_entry
+{
+    void * key;
+    void * value;
+    whgc_dtor_f keyDtor;
+    whgc_dtor_f valueDtor;
+};
+typedef struct whgc_gc_entry whgc_gc_entry;
+#define WHGC_GC_ENTRY_INIT {0,0,0,0}
+static const whgc_gc_entry whgc_gc_entry_init = WHGC_GC_ENTRY_INIT;
+
+struct whgc_entries
+{
+    whgc_gc_entry * entry;
+    struct whgc_entries * left;
+};
+typedef struct whgc_entries whgc_entries;
+#define WHGC_ENTRIES_INIT {0,0}
+static const whgc_entries whgc_entries_init = WHGC_ENTRIES_INIT;
+
+/**
+   The main handle type used by the whgc API.
+*/
 struct whgc_context
 {
     void const * client;
     hashtable * ht;
-    size_t order;
+    whgc_entries * entries;
 };
 
 #define WHGC_CONTEXT_INIT {0,0,0}
@@ -82,27 +109,11 @@ static void whgc_free_value( void * k )
 }
 
 /**
-   Holder for generic gc data.
-*/
-struct whgc_gc_entry
-{
-    void * key;
-    void * value;
-    whgc_dtor_f keyDtor;
-    whgc_dtor_f valueDtor;
-    size_t order;
-};
-typedef struct whgc_gc_entry whgc_gc_entry;
-#define WHGC_GC_ENTRY_INIT {0,0,0,0,0}
-static const whgc_gc_entry whgc_gc_entry_init = WHGC_GC_ENTRY_INIT;
-
-/**
    Destructor for use with the hashtable API. Frees
    whgc_gc_entry objects.
 */
-static void whgc_hashtable_free_gc_entry( void * v )
+static void whgc_free_gc_entry( whgc_gc_entry *e )
 {
-    whgc_gc_entry * e = (whgc_gc_entry*)v;
     if( ! e ) return;
     //MARKER;printf("Freeing GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
     if( e->valueDtor )
@@ -118,6 +129,9 @@ static void whgc_hashtable_free_gc_entry( void * v )
     whgc_free(e);
 }
 
+/**
+   A no-op "destructor" to assist in tracking down destructions.
+*/
 static void whgc_free_noop( void * ARG_UNUSED(v) )
 {
     //MARKER;printf("dtor no-op @%p\n",v);
@@ -129,7 +143,12 @@ static hashtable * whgc_hashtable( whgc_context * cx )
     if( cx->ht ) return cx->ht;
     if( (cx->ht = hashtable_create( 10, whgc_hash_void_ptr, whgc_hash_cmp_void_ptr ) ) )
     {
-	hashtable_set_dtors( cx->ht, whgc_free_noop, whgc_hashtable_free_gc_entry );
+	hashtable_set_dtors( cx->ht,
+			     //0, 0
+			     whgc_free_noop,whgc_free_noop
+			     //whgc_free_noop,whgc_free_value
+			     //whgc_free_noop,whgc_hashtable_free_gc_entry
+			     );
     }
     return cx->ht;
 }
@@ -159,9 +178,19 @@ bool whgc_register( whgc_context * cx,
     e->keyDtor = keyDtor;
     e->value = value;
     e->valueDtor = valDtor;
-    e->order = cx->order++;
     //MARKER;printf("Registering GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
     hashtable_insert( cx->ht, key, e );
+#if 1
+    whgc_entries * E = (whgc_entries*)malloc(sizeof(whgc_entries));
+    if( ! E ) return false;
+    *E = whgc_entries_init;
+    E->entry = e;
+    if( cx->entries )
+    {
+	E->left = cx->entries;
+    }
+    cx->entries = E;
+#endif
     return true;
 }
 
@@ -182,6 +211,36 @@ void whgc_destroy_context( whgc_context * cx )
 {
     if( ! cx ) return;
     cx->client = 0;
+
+#if 1
+    /**
+       Destroy registered entries in reverse order of
+       their registration.
+    */
+    whgc_entries * e = cx->entries;
+    while( e )
+    {
+	//MARKER;printf("Want to clean up @%p\n",e);
+	whgc_entries * left = e->left;
+	whgc_gc_entry * E = e->entry;
+#if 1
+	whgc_free_gc_entry(E);
+#else
+	if( E->keyDtor )
+	{
+	    E->keyDtor( E->key );
+	}
+	if( E->valueDtor )
+	{
+	    E->valueDtor( E->value );
+	}
+#endif
+	free(e);
+	e = left;
+    }
+    cx->entries = 0;
+#endif
+
     if( cx->ht )
     {
 	whgc_free_hashtable( cx->ht );
@@ -189,7 +248,6 @@ void whgc_destroy_context( whgc_context * cx )
     }
     whgc_free(cx);
 }
-
 
 #if defined(__cplusplus)
 } /* extern "C" */
