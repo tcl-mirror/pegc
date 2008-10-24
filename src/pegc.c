@@ -208,13 +208,30 @@ void pegc_add_match_listener( pegc_parser * st,
     }
 }
 
+void pegc_set_name( pegc_parser * st, char const * name )
+{
+    if( st )
+    {
+	st->name = name;
+    }
+}
+
+char const * pegc_get_name( pegc_parser * st )
+{
+    return st ? st->name : 0;
+}
+
 /**
    A hash routine for use with the hashtable API. Simply
    casts k to the numeric value of its pointer address.
 */
 static hashval_t pegc_hash_void_ptr( void const * k )
 {
-    typedef long kludge_t; /* must apparently be the same size as the platform's (void*) */
+    typedef long kludge_t; /* must apparently be the same size as the platform's (void*) ??? */
+    if( (sizeof(void*) > sizeof(kludge_t)) || (sizeof(void*) > sizeof(hashval_t)) )
+    {
+	assert(0 && "Could not find a suitable numeric type for (void*) hash keys." );
+    }
     return (hashval_t) (kludge_t) k;
 }
 
@@ -931,12 +948,19 @@ PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * 
     }
     return r;
 }
-PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const src )
+
+PegcRule * pegc_copy_r_p( pegc_parser * st, PegcRule const * src )
 {
-    PegcRule * r = pegc_alloc_r( st, 0, 0 );
-    if( r ) *r = src;
+    PegcRule * r = src ? pegc_alloc_r( st, 0, 0 ) : 0;
+    if( r ) *r = *src;
     return r;
 }
+
+PegcRule * pegc_copy_r_v( pegc_parser * st, PegcRule const src )
+{
+    return pegc_copy_r_p(st, &src);
+}
+
 
 bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
@@ -1126,12 +1150,12 @@ PegcRule pegc_r_at_p( PegcRule const * proxy )
 {
     if( pegc_is_rule_valid(proxy) ) return PegcRule_invalid;
     PegcRule r = pegc_r( PegcRule_mf_at, 0 );
-    r.proxy = proxy; //pegc_copy_r(st, proxy);
+    r.proxy = proxy; //pegc_copy_r_v(st, proxy);
     return r;
 }
 PegcRule pegc_r_at_v( pegc_parser * st, PegcRule const proxy )
 {
-    return pegc_r_at_p( pegc_copy_r(st,proxy) );
+    return pegc_r_at_p( pegc_copy_r_v(st,proxy) );
 }
 static bool PegcRule_mf_notat( PegcRule const * self, pegc_parser * st )
 {
@@ -1144,13 +1168,13 @@ PegcRule pegc_r_notat_p( PegcRule const * proxy )
 {
     if( ! pegc_is_rule_valid(proxy) ) return PegcRule_invalid;
     PegcRule r = pegc_r( PegcRule_mf_notat, 0 );
-    r.proxy = proxy; // pegc_copy_r( st, proxy );
+    r.proxy = proxy; // pegc_copy_r_v( st, proxy );
     return r;
 }
 
 PegcRule pegc_r_notat_v( pegc_parser * st, PegcRule const proxy )
 {
-    return pegc_r_notat_p( pegc_copy_r(st,proxy) );
+    return pegc_r_notat_p( pegc_copy_r_v(st,proxy) );
 }
 
 
@@ -1409,10 +1433,10 @@ static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
 {
     if( !st || pegc_has_error(st) || !self || !self->proxy || !self->data ) return false;
     pegc_const_iterator orig = pegc_pos(st);
-    MARKER; printf("trying rule for delayed action @%p\n", self->data);
+    //MARKER; printf("trying rule for delayed action @%p\n", self->data);
     if( ! self->proxy->rule( self->proxy, st ) ) return false;
     PegcAction * theact = (PegcAction*) pegc_gc_search(st,self->data);
-    MARKER; printf("setting up delayed action @%p\n", theact);
+    //MARKER; printf("setting up delayed action @%p\n", theact);
     if( ! theact ) return false;
     pegc_actions * info = (pegc_actions*)malloc(sizeof(pegc_actions));
     if( ! info )
@@ -1710,7 +1734,7 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 	PegcRule const next = pegc_r_notat_v( st, illegaltail );
 	PegcRule const end = pegc_r_or_ev( st, PegcRule_eof, next, aend );
 	PegcRule const R = pegc_r_and_ev( st, PegcRule_int_dec, end, aend );
-	r->proxy = pegc_copy_r(st,R);
+	r->proxy = pegc_copy_r_v(st,R);
     }
     /**
        ^^^ instead of setting r.proxy we could just do

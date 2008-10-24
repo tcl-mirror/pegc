@@ -366,6 +366,19 @@ extern "C" {
     bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length );
 
     /**
+       Sets a descriptive name for the parser. Intended for debugging and error
+       reporting. e.g. it to the name of a file being processed, or a description
+       of the parser rule (e.g. "telephone number parser").
+    */
+    void pegc_set_name( pegc_parser * st, char const * name );
+
+    /**
+       Returns the name of this parser, or 0 if no name has been set via
+       pegc_set_name().
+    */
+    char const * pegc_get_name( pegc_parser * st );
+
+    /**
        An abstraction over strlen() for potential use if this library is
        ever refactored to support string types other than (char *).
 
@@ -711,6 +724,37 @@ extern "C" {
        only useful if the rule is created on the heap (and then
        (rule->data=rule) should be set so that copies of the object
        get the same key address.
+
+
+       PegcRules must comply with a few guidelines if they want to
+       be sure to work with the core rules:
+
+       - They must be copyable. Any memory associated with a rule
+       should be assigned ownership to someone else
+       (e.g. pegc_gc_add()), and a reference to the data (or a unique
+       lookup key for it) should be stored in thatRule.data. All
+       copies of the rule can then use that reference (or lookup key)
+       to get at the data. For many examples, see the source code for
+       some of the core rules.
+
+       - They must not have per-instance state. That is, any
+       copies must be able to share all state with their origin.
+       The origin need not outlive the copies, as long as ownership
+       of any shared data is well defined and the referenced data
+       outlives all copies of the rule. Again, see the code for some
+       of the core rules, and this will become clear.
+
+       - Rules should considered const after creation. Ideally they
+       are only configurable via factory functions (e.g. the
+       pegc_r_xxx() functions). Once the factory is done configuring
+       them, clients must not change any state in the rule (with the
+       exception of the 'client' member, which is reserved for
+       client-side use).
+
+       - Rules which require no runtime-generated state at all can
+       often be implemented as a shared const instance of
+       PegcRule. For many examples see the PegcRule_xxx family of
+       objects.
     */
     struct PegcRule
     {
@@ -846,6 +890,11 @@ extern "C" {
     PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * data );
 
     /**
+       Functionally equivalent to pegc_copy_r_p() but it takes
+       a value argument instead of a pointer.
+    */
+    PegcRule * pegc_copy_r_v( pegc_parser * st, PegcRule const r );
+    /**
        Like pegc_alloc_r() (with the same ownership conventions),
        but copies all data from r.
 
@@ -856,7 +905,7 @@ extern "C" {
        For many examples of when/why to use it, see pegc.c and
        search for this function name.
     */
-    PegcRule * pegc_copy_r( pegc_parser * st, PegcRule const r );
+    PegcRule * pegc_copy_r_p( pegc_parser * st, PegcRule const * r );
 
     /**
        Returns a rule which matches if any character in the given string
