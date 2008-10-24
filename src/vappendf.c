@@ -509,7 +509,7 @@ static long spech_sqlstring_main( int xtype,
         int i, j, n, ch, isnull;
         int needQuote;
         char q = ((xtype==etSQLESCAPE3)?'"':'\'');   /* Quote character */
-        char *escarg = (char*) varg;
+        char const * escarg = (char const *) varg;
 	char * bufpt = 0;
         isnull = escarg==0;
         if( isnull ) escarg = (xtype==etSQLESCAPE2 ? "NULL" : "(NULL)");
@@ -876,8 +876,12 @@ if(1){				       \
         exp = 0;
 #if 1
 	if( (realvalue)!=(realvalue) ){
-          /* from sqlite3: #define sqlite3_isnan(X)  ((X)!=(X)) */
-          bufpt = "NaN";
+	    /* from sqlite3: #define sqlite3_isnan(X)  ((X)!=(X)) */
+	    /* This weird array thing is to avoid constness violations
+	       when assinging, e.g. "NaN" to bufpt.
+	    */
+	    static char NaN[4] = {'N','a','N','\0'};
+	    bufpt = NaN;
           length = 3;
           break;
         }
@@ -890,11 +894,14 @@ if(1){				       \
           while( realvalue<1.0 && exp>=-350 ){ realvalue *= 10.0; exp--; }
           if( exp>350 || exp<-350 ){
             if( prefix=='-' ){
-              bufpt = "-Inf";
+		static char Inf[5] = {'-','I','n','f','\0'};
+		bufpt = Inf;
             }else if( prefix=='+' ){
-              bufpt = "+Inf";
+		static char Inf[5] = {'+','I','n','f','\0'};
+		bufpt = Inf;
             }else{
-              bufpt = "Inf";
+		static char Inf[4] = {'I','n','f','\0'};
+		bufpt = Inf;
             }
             length = strlen(bufpt);
             break;
