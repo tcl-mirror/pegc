@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 static const hashtable
 hashtable_init = { 0, /*tablelength*/
@@ -44,6 +43,14 @@ size_t hashtable_index(size_t tablelength, size_t hashvalue)
 }
 #endif
 
+hashval_t hashtable_ceil( double d )
+{
+    hashval_t x = (hashval_t)d;
+    return (( d - (double)x )>0.0)
+	? (x+1)
+	: x;
+}
+
 /*****************************************************************************/
 hashtable *
 hashtable_create(hashval_t minsize,
@@ -72,7 +79,7 @@ hashtable_create(hashval_t minsize,
     h->entrycount   = 0;
     h->hashfn       = hashf;
     h->eqfn         = eqf;
-    h->loadlimit    = (hashval_t) ceil(size * max_load_factor);
+    h->loadlimit    = hashtable_ceil(size * max_load_factor);
     return h;
 }
 /*****************************************************************************/
@@ -163,7 +170,7 @@ hashtable_expand(hashtable *h)
         }
     }
     h->tablelength = newsize;
-    h->loadlimit   = (hashval_t) ceil(newsize * max_load_factor);
+    h->loadlimit   = hashtable_ceil(newsize * max_load_factor);
     return -1;
 }
 
