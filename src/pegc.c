@@ -30,9 +30,9 @@ const pegc_cursor pegc_cursor_init = PEGC_CURSOR_INIT;
 const PegcRule PegcRule_init = PEGC_INIT_RULE;
 const PegcRule PegcRule_invalid = PEGC_INIT_RULE;
 
-unsigned int pegc_strnlen( unsigned int n, pegc_const_iterator c )
+size_t pegc_strnlen( size_t n, pegc_const_iterator c )
 {
-    unsigned int ret = 0;
+    size_t ret = 0;
     while( c && *c )
     {
 	if( (n>0) && (ret == n) ) break;
@@ -42,7 +42,7 @@ unsigned int pegc_strnlen( unsigned int n, pegc_const_iterator c )
     return ret;
 }
 
-unsigned int pegc_strlen( pegc_const_iterator c )
+size_t pegc_strlen( pegc_const_iterator c )
 {
     return pegc_strnlen( 0, c );
 }
@@ -88,31 +88,31 @@ struct PegcAction
 };
 typedef struct PegcAction PegcAction;
     
-//#define PEGC_ACTION_INIT {0,0,PEGC_CURSOR_INIT} /* compile error? */
-#define PEGC_ACTION_INIT {0,0,PEGC_CURSOR_INIT}
-static const PegcAction PegcAction_init = PEGC_ACTION_INIT;
+//#define PEGCACTION_INIT {0,0,PEGC_CURSOR_INIT} /* compile error? */
+#define PEGCACTION_INIT {0,0,PEGC_CURSOR_INIT}
+static const PegcAction PegcAction_init = PEGCACTION_INIT;
 
 /**
    Internal type to hold a linked list of queues actions.
 */
-struct pegc_actions
+struct pegc_action
 {
     /**
        Previous item in the list. Used for destruction traversal.
     */
-    struct pegc_actions * left;
+    struct pegc_action * left;
     /**
        Next item in the list. Used for action trigger traversal.
     */
-    struct pegc_actions * right;
+    struct pegc_action * right;
     /**
        This object's action.
     */
     PegcAction action;
 };
-typedef struct pegc_actions pegc_actions;
-#define PEGC_ACTIONS_INIT {0,0,PEGC_ACTION_INIT}
-static const pegc_actions pegc_actions_init = PEGC_ACTIONS_INIT;
+typedef struct pegc_action pegc_action;
+#define PEGC_ACTION_INIT {0,0,PEGCACTION_INIT}
+static const pegc_action pegc_action_init = PEGC_ACTION_INIT;
 
 
 /**
@@ -133,9 +133,10 @@ struct pegc_parser
     */
     pegc_match_listener_data * listeners;
     /**
-       Queued actions are stored here.
+       Queued actions are stored here. This item is the right-most
+       action in the list.
     */
-    pegc_actions * actions;
+    pegc_action * actions;
     /**
        Generic garbage collector.
     */
@@ -149,12 +150,12 @@ struct pegc_parser
     */
     struct errinfo {
 	char * message;
-	unsigned int line;
-	unsigned int col;
+	size_t line;
+	size_t col;
     } errinfo;
 };
 
-static unsigned int pegc_parser_instanceCount = 0;
+static size_t pegc_parser_instanceCount = 0;
 static const pegc_parser
 pegc_parser_init = { 0, /* name */
 		    {0,0,0}, /* cursor */
@@ -203,7 +204,7 @@ char const * pegc_get_name( pegc_parser * st )
     return st ? st->name : 0;
 }
 
-static void pegc_free( void * k )
+void pegc_free( void * k )
 {
     //MARKER; printf("Freeing GENERIC (void*) @%p\n",k);
     free(k);
@@ -221,6 +222,11 @@ static void pegc_free_value( void * k )
     free(k);
 }
 
+void pegc_gc_test_listener( whgc_event const event )
+{
+    MARKER; printf("GC event: cx=@%p event=%d key=%p value=@%p\n",event.cx,event.type,event.key,event.value);
+}
+
 bool pegc_gc_register( pegc_parser * st,
 		       void * key, void (*keyDtor)(void*),
 		       void * value, void (*valDtor)(void*) )
@@ -229,6 +235,8 @@ bool pegc_gc_register( pegc_parser * st,
     if( ! st->gc )
     {
         st->gc = whgc_create_context(st);
+	if( ! st->gc ) return false;
+	//whgc_add_listener( st->gc, pegc_gc_test_listener );
     }
     if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {
@@ -298,17 +306,19 @@ bool pegc_destroy_parser( pegc_parser * st )
 {
     if( ! st ) return false;
     pegc_set_error_e( st, 0, 0 );
+#if 0
+    while( st->actions )
+    {
+	pegc_action * p = st->actions->left;
+	//MARKER;printf("Freeing queued action entry @%p\n",st->actions);
+	pegc_free(st->actions);
+	st->actions = p;
+    }
+#endif
     if( st->gc )
     {
         whgc_destroy_context( st->gc );
         st->gc = 0;
-    }
-    while( st->actions )
-    {
-	pegc_actions * p = st->actions->left;
-	//MARKER;printf("Freeing queued action entry @%p\n",st->actions);
-	pegc_free(st->actions);
-	st->actions = p;
     }
     pegc_match_listener_data * x = st->listeners;
     while( x )
@@ -352,8 +362,8 @@ pegc_const_iterator pegc_latin1(int ch)
 
 
 char const * pegc_get_error( pegc_parser const * st,
-			     unsigned int * line,
-			     unsigned int * col )
+			     size_t * line,
+			     size_t * col )
 {
     if( ! st || !st->errinfo.message ) return 0;
     if( line ) *line = st->errinfo.line;
@@ -373,7 +383,7 @@ bool pegc_set_error_v( pegc_parser * st, char const * fmt, va_list vargs )
     if( ! fmt ) return true;
     char const * at = fmt;
     for( ; at && *at; ++at ){};
-    unsigned int len = at - fmt;
+    size_t len = at - fmt;
     if( ! len )
     {
 	st->errinfo.message = 0;
@@ -483,11 +493,11 @@ long pegc_distance( pegc_parser const * st, pegc_const_iterator e )
 }
 
 bool pegc_line_col( pegc_parser const * st,
-		    unsigned int * line,
-		    unsigned int * col )
+		    size_t * line,
+		    size_t * col )
 {
     if( !st ) return false;
-    unsigned int bogo;
+    size_t bogo;
     if( ! line ) line = &bogo;
     if( ! col ) col = &bogo;
     *line = 1;
@@ -654,7 +664,7 @@ static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
     //MARKER;printf("self=%p, self->data=%p\n",self,self->data);
     if( ! pegc_rule_check( self, st, true, false, false ) ) return false;
     if( !pegc_isgood( st ) ) return false;
-    unsigned int evil = (unsigned int)self->data;
+    size_t evil = (size_t)self->data;
     int min = ((evil >> 8) & 0x00ff);
     int max = (evil & 0x00ff);
     //MARKER;printf("min=%c, max=%c, evil=%x\n",min,max,evil);
@@ -680,8 +690,8 @@ PegcRule pegc_r_char_range( pegc_char_t start, pegc_char_t end )
        i'm not proud of this, but i want to avoid allocating
        for this rule, since i expect it to be used often.
      */
-    assert( (sizeof(unsigned int) <= sizeof(void*)) && "pegc_r_char_range(): invalid use of (void*) to store int value: (void*) is too small!");
-    unsigned int evil = ((start << 8) | (0x00ff & end));
+    assert( (sizeof(size_t) <= sizeof(void*)) && "pegc_r_char_range(): invalid use of (void*) to store int value: (void*) is too small!");
+    size_t evil = ((start << 8) | (0x00ff & end));
     PegcRule r = pegc_r( PegcRule_mf_char_range, (void*)evil );
     //MARKER;printf("min=%c, max=%c, evil=%x, r.data=%p\n",start,end,evil,r.data);
     return r;
@@ -807,9 +817,6 @@ char * pegc_mprintf( pegc_parser * st, char const * fmt, ... )
     return ret;
 }
 
-
-
-
 bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
     return false;
@@ -833,7 +840,7 @@ static bool PegcRule_mf_oneof_impl( PegcRule const * self, pegc_parser * st, boo
     pegc_const_iterator p = pegc_pos(st);
     if( !*p ) return false;
     pegc_const_iterator str = (pegc_const_iterator)self->data;
-    unsigned int len = pegc_strlen(str);
+    size_t len = pegc_strlen(str);
     int i = 0;
     for( ; (i < len); ++i )
     {
@@ -876,7 +883,7 @@ static bool PegcRule_mf_string_impl( PegcRule const * self, pegc_parser * st, bo
     if( ! pegc_rule_check( self, st, true, false, false ) ) return false;
     pegc_const_iterator str = (pegc_const_iterator)self->data;
     if( ! str ) return false;
-    unsigned int len = pegc_strlen(str);
+    size_t len = pegc_strlen(str);
     pegc_const_iterator p = pegc_pos(st);
     bool b = pegc_matches_string( st, str, len, caseSensitive );
     //MARKER; printf("matches? == %d\n", b);
@@ -1115,10 +1122,10 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
-    const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
-    unsigned int count = 0;
+    const size_t blockSize = 5; /* number of rules to allocate at a time. */
+    size_t count = 0;
     PegcRule const ** li = 0;
-    unsigned int pos = 0;
+    size_t pos = 0;
     bool ok = true;
     while( true )
     {
@@ -1232,10 +1239,10 @@ static bool PegcRule_mf_and_v( PegcRule const * self, pegc_parser * st )
 PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
-    const unsigned int blockSize = 5; /* number of rules to allocate at a time. */
-    unsigned int count = 0;
+    const size_t blockSize = 5; /* number of rules to allocate at a time. */
+    size_t count = 0;
     PegcRule * li = 0;
-    unsigned int pos = 0;
+    size_t pos = 0;
     while( true )
     {
 	PegcRule const r = va_arg(ap,PegcRule const);
@@ -1306,13 +1313,13 @@ static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
     PegcAction * theact = (PegcAction*) pegc_gc_search(st,self->data);
     //MARKER; printf("setting up delayed action @%p\n", theact);
     if( ! theact ) return false;
-    pegc_actions * info = (pegc_actions*)malloc(sizeof(pegc_actions));
+    pegc_action * info = (pegc_action*)malloc(sizeof(pegc_action));
     if( ! info )
     { /* we should report an error, but we don't want to malloc now! */
 	return false;
     }
-    pegc_gc_add( st, info, 0 ); //pegc_free );
-    *info = pegc_actions_init;
+    pegc_gc_add( st, info, pegc_free );
+    *info = pegc_action_init;
     info->action = *theact;
     info->action.match.begin = orig;
     info->action.match.end = pegc_pos(st);
@@ -1357,12 +1364,12 @@ PegcRule pegc_r_action_d_v( pegc_parser * st,
 bool pegc_trigger_actions( pegc_parser * st )
 {
     if( pegc_has_error(st) ) return false;
-    pegc_actions const * a = st->actions;
+    pegc_action const * a = st->actions;
     if( ! a ) return false;
     while( a && a->left ) a = a->left;
     while( a )
     {
-	pegc_actions * nc = pegc_gc_search( st, a );
+	pegc_action * nc = pegc_gc_search( st, a );
 	if( ! nc )
 	{
 	    pegc_set_error_e( st, "pegc_trigger_actions(): action for @%p not found!",a);
@@ -1746,8 +1753,8 @@ const PegcRule PegcRule_ascii = {PegcRule_mf_ascii,0};
 
 struct pegc_range_info
 {
-    unsigned int min;
-    unsigned int max;
+    size_t min;
+    size_t max;
 };
 typedef struct pegc_range_info pegc_range_info;
 
@@ -1757,7 +1764,7 @@ static bool PegcRule_mf_repeat( PegcRule const * self, pegc_parser * st )
     pegc_range_info const * info = self->data;
     if( ! info ) return false;
     pegc_const_iterator orig = pegc_pos(st);
-    unsigned int count = 0;
+    size_t count = 0;
     while( self->proxy->rule( self->proxy, st ) )
     {
 	if( (++count == info->max)
@@ -1779,8 +1786,8 @@ static bool PegcRule_mf_repeat( PegcRule const * self, pegc_parser * st )
 
 PegcRule pegc_r_repeat( pegc_parser * st,
 			PegcRule const * rule,
-			unsigned int min,
-			unsigned int max )
+			size_t min,
+			size_t max )
 {
     if( ! st || !rule ) return PegcRule_invalid;
     if( (max < min) || (0==max) ) return PegcRule_invalid;
@@ -2136,7 +2143,8 @@ PegcRule pegc_r_string_quoted( pegc_parser * st,
 
 #undef MARKER
 #undef DUMPPOS
-#undef PEGC_ACTIONS_INIT
+#undef PEGC_ACTION_INIT
+#undef PEGCACTION_INIT
 
 #if defined(__cplusplus)
 } /* extern "C" */

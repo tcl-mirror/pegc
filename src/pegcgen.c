@@ -86,15 +86,27 @@ static bool PG_mf_spacing( PegcRule const * self, pegc_parser * p )
 {
     if( !p || pegc_has_error(p) ) return false;
     if( pegc_eof(p) ) return true;
-    PegcRule const space = pegc_r_plus_p( &PegcRule_blank );
+    PegcRule const space = pegc_r_plus_p( &PegcRule_space );
     return space.rule( &space, p );
 }
-static const PegcRule PG_spacing = PEGC_INIT_RULE2(PG_mf_spacing,0);
+static const PegcRule PG_spacing = PEGC_INIT_RULE1(PG_mf_spacing);
+static const PegcRule PG_op_or = PEGC_INIT_RULE2(PegcRule_mf_char,"/");
+static const PegcRule PG_op_at = PEGC_INIT_RULE2(PegcRule_mf_char,"&");
+static const PegcRule PG_op_star = PEGC_INIT_RULE2(PegcRule_mf_char,"*");
+static const PegcRule PG_op_plus = PEGC_INIT_RULE2(PegcRule_mf_char,"+");
+static const PegcRule PG_op_dot = PEGC_INIT_RULE2(PegcRule_mf_char,".");
+static const PegcRule PG_op_popen = PEGC_INIT_RULE2(PegcRule_mf_char,"(");
+static const PegcRule PG_op_pclose = PEGC_INIT_RULE2(PegcRule_mf_char,")");
+static const PegcRule PG_op_bopen = PEGC_INIT_RULE2(PegcRule_mf_char,"[");
+static const PegcRule PG_op_bclose = PEGC_INIT_RULE2(PegcRule_mf_char,"]");
+static const PegcRule PG_op_sbopen = PEGC_INIT_RULE2(PegcRule_mf_char,"{");
+static const PegcRule PG_op_sbclose = PEGC_INIT_RULE2(PegcRule_mf_char,"}");
+static const PegcRule PG_op_larrow = PEGC_INIT_RULE2(PegcRule_mf_string,"<-");
 static const PegcRule PG_end = PEGC_INIT_RULE;
 static const PegcRule PG_alpha_uscor =
     PEGC_INIT_RULE2(PegcRule_mf_oneofi,"abcdebfhijklmnopqrstuvwxyz_");
 
-PegcRule pg_r_spacearound( pegc_parser * p, PegcRule const R )
+PegcRule pg_r_skipws( pegc_parser * p, PegcRule const R )
 {
     return pegc_r_pad_v(p, PegcRule_success, R, PG_spacing, true );
 }
@@ -113,7 +125,7 @@ PegcRule pg_r_identifier( pegc_parser * p )
 	;
     PegcRule const idcont = pegc_r_star_v(p,pegc_r_or_ev(p,idstart,PegcRule_digit,PG_end));
     PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_end);
-    PegcRule const pad = pg_r_spacearound( p, id );
+    PegcRule const pad = pg_r_skipws( p, id );
     //PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_spacing, PG_end);
     PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_identifier()");
     return act;
@@ -123,15 +135,17 @@ PegcRule pg_r_identifier( pegc_parser * p )
 int a_test()
 {
     char const * src = "_abcd _1212 t930_9";
-    pegc_parser * P = pegc_create_parser( src, -1 );
+    pegc_parser * P = PGApp.P;//pegc_create_parser( src, -1 );
+    pegc_set_input( P, src, -1 );
     PegcRule const R = pg_r_identifier(P);
     while( pegc_parse( P, &R ) )
     {
 	char * m = pegc_get_match_string(P);
 	MARKER;printf("matched: [%s]\n", m ? m : "<EMPTY>");
-	free(m);
+	if( 1 ) free(m);
+	else pegc_gc_add(P,m,pegc_free);
     }
-    pegc_destroy_parser(P);
+    //pegc_destroy_parser(P);
     return 0;
 }
 
@@ -154,5 +168,6 @@ int main( int argc, char ** argv )
 	   ? "You win :)"
 	   : "You lose :(");
     whgc_destroy_context( PGApp.gc );
+    pegc_destroy_parser( PGApp.P );
     return rc;
 }

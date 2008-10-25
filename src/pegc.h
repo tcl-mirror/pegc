@@ -397,12 +397,12 @@ extern "C" {
        means "unlimited" (i.e. only stop at a null).
 
     */
-    unsigned int pegc_strnlen( unsigned int n, pegc_const_iterator c );
+    size_t pegc_strnlen( size_t n, pegc_const_iterator c );
 
     /**
        Equivalent to pegc_strnlen(0,c).
     */
-    unsigned int pegc_strlen( pegc_const_iterator c );
+    size_t pegc_strlen( pegc_const_iterator c );
 
     /**
        Clears the parser's internal state, freeing any resources
@@ -464,7 +464,7 @@ extern "C" {
        carriage return as the newline character. We can use
        PegcRule_eol to implement that behaviour.
     */
-    bool pegc_line_col( pegc_parser const * st, unsigned int * line, unsigned int * col );
+    bool pegc_line_col( pegc_parser const * st, size_t * line, size_t * col );
 
     /**
        Gets the current error string (which may be 0), line, and
@@ -484,8 +484,8 @@ extern "C" {
        state or when the parser is destroyed.
     */
     char const * pegc_get_error( pegc_parser const * st,
-				 unsigned int * line,
-				 unsigned int * col );
+				 size_t * line,
+				 size_t * col );
 
     /**
        Copies the given null-terminated string as the current error
@@ -804,7 +804,7 @@ extern "C" {
 	    /**
 	       For client-side use. This library makes no use of it.
 	    */
-	    unsigned int flags;
+	    size_t flags;
 	    /**
 	       For client-side use. This library makes no use of it.
 	    */
@@ -1334,8 +1334,8 @@ extern "C" {
     */
     PegcRule pegc_r_repeat( pegc_parser * st,
 			    PegcRule const * rule,
-			    unsigned int min,
-			    unsigned int max );
+			    size_t min,
+			    size_t max );
 
     /**
        Creates a rule which matches if the equivalent of:
@@ -1643,6 +1643,11 @@ extern "C" {
     */
     char * pegc_mprintf( pegc_parser * st, char const * fmt, ... );
 
+    /**
+       Functionally equivalent to free() but may also do some logging
+       or other telemetry collection.
+    */
+    void pegc_free(void*);
 #ifdef __cplusplus
 } // extern "C"
 #endif
