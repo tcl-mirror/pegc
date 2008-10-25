@@ -887,21 +887,12 @@ static bool PegcRule_mf_string_impl( PegcRule const * self, pegc_parser * st, bo
     return b;
 }
 
-/**
-   Requires that self->data be a pegc_const_iterator. Matches if
-   that string case-sensitively matches the next
-   pegc_strlen(thatString) bytes of st.
-*/
-static bool PegcRule_mf_string( PegcRule const * self, pegc_parser * st )
+bool PegcRule_mf_string( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_string_impl( self, st, true );
 }
 
-/**
-   Identical to PegcRule_mf_string() except that it matches
-   case-insensitively.
-*/
-static bool PegcRule_mf_stringi( PegcRule const * self, pegc_parser * st )
+bool PegcRule_mf_stringi( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_string_impl( self, st, false );
 }
@@ -925,19 +916,12 @@ static bool PegcRule_mf_char_impl( PegcRule const * self, pegc_parser * st, bool
     return false;
 }
 
-/**
-   Requires that self->data be an pegc_const_iterator. Matches if
-   the first char of that string matches st.
-*/
-static bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st )
+bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_char_impl(self,st,true);
 }
 
-/**
-   Case-insensitive form of PegcRule_mf_chari.
-*/
-static bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st )
+bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_char_impl(self,st,false);
 }

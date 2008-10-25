@@ -1027,10 +1027,35 @@ extern "C" {
     PegcRule pegc_r_string( pegc_const_iterator input, bool caseSensitive );
 
     /**
+       Matches if that string case-sensitively matches the next
+       pegc_strlen(thatString) bytes of st. Requires that self->data
+       be a pegc_const_iterator.
+    */
+    bool PegcRule_mf_string( PegcRule const * self, pegc_parser * st );
+
+    /**
+       Identical to PegcRule_mf_string() except that it matches
+       case-insensitively.
+    */
+    bool PegcRule_mf_stringi( PegcRule const * self, pegc_parser * st );
+
+
+    /**
        Creates a rule which matches the given character, which must
        be in the range [0,255].
     */
     PegcRule pegc_r_char( pegc_char_t ch, bool caseSensitive );
+
+    /**
+       Matches if the first char of that string matches st. Requires
+       that self->data be a non-null pegc_const_iterator.
+    */
+    bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st );
+
+    /**
+       Case-insensitive form of PegcRule_mf_char.
+    */
+    bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st );
 
     /**
        Returns a rule which matches any character in the inclusive
