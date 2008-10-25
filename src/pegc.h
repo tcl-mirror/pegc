@@ -120,7 +120,7 @@ parser. Rules have, by convention, no non-const state, so it is safe
 to use them in multiple parts of a given grammar.  For example, if
 you need a certain list of rules in several places in your grammar, it
 is wise to create that list only once and reference that copy
-throughout the grammar, instead of calling pegc_r_list_ap() (or
+throughout the grammar, instead of calling pegc_r_list_a() (or
 similar) each time an identical rule is needed.  Failing to follow
 this guideline will result in significantly larger memory costs for
 the parser. Note that most allocation happens during the construction
@@ -290,6 +290,12 @@ extern "C" {
        its pointers properly initialized to 0.
     */
     extern const pegc_cursor pegc_cursor_init;
+    /**
+       A macro for use in places where a const expression is needed
+       in place of pegc_cursor_init.
+     */
+#define PEGC_CURSOR_INIT { 0, 0, 0 }
+
 
     /**
        Initializes curs to point at the range [begin,end) and sets
@@ -808,6 +814,44 @@ extern "C" {
     typedef struct PegcRule PegcRule;
 
     /**
+       This object can (should) be used as an initializer to ensure a
+       clean slate for the internal members of PegcRule objects. Simply
+       copy this over the object. It is an invalid rule.
+    */
+    extern const PegcRule PegcRule_init;
+
+
+    /**
+       Always returns false and does nothing.
+    */
+    bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
+
+    /**
+       The PEGC_INIT_RULE family of macros are for use in places where a
+       const expression is needed in place of PegcRule_init. The numeric
+       suffix on the macro name is the number of arguments it takes, from
+       0 to 2 arguments:
+
+       RF = a PegcRule_mf
+       D = static rule data
+    */
+#define PEGC_INIT_RULE2(RF,D) { \
+     RF /* rule */,\
+     D /* data */,\
+     0 /* proxy */,\
+     /* client */ { 0/* flags */,0 /* data */}\
+}
+    /**
+       A rule using RF as its rule function.
+     */
+#define PEGC_INIT_RULE1(RF) PEGC_INIT_RULE2(RF,0)
+    /**
+       An invalid rule.
+     */
+#define PEGC_INIT_RULE PEGC_INIT_RULE1(0)
+
+
+    /**
        Returns true if (r && r->rule). Note that it does not
        know about rule-specific validity checks. Some rule
        factory functions return an "invalid rule" on error,
@@ -822,14 +866,6 @@ extern "C" {
        set the match string - that is up to the rule to do).
     */
     bool pegc_parse( pegc_parser * st, PegcRule const * r );
-
-    /**
-       This object can (should) be used as an initializer to ensure a
-       clean slate for the internal members of PegcRule objects. Simply
-       copy this over the object. Its default rule is a rule which
-       never matches (always returns false) and does not consume.
-    */
-    extern const PegcRule PegcRule_init;
 
     /**
        Registers an arbitrary key and value with the garbage
@@ -926,6 +962,19 @@ extern "C" {
        matches the next input char.
     */
     PegcRule pegc_r_oneof( char const * list, bool caseSensitive );
+
+    /**
+       See pegc_r_oneof(). Requires that self->data be a (char const *),
+       and does a case-sensitive comparison.
+    */
+    bool PegcRule_mf_oneof( PegcRule const * self, pegc_parser * st );
+
+    /**
+       Identical to PegcRule_mf_oneof() except that it compares
+       case-insensitively by using tolower() for each compared
+       character.
+    */
+    bool PegcRule_mf_oneofi( PegcRule const * self, pegc_parser * st );
 
     /**
        Creates a 'star' rule for the given proxy rule.
@@ -1051,10 +1100,11 @@ extern "C" {
        an entry where entry->rule is 0, or results are undefined
        (almost certainly an overflow).
 
-       All rules in li must outlive the returned object.
+       All rules in li are copied (shallowly), so they need not
+       outlive the returned object.
 
-       This allocates resources for the returned rule which belong to
-       this API and are freed when st is destroyed.
+       This routine allocates resources for the returned rule which
+       belong to this API and are freed when st is destroyed.
 
        If st or li are null then an invalid rule is returned.
 
@@ -1067,14 +1117,14 @@ extern "C" {
 
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
 
-       Of the various pegc_r_plist_X() implementations, this one is
+       Of the various pegc_r_list_X() implementations, this one is
        most efficient (the others synthesize an array, which causes
-       extra allocations, and call this routine).  ).
+       extra allocations, and call this routine).
     */
-    PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const * li );
+    PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
 
     /**
-       Works like pegc_r_list_ap() but requires a NULL-terminated list of
+       Works like pegc_r_list_a() but requires a NULL-terminated list of
        (PegcRule const *).
 
        Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
@@ -1302,11 +1352,16 @@ extern "C" {
        "token". It is possible to capture the left/right pad rule matches
        by wrapping them in an Action rule.
     */
-    PegcRule pegc_r_pad( pegc_parser * st,
-			 PegcRule const * leftRule,
-			 PegcRule const * mainRule,
-			 PegcRule const * rightRule,
-			 bool discardLeftRight);
+    PegcRule pegc_r_pad_p( pegc_parser * st,
+			   PegcRule const * leftRule,
+			   PegcRule const * mainRule,
+			   PegcRule const * rightRule,
+			   bool discardLeftRight);
+    PegcRule pegc_r_pad_v( pegc_parser * st,
+			   PegcRule const leftRule,
+			   PegcRule const mainRule,
+			   PegcRule const rightRule,
+			   bool discardLeftRight);
 
     /**
        An object implementing functionality identical to the

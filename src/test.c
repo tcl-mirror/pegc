@@ -172,7 +172,7 @@ int test_three()
 #endif
     PegcRule const delim = pegc_r_plus_p( &rangeU );
     PegcRule const word = pegc_r_plus_p( &rangeL );
-    PegcRule const R = pegc_r_pad( P, &delim, &word, &delim, true );
+    PegcRule const R = pegc_r_pad_p( P, &delim, &word, &delim, true );
     int rc = 0;
     if( pegc_parse(P, &R) )
     {
@@ -209,8 +209,8 @@ int test_strings()
     0 };
     pegc_parser * P = pegc_create_parser( 0, 0 );
     char * tgt = 0;
-    PegcRule const QD = pegc_r_string_quoted_unescape( P, '"', '\\', &tgt );
-    PegcRule const QS = pegc_r_string_quoted_unescape( P, '\'', '\\', 0 );
+    PegcRule const QD = pegc_r_string_quoted( P, '"', '\\', &tgt );
+    PegcRule const QS = pegc_r_string_quoted( P, '\'', '\\', &tgt );
     PegcRule const R = pegc_r_list_ev( P, true, QD, QS, PegcRule_invalid );
     //PegcRule const R = pegc_r_list_ep( P, true, &QD, &QS, &PegcRule_invalid );
     //PegcRule const R = pegc_r_or( P, &QD, &QS );

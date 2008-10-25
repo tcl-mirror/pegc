@@ -2,23 +2,19 @@
 # Requires GNU Make 3.80+!
 default: all
 
-ifeq (1,1)
-CPPFLAGS += \
-	-Wimplicit-function-declaration \
-	-Wall \
-	-g -O0
-endif
-ifneq (,$(TCC))
+ifeq (1,$(TCC))
   # If you have (want to use) tcc, try this:
   CC := tcc
   CXX := tcc
-  CPPFLAGS += -b \
-	-Wwrite-strings \
+  CPPFLAGS += -g \
 	-Wunsupported \
 	-Wall
 else
   # Assume gcc-compatible flags:
-  CPPFLAGS += -Wall -Werror
+  CPPFLAGS += \
+	-Wimplicit-function-declaration \
+	-Wall \
+	-g -O0
 endif
 
 # CPPFLAGS ?= -g
