@@ -34,19 +34,12 @@ struct whgc_gc_entry
     void * value;
     whgc_dtor_f keyDtor;
     whgc_dtor_f valueDtor;
+    struct whgc_gc_entry * left;
+    struct whgc_gc_entry * right;
 };
 typedef struct whgc_gc_entry whgc_gc_entry;
-#define WHGC_GC_ENTRY_INIT {0,0,0,0}
+#define WHGC_GC_ENTRY_INIT {0,0,0,0,0,0}
 static const whgc_gc_entry whgc_gc_entry_init = WHGC_GC_ENTRY_INIT;
-
-struct whgc_entries
-{
-    whgc_gc_entry * entry;
-    struct whgc_entries * left;
-};
-typedef struct whgc_entries whgc_entries;
-#define WHGC_ENTRIES_INIT {0,0}
-static const whgc_entries whgc_entries_init = WHGC_ENTRIES_INIT;
 
 /**
    The main handle type used by the whgc API.
@@ -55,7 +48,12 @@ struct whgc_context
 {
     void const * client;
     hashtable * ht;
-    whgc_entries * entries;
+    /**
+       Holds the right-most (most recently added) entry. A cleanup,
+       the list is walked leftwards to free the entries in reverse
+       order.
+    */
+    whgc_gc_entry * current;
 };
 
 #define WHGC_CONTEXT_INIT {0,0,0}
@@ -86,24 +84,28 @@ static int whgc_hash_cmp_void_ptr( void const * k1, void const * k2 )
 */
 static void whgc_free_hashtable( void * k )
 {
-    //MARKER; printf("Freeing HASHTABLE @%p\n",k);
+    MARKER; printf("Freeing HASHTABLE @%p\n",k);
     hashtable_destroy( (hashtable*)k );
 }
 
+/**
+   A logging version of free().
+ */
 static void whgc_free( void * k )
 {
-    //MARKER; printf("Freeing GENERIC (void*) @%p\n",k);
+    MARKER; printf("Freeing GENERIC (void*) @%p\n",k);
     free(k);
 }
 
 /**
    Destructor for use with the hashtable API. Frees
-   whgc_gc_entry objects.
+   whgc_gc_entry objects by calling the assigned
+   dtors and then calling free(e).
 */
-static void whgc_free_gc_entry( whgc_gc_entry *e )
+static void whgc_free_gc_entry( whgc_gc_entry * e )
 {
     if( ! e ) return;
-    //MARKER;printf("Freeing GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
+    MARKER;printf("Freeing GC item e[@%p]: key=[%p(key[@%p])] val[%p(@%p])]\n",e,e->keyDtor,e->key,e->valueDtor,e->value);
     if( e->valueDtor )
     {
 	//MARKER;printf("dtor'ing GC value %p( @%p )\n",e->valueDtor, e->value);
@@ -131,12 +133,12 @@ static hashtable * whgc_hashtable( whgc_context * cx )
     if( cx->ht ) return cx->ht;
     if( (cx->ht = hashtable_create( 10, whgc_hash_void_ptr, whgc_hash_cmp_void_ptr ) ) )
     {
-	hashtable_set_dtors( cx->ht,
-			     //0, 0
-			     whgc_free_noop,whgc_free_noop
-			     //whgc_free_noop,whgc_free_value
-			     //whgc_free_noop,whgc_hashtable_free_gc_entry
-			     );
+	hashtable_set_dtors( cx->ht, whgc_free_noop, whgc_free_noop );
+	/**
+	   We use no-op dtors so we can log the destruction process, but cx->ht
+	   does not own anything. Because we need predictable destruction order,
+	   we manage a list of entries and destroy them in reverse order.
+	 */
     }
     return cx->ht;
 }
@@ -168,23 +170,37 @@ bool whgc_register( whgc_context * cx,
     e->valueDtor = valDtor;
     //MARKER;printf("Registering GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
     hashtable_insert( cx->ht, key, e );
-#if 1
-    whgc_entries * E = (whgc_entries*)malloc(sizeof(whgc_entries));
-    if( ! E ) return false;
-    *E = whgc_entries_init;
-    E->entry = e;
-    if( cx->entries )
+    if( cx->current )
     {
-	E->left = cx->entries;
+	e->left = cx->current;
+	cx->current->right = e;
     }
-    cx->entries = E;
-#endif
+    cx->current = e;
     return true;
 }
 
 bool whgc_add( whgc_context * cx, void * key, whgc_dtor_f keyDtor )
 {
     return whgc_register( cx, key, keyDtor, key, 0 );
+}
+
+void * whgc_take( whgc_context * cx, void * key )
+{
+    if( ! cx || !key ) return 0;
+    whgc_gc_entry * e = (whgc_gc_entry*)hashtable_take( cx->ht, key );
+    void * ret = e ? e->value : 0;
+    if( e )
+    {
+	if( e->left ) e->left->right = e->right;
+	if( e->right ) e->right->left = e->left;
+	if( cx->current == e ) cx->current = (e->right ? e->right : e->left);
+	/**
+	   ^^^ this is pedantic. In theory cx->current must always be
+	   the right-most entry, so we could do: cx->current=e->left;
+	 */
+	free(e);
+    }
+    return ret;
 }
 
 void * whgc_search( whgc_context const * cx, void const * key )
@@ -199,41 +215,27 @@ void whgc_destroy_context( whgc_context * cx )
 {
     if( ! cx ) return;
     cx->client = 0;
-
+    if( cx->ht )
+    {
+	MARKER;printf("Cleaning up %u GC entries...\n",hashtable_count(cx->ht));
+	whgc_free_hashtable( cx->ht );
+	cx->ht = 0;
+    }
 #if 1
     /**
        Destroy registered entries in reverse order of
        their registration.
     */
-    whgc_entries * e = cx->entries;
+    whgc_gc_entry * e = cx->current;
     while( e )
     {
 	//MARKER;printf("Want to clean up @%p\n",e);
-	whgc_entries * left = e->left;
-	whgc_gc_entry * E = e->entry;
-#if 1
-	whgc_free_gc_entry(E);
-#else
-	if( E->keyDtor )
-	{
-	    E->keyDtor( E->key );
-	}
-	if( E->valueDtor )
-	{
-	    E->valueDtor( E->value );
-	}
-#endif
-	free(e);
+	whgc_gc_entry * left = e->left;
+	whgc_free_gc_entry(e);
 	e = left;
     }
-    cx->entries = 0;
+    cx->current = 0;
 #endif
-
-    if( cx->ht )
-    {
-	whgc_free_hashtable( cx->ht );
-	cx->ht = 0;
-    }
     whgc_free(cx);
 }
 

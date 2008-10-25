@@ -100,6 +100,16 @@ extern "C" {
        eliminated a number of headaches involved with ownership of the
        dynamic data. It also simplified many lookup operations when we
        needed to find shared data.
+
+       @section sec_threadsafety Thread safety
+
+       By default it is never legal to use the same context from
+       multiple threads at the same time. That said, the client may
+       use their own locking to serialize access. All API functions
+       which take a (whgc_context const *) argument require only a
+       read lock, whereas those taking a (whgc_context*) argument
+       require a exclusive (read/write) access. whgc_create_context()
+       is reentrant and does not need to be locked.
     */
 
     /**
@@ -166,11 +176,18 @@ extern "C" {
     bool whgc_add( whgc_context *cx, void * key, whgc_dtor_f keyDtor );
 
     /**
+       Removes the given key from the given context, transfering ownership
+       of the key and the associated value to the caller.
+    */
+    void * whgc_take( whgc_context * cx, void * key );
+
+    /**
        Frees all resources associated with the given context.
        All entries which have been added via whgc_add() are passed to
        the dtor function which was assigned to them via whgc_add().
 
-       Note that the destruction order is undefined.
+       Note that the destruction order is in reverse order of the
+       registration (FIFO).
     */
     void whgc_destroy_context( whgc_context * );
 
