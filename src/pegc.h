@@ -262,20 +262,26 @@ extern "C" {
     typedef pegc_char_t * pegc_iterator;
 
     /**
-       A type for holding a set of pointers in a string:
+       A type for holding a set of pointers in a string.
 
-       begin: the start of the string
-
-       pos: current cursor pos in the string.
-
-       end: one address after the end of the string (i.e., where the
-       null terminator should be, except that the end may be within a
-       substring of a larger string).
+       This type is used for storing marking input ranges and
+       storing string matches for pegc_parsers.
     */
     struct pegc_cursor
     {
+	/**
+	   The starting point of the cursor.
+	*/
 	pegc_const_iterator begin;
+	/**
+	  The current position in the string.
+	*/
 	pegc_const_iterator pos;
+	/*
+	  One address after the end of the string (i.e., where the
+	  null terminator should be, except that the end may be within a
+	  substring of a larger string).
+	*/
 	pegc_const_iterator end;
     };
     typedef struct pegc_cursor pegc_cursor;
@@ -287,13 +293,9 @@ extern "C" {
 
     /**
        Initializes curs to point at the range [begin,end) and sets
-       it->pos set to begin. Returns false and does nothing if
+       cursor.pos set to begin. Returns false and does nothing if
        (end<begin). As a special case, if begin is not 0 and end is 0
        then strlen(begin) will be used to calculate the length.
-
-       When re-mapping a parser to a different input source than
-       previously used, be sure to call pegc_set_error() to clear the
-       error state, or most parse operations will fail.
     */
     bool pegc_init_cursor( pegc_cursor * curs, pegc_const_iterator begin, pegc_const_iterator end );
 
@@ -308,27 +310,21 @@ extern "C" {
     typedef struct pegc_parser pegc_parser;
 
     /**
-       Creates a new parser, assigns it to st, and sets it up to point
-       at the given input. The data pointed to by must outlive st and
-       must not change during st's useful lifetime. If len is less
-       than 0 then strlen(inp) is used to determine the input's
-       length.
+       Creates a new parser and sets it up to point at the given
+       input. The data pointed to by must outlive st and must not
+       change during st's useful lifetime. If len is less than 0 then
+       strlen(inp) is used to determine the input's length.
 
-       If this routine returns true, the returned object must be
+       If this routine returns non-null, the returned object must be
        cleaned up by calling pegc_destroy_parser(st). pegc_destroy_parser()
-       may be called if this routine fails, but only if (p==0) (otherwise
-       pegc_destroy_parser() will try to free that pointer, which probably
-       isn't valid).
-
-       If (st==0) then this routine returns false and does nothing. If
-       st is not null then st is always assigned a value, but the value
-       will be 0 if this routine returns false.
+       may be called if this routine fails, in case that simplifies
+       error handling.
 
        Example:
 
        \code
-       pegc_parser * p = 0;
-       if( ! pegc_create_parser( &p, "...", -1 ) ) { ... error... }
+       pegc_parser * p = pegc_create_parser( &p, "...", -1 );
+       if( ! p ) { ... error... }
        ...
        pegc_destroy_parser(p);
        \endcode
@@ -348,27 +344,35 @@ extern "C" {
        do. In fact, the reason they have the pegc_parser argument is
        so that they know where to "attach" the allocated memory to
        (for cleanup purposes).
-       
     */
-    bool pegc_create_parser( pegc_parser ** st, char const * inp, long len );
+    pegc_parser * pegc_create_parser( char const * inp, long len );
 
     /**
-       Initializes st's input range and clears the error state. This effectively invalidates any
-       current parse, as the input range has changed. The input range
-       must outlive st.
+       Initializes st's input range and clears the error state. This
+       effectively invalidates any current parse, as the input range
+       has changed. The input range must outlive the parser. If the
+       input of a parser changes, the old input range must still
+       outlive the new input if the parser has triggered any delayed
+       actions because those actions' string matches still refer to
+       the old input range.
 
-       If length is less than 0 then strlen(begin) will be used to
+       If length is less than 0 then pegc_strlen(begin) will be used to
        calculate the end point.
 
        If (!st) then false is returned. null input is legal (but not
        parseable).
+
+       When re-mapping a parser to a different input source than
+       previously used, be sure to call pegc_set_error_e() to clear the
+       error state, or most parse operations will fail.
     */
     bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length );
 
     /**
-       Sets a descriptive name for the parser. Intended for debugging and error
-       reporting. e.g. it to the name of a file being processed, or a description
-       of the parser rule (e.g. "telephone number parser").
+       Sets a descriptive name for the parser. Intended for debugging
+       and error reporting. e.g. it to the name of a file being
+       processed, or a description of the parser rule (e.g. "telephone
+       number parser").
     */
     void pegc_set_name( pegc_parser * st, char const * name );
 
@@ -421,7 +425,7 @@ extern "C" {
 
     /**
        Returns true if st has an error message set.
-       See pegc_set_error().
+       See pegc_set_error_e().
     */
     bool pegc_has_error( pegc_parser const * st );
 
@@ -439,8 +443,9 @@ extern "C" {
     /**
        Calculates the line and column position of st by counting
        newline characters, writing them to the given line and col
-       pointers (which must not be 0). The line number starts at one
-       and column starts at zero (because this is how emacs does it).
+       pointers (which may be 0, in which case they are ignored). The
+       line number starts at one and column starts at zero (because
+       this is how emacs does it).
 
        Returns false if any of the arguments are null, otherwise
        returns true.
@@ -458,7 +463,7 @@ extern "C" {
     /**
        Gets the current error string (which may be 0), line, and
        column. The string is owned by the parser and will be invalided
-       the next time pegc_set_error() is called.
+       the next time pegc_set_error_e() is called.
 
        Any of the integer pointers may be 0.
 
@@ -466,10 +471,11 @@ extern "C" {
 
        - (!st)
 
-       - No error has been set using pegc_set_error().
+       - No error has been set using pegc_set_error_e().
 
-       The returned string is owned by the parser and will be invalidated
-       by the next parsing operation which sets the error state.
+       The returned string is owned by the parser and will be
+       invalidated by the next parsing operation which sets the error
+       state or when the parser is destroyed.
     */
     char const * pegc_get_error( pegc_parser const * st,
 				 unsigned int * line,
@@ -494,7 +500,13 @@ extern "C" {
        Note that because it must allocate memory for the error string,
        it is not a wise idea to set this in response to alloc errors.
     */
-    bool pegc_set_error( pegc_parser * st, char const * fmt, ... );
+    bool pegc_set_error_v( pegc_parser * st, char const * fmt, va_list vargs );
+
+    /**
+       Identical to pegc_set_error_v(), except that it takes (...) instead
+       of a va_list.
+    */
+    bool pegc_set_error_e( pegc_parser * st, char const * fmt, ... );
 
     /**
        Returns st's cursor. Note that any parsing operations may change its
@@ -804,10 +816,10 @@ extern "C" {
     bool pegc_is_rule_valid( PegcRule const * r );
 
     /**
-       If either st or r are null then this function returns false,
-       otherwise it returns r->rule(r,st). It is simply a front-end
-       and does no management of st's state (e.g. does not set the
-       match string - that is up to the rule to do).
+       If either st or r or r->rule are null then this function returns
+       false, otherwise it returns r->rule(r,st). It is simply a
+       front-end and does no management of st's state (e.g. does not
+       set the match string - that is up to the rule to do).
     */
     bool pegc_parse( pegc_parser * st, PegcRule const * r );
 
@@ -894,6 +906,7 @@ extern "C" {
        a value argument instead of a pointer.
     */
     PegcRule * pegc_copy_r_v( pegc_parser * st, PegcRule const r );
+
     /**
        Like pegc_alloc_r() (with the same ownership conventions),
        but copies all data from r.
@@ -906,6 +919,7 @@ extern "C" {
        search for this function name.
     */
     PegcRule * pegc_copy_r_p( pegc_parser * st, PegcRule const * r );
+
 
     /**
        Returns a rule which matches if any character in the given string
@@ -922,24 +936,40 @@ extern "C" {
        consume input, in which case this routine stops at the first
        match to avoid an endless loop.
     */
-    PegcRule pegc_r_star( PegcRule const * proxy );
+    PegcRule pegc_r_star_p( PegcRule const * proxy );
+    /**
+       Functionally equivalent to pegc_r_star_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_star_v( pegc_parser * st, PegcRule const proxy );
 
     /**
        Creates a 'plus' rule for the given proxy rule.
 
-       Works like pegc_r_star(), but matches 1 or more times.  This
+       Works like pegc_r_star_p(), but matches 1 or more times.  This
        routine is "greedy", matching as long as it can UNLESS the
        proxy rule does not consume input, in which case this routine
        stops at the first match to avoid an endless loop.
     */
-    PegcRule pegc_r_plus( PegcRule const * proxy );
+    PegcRule pegc_r_plus_p( PegcRule const * proxy );
+
+    /**
+       Functionally equivalent to pegc_r_plus_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_plus_v( pegc_parser * st, PegcRule const proxy );
 
     /**
        Always returns true but only consumes if proxy does.
 
        Equivalent expression: (RULE)?
     */
-    PegcRule pegc_r_opt( PegcRule const * proxy );
+    PegcRule pegc_r_opt_p( PegcRule const * proxy );
+    /**
+       Functionally equivalent to pegc_r_opt_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_opt_v( pegc_parser * st, PegcRule const proxy );
 
     /**
        Creates a rule which will match the given string. The string
@@ -977,6 +1007,10 @@ extern "C" {
        object.
     */
     PegcRule pegc_r_at_p( PegcRule const * proxy );
+    /**
+       Functionally equivalent to pegc_r_at_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
     PegcRule pegc_r_at_v( pegc_parser * st, PegcRule const proxy );
 
     /**
@@ -985,7 +1019,30 @@ extern "C" {
        consumes.
     */
     PegcRule pegc_r_notat_p( PegcRule const * proxy );
+    /**
+       Functionally equivalent to pegc_r_noat_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
     PegcRule pegc_r_notat_v( pegc_parser * st, PegcRule const proxy );
+
+    /**
+       Creates a rule which consumes input until the proxy rule matches.
+       If proxy rule never matches then false is returned and input
+       is not consumed.
+
+       The match string will range from the pre-rule position to the
+       end if the proxy parse. If you only want to parse up TO the proxy
+       without consuming it, wrap the proxy in an "at" rule using
+        pegc_r_at_v() or  pegc_r_at_p().
+    */
+    PegcRule pegc_r_until_p( PegcRule const * proxy );
+
+    /**
+       Functionally equivalent to pegc_r_until_p() except that it must
+       allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_until_v( pegc_parser * st, PegcRule const proxy );
+
 
     /**
        Creates a rule which performs either an OR operation (if orOp
@@ -1069,13 +1126,13 @@ extern "C" {
        as soon as a match is found.
 
        "Delayed" rules, generated with pegc_r_action_d(), are queued
-       on every match and executed ia pegc_trigger_actions() (presumably
+       on every match and executed with pegc_trigger_actions() (presumably
        after the parser has successfully handled an entire grammar).
 
        The arguments are:
 
        - st: the parser. The ONLY reason it is non-const is so that an
-       action can call pegc_set_error(). There *might* be useful
+       action can call pegc_set_error_e(). There *might* be useful
        reasons for changing the parser during an action, but it sounds
        dangerous to me.
 
@@ -1095,8 +1152,6 @@ extern "C" {
        If an action returns false then the effect is the same as a rule
        returning false
 
-
-
        Actions can act on client-side data in two ways:
 
        - By passing a data object (the clientData parameter) to
@@ -1112,9 +1167,11 @@ extern "C" {
 				   void * clientData );
 
     /*
-      Creates rule which, when it matches, triggers an action immediately. If rule matches then
-      onMatch(st,clientData) is called. onMatch can fetch the matched
-      string using pegc_get_match_string() or pegc_get_match_cursor().
+      Creates rule which, when it matches, triggers an action
+      immediately. If rule matches then onMatch(st,clientData) is
+      called. onMatch can fetch the matched string using
+      the pegc_cursor argument to the callback or via
+      pegc_get_match_string() or pegc_get_match_cursor().
 
       This allocates resources for the returned rule which belong to
       this API and are freed when st is destroyed.
@@ -1124,16 +1181,25 @@ extern "C" {
       accumulate parsed tokens in a client-side structure, convert
       tokens to (e.g.) integers, or whatever the client needs to do.
      */
-    PegcRule pegc_r_action_i( pegc_parser * st,
+    PegcRule pegc_r_action_i_p( pegc_parser * st,
 			      PegcRule const * rule,
+			      pegc_action_f onMatch,
+			      void * clientData );
+
+    /**
+       Functionally equivalent to pegc_r_action_i_p() except that it
+       must allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_action_i_v( pegc_parser * st,
+			      PegcRule const rule,
 			      pegc_action_f onMatch,
 			      void * clientData );
 
 
     /**
-       Creates a rule implementing a delayed actions. That is,
-       actions which are queued when a rule matches, but not executed
-       until the user specifies (i.e. after a successful parse).
+       Creates a rule implementing a delayed actions. That is, actions
+       which are queued when a rule matches, but not executed until
+       the user specifies (e.g. after a completely successful parse).
 
        Neither st nor rule may be null. onMatch may be 0, but there's
        not much use for that. The clientData pointer is ignored by
@@ -1147,10 +1213,19 @@ extern "C" {
        Use pegc_trigger_actions() to trigger all queued actions. )Normally
        it should be called only after a successful parse.)
     */
-    PegcRule pegc_r_action_d( pegc_parser * st,
+
+    PegcRule pegc_r_action_d_p( pegc_parser * st,
 			      PegcRule const * rule,
 			      pegc_action_f onMatch,
 			      void * clientData );
+    /**
+       Functionally equivalent to pegc_r_action_d_p() except that it
+       must allocate a (shallow) copy of the proxy rule.
+     */
+    PegcRule pegc_r_action_d_v( pegc_parser * st,
+			       PegcRule const rule,
+			       pegc_action_f onMatch,
+			       void * clientData );
     
     /**
        Causes queued actions to be activated, in the order they were
@@ -1159,7 +1234,7 @@ extern "C" {
        false then this function stops processing actions and returns
        false. If st is null or pegc_has_error() returns true then this
        routine returns false. On a severe error (e.g. internal errors)
-       pegc_set_error() is called and false is returned.
+       pegc_set_error_e() is called and false is returned.
     */
     bool pegc_trigger_actions( pegc_parser * st );
 
@@ -1218,7 +1293,7 @@ extern "C" {
 
        \code
        PegcRule colon = pegc_r_char(':',true);
-       PegcRule word = pegc_r_plus( &PegcRule_alpha );
+       PegcRule word = pegc_r_plus_p( &PegcRule_alpha );
        PegcRule R = pegc_r_pad( myParser, &colon, &word, &colon, true );
        \endcode
 
@@ -1418,7 +1493,7 @@ extern "C" {
     extern const PegcRule PegcRule_bol;
 
     /**
-       This rule never consumes and returns !pegc_has_error().
+       This rule never consumes and returns pegc_has_error().
     */
     extern const PegcRule PegcRule_has_error;
 
@@ -1441,6 +1516,52 @@ extern "C" {
        Identical to pegc_r_error_v() except that it takes (...) instead of a va_list.
     */
     PegcRule pegc_r_error_e( pegc_parser * st, char const * fmt, ... );
+
+    /**
+       Creates a rule which is similar, but not identical, to conventional
+       if/then/else blocks. The rule is processed like so:
+
+       - If the If rule matches AND the Then rule matches then the matched
+       string is everything from the start of the If parse to the end of
+       the Then parse and true is returned.
+
+       - If the If rule does not match and the Else rule matches then
+       the matched string is everything from the start of the If parse
+       to the end of the Else parse and true is returned.
+
+       - All other cases are a mismatch and this rule will not consume.
+       
+       It is legal for the Else rule to be 0 (in which case it is
+       treated as a non-match), but the If/Then rule may not be 0.
+
+       On error (invalid arguments or OOM) an invalid rule is
+       returned.
+    */
+    PegcRule pegc_r_if_then_else_p( pegc_parser * st,
+				    PegcRule const * If,
+				    PegcRule const * Then,
+				    PegcRule const * Else );
+    /**
+       Equivalent to pegc_r_if_then_else_v() except that it takes
+       value objects rather than pointers.
+    */
+    PegcRule pegc_r_if_then_else_v( pegc_parser * st,
+				    PegcRule const If,
+				    PegcRule const Then,
+				    PegcRule const Else );
+
+    /**
+       Allocates a new printf-style string on the heap. If st is not
+       null then the string is owned by st, otherwise the caller owns
+       it. Returns 0 if fmt is 0 or the result string is 0 bytes.
+    */
+    char * pegc_vmprintf( pegc_parser * st, char const * fmt, va_list args );
+
+    /**
+       Equivalent to pegc_vmprintf() except that it takes (...) instead of
+       a va_list.
+    */
+    char * pegc_mprintf( pegc_parser * st, char const * fmt, ... );
 
 #ifdef __cplusplus
 } // extern "C"

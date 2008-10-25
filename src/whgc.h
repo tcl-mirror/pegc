@@ -55,6 +55,51 @@ extern "C" {
        client-defined destructor functions will be called on for all
        of the keys and values. This greatly simplifies management of
        dynamically allocated memory in some contexts.
+
+       An exceedingly simple example of using it:
+
+       @code
+       whgc_context * cx = whgc_create_context( 0 );
+       if( ! cx ) { ... error, probably OOM ... }
+       
+       int * i = (int*)malloc(sizeof(int));
+       *i = 42;
+       whgc_add( i, free );
+
+       struct mystruct * my = (struct mystruct*)malloc(sizeof(struct mystruct));
+       my->foo = "hi";
+       my->bar = 42.42;
+       // Assume this function exists:
+       //   void mystruct_dtor(void*);
+       // and that it deallocated mystruct objects.
+       whgc_add( cx, my, mystruct_dtor );
+
+       ...
+
+       whgc_destroy_context( cx );
+       // now all items added to the context are destroyed using the
+       // given destructor callbacks. They are destroyed in the reverse
+       // order they were added (LIFO).
+       @endcode
+
+       Aside from whgc_add(), there is the more flexible
+       whgc_register(), which allows one to register key/value pairs,
+       and separate destructors for each key and value. The lookup key
+       can be used with whgc_search() to find the mapped data.
+
+       Assigning a lookup key to data is often useful when we have
+       some common handle type we're passing around but need to
+       associated dynamically-allocated objects to them. The GC approach
+       allows us to transfer ownership to the GC context, so that we can
+       map arbitrary data to an arbitrary object and not have to worry
+       about whether or not that memory will be deallocated later.
+
+       The original use case for whgc was a parser toolkit which
+       needed to allocate dynamic resources while generating a
+       grammar. By attaching the dynamic data to the parser's GC, we
+       eliminated a number of headaches involved with ownership of the
+       dynamic data. It also simplified many lookup operations when we
+       needed to find shared data.
     */
 
     /**

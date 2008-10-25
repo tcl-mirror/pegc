@@ -96,18 +96,6 @@ static void whgc_free( void * k )
     free(k);
 }
 
-static void whgc_free_key( void * k )
-{
-    //MARKER; printf("Freeing KEY (void*) @%p\n",k);
-    free(k);
-}
-
-static void whgc_free_value( void * k )
-{
-    //MARKER; printf("Freeing VALUE (void*) @%p\n",k);
-    free(k);
-}
-
 /**
    Destructor for use with the hashtable API. Frees
    whgc_gc_entry objects.

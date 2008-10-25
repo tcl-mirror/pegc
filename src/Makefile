@@ -1,7 +1,27 @@
 #!/usr/bin/make -f
 # Requires GNU Make 3.80+!
 default: all
-CPPFLAGS ?= -g
+
+ifeq (1,1)
+CPPFLAGS += \
+	-Wimplicit-function-declaration \
+	-Wall \
+	-g -O0
+endif
+ifneq (,$(TCC))
+  # If you have (want to use) tcc, try this:
+  CC := tcc
+  CXX := tcc
+  CPPFLAGS += -b \
+	-Wwrite-strings \
+	-Wunsupported \
+	-Wall
+else
+  # Assume gcc-compatible flags:
+  CPPFLAGS += -Wall -Werror
+endif
+
+# CPPFLAGS ?= -g
 # -Wall -Werror
 
 PACKAGE.NAME = pegc
@@ -43,6 +63,14 @@ $(call ShakeNMake.CALL.RULES.BINS,test)
 $(test.BIN): $(libpegc.LIB)
 bins: test.BIN
 
+pegcgen.BIN.LDFLAGS := $(libpegc.LIB)
+pegcgen.BIN.OBJECTS := pegcgen.o
+$(call ShakeNMake.CALL.RULES.BINS,pegcgen)
+$(pegcgen.BIN): $(libpegc.LIB)
+bins: pegcgen.BIN
+
 CLEAN_FILES += *~
+
+PACKAGE.DIST_FILES += $(wildcard *.c *.h)
 
 all: bins
