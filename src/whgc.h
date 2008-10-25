@@ -229,7 +229,7 @@ extern "C" {
     /**
        Enum for whgc event types.
     */
-    enum whgc_events {
+    enum whgc_event_types {
     /**
        Signal that a GC item has been registered.
     */
@@ -249,37 +249,50 @@ extern "C" {
     whgc_event_destructing_context = 4
     };
     /**
+       whgc_event is a type for sending information regarding certain GC
+       context state changes to registered listeners.
+    */
+    struct whgc_event
+    {
+	/**
+	   The context from which this event originated.
+	 */
+	whgc_context const * cx;
+	/**
+	   An event type.
+
+	   The semantics of the various event types:
+
+	   (whgc_event_registered) signals that the key/value members have
+	   just been registered with the context.
+
+	   (whgc_event_unregistered) signals that the key/value members
+	   have just been unregistered from the context.
+
+	   (whgc_event_destructing_item) signals that the key/value
+	   members are about to be passed to their registered dtor
+	   functions (if any).
+
+	   (whgc_event_destructing_context) signals that the cx member
+	   is about to be destroyed (key/value will be 0).
+	 */
+	enum whgc_event_types type;
+	/**
+	   The key associated with the event. Not used by all event types.
+	 */
+	void const * key;
+	/**
+	   The value associated with the event. Not used by all event types.
+	 */
+	void const * value;
+    };
+    typedef struct whgc_event whgc_event;
+    /**
        A typedef for whgc context event listers. The primary use case
        of a listener is to help debug the lifetimes of GC'd items.
 
-       The arguments are:
-
-       cx: the context from which the event originated.
-
-       event: an event type (see below)
-
-       key, val: the key and value associated with the event
-       (see below).
-
-       The event types:
-
-       (whgc_event_registered) signals that the key/value parameters have
-       just been registered with the context.
-
-       (whgc_event_unregistered) signals that the key/value parameters
-       have just been unregistered from the context.
-
-       (whgc_event_destructing_item) signals that the key/value
-       parameters are about to be passed to their registered dtor
-       functions (if any).
-
-       (whgc_event_destructing_context) signals that the cx parameter
-       is about to be destroyed (key/value will be 0).
     */
-    typedef void (*whgc_listener_f)( whgc_context const *cx,
-				     enum whgc_events event,
-				     void const * key,
-				     void const * value );
+    typedef void (*whgc_listener_f)( whgc_event const ev );
     /**
        Adds an event listener to the context. The listener is called
        when certain events happen within the given context.

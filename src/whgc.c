@@ -124,20 +124,29 @@ static void whgc_free( void * k )
    parameters.
 */
 static void whgc_fire_event( whgc_context const *cx,
-			     enum whgc_events ev,
+			     enum whgc_event_types ev,
 			     void const * key,
 			     void const * val )
 {
     //MARKER;printf("Firing event %d for cx @%p\n",ev,cx);
     whgc_listener * l = cx ? cx->listeners : 0;
-    while( l )
+    if( l )
     {
-	if( l->func )
+	whgc_event E;
+	E.cx = cx;
+	E.type = ev;
+	E.key = key;
+	E.value = val;
+	while( l )
 	{
-	    //MARKER;printf("Firing @%p(cx=@%p,event=%d,key=@%p,val=@%p)\n",l->func,cx,ev,key,val);
-	    l->func( cx, ev, key, val );
+	    if( l->func )
+	    {
+		//MARKER;printf("Firing @%p(cx=@%p,event=%d,key=@%p,val=@%p)\n",l->func,cx,ev,key,val);
+		//l->func( cx, ev, key, val );
+		l->func( E );
+	    }
+	    l = l->next;
 	}
-	l = l->next;
     }
 }
 
