@@ -43,16 +43,21 @@ size_t hashtable_index(size_t tablelength, size_t hashvalue)
 }
 #endif
 
+//#include "math.h"
 /**
    Custom implementation of ceil() to avoid a dependency on
    libmath on some systems (e.g. the tcc compiler).
 */
 static hashval_t hashtable_ceil( double d )
 {
+#if 0
+    return (hashval_t)ceil(d);
+#else
     hashval_t x = (hashval_t)d;
     return (( d - (double)x )>0.0)
 	? (x+1)
 	: x;
+#endif
 }
 
 /*****************************************************************************/
