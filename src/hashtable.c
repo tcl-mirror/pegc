@@ -100,12 +100,12 @@ hashtable_create(hashval_t minsize,
  */
 void hashtable_free_key(hashtable const * h, void * key )
 {
-    if( h && h->freeKey ) (*(h->freeKey))( key );
+    if( h && h->freeKey ) h->freeKey( key );
 }
 
 void hashtable_free_val(hashtable const * h, void * val )
 {
-    if( h && h->freeVal ) (*(h->freeVal))( val );
+    if( h && h->freeVal ) h->freeVal( val );
 }
 
 
@@ -243,13 +243,11 @@ hashtable_search(hashtable *h, void const *k)
     return NULL;
 }
 
-/*****************************************************************************/
-void * /* returns value associated with key */
-hashtable_take(hashtable *h, void const *k)
+void *
+hashtable_take(hashtable *h, void *k)
 {
     /* TODO: consider compacting the table when the load factor drops enough,
      *       or provide a 'compact' method. */
-
     hashtable_entry *e;
     hashtable_entry **pE;
     void *v;
@@ -269,7 +267,7 @@ hashtable_take(hashtable *h, void const *k)
             *pE = e->next;
             h->entrycount--;
             v = e->v;
-            hashtable_free_key( h, e->k );
+            //hashtable_free_key( h, e->k );
             free(e);
             return v;
         }
@@ -279,9 +277,11 @@ hashtable_take(hashtable *h, void const *k)
     return NULL;
 }
 
-short hashtable_remove(hashtable *h, void const *k)
+short hashtable_remove(hashtable *h, void *k)
 {
+    if( !h || !k ) return 0;
     void * v = hashtable_take(h,k);
+    hashtable_free_key(h,k);
     if( v )
     {
 	hashtable_free_val(h,v);
@@ -303,6 +303,17 @@ void hashtable_set_dtors( hashtable * h, void (*keyDtor)( void * ), void (*valDt
     hashtable_set_val_dtor( h, valDtor );
 }
 
+static hashtable_entry * hashtable_free_entry( hashtable * h, hashtable_entry * e )
+{
+    if( !h || !e ) return 0;
+    hashtable_entry * next = e->next;
+    h->entrycount--;
+    hashtable_free_key( h, e->k );
+    hashtable_free_val( h, e->v );
+    free(e);
+    return next;
+}
+
 /*****************************************************************************/
 /* destroy */
 void
@@ -310,18 +321,14 @@ hashtable_destroy(hashtable *h)
 {
     if( ! h ) return;
     hashval_t i;
-    hashtable_entry *e, *f;
+    hashtable_entry *e;
     hashtable_entry **table = h->table;
     for (i = 0; i < h->tablelength; i++)
     {
         e = table[i];
         while (NULL != e)
         {
-            f = e;
-            e = e->next;
-            hashtable_free_key( h, f->k );
-            hashtable_free_val( h, f->v );
-            free(f);
+            e = hashtable_free_entry( h, e );
         }
     }
     free(h->table);

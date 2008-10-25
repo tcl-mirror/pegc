@@ -195,23 +195,25 @@ valuetype * fnname (hashtable *h, keytype const *k) \
 
 /*****************************************************************************
  * hashtable_take() removes the given key from the hashtable and
- * returns the value to the caller.  If a match is found, the key dtor
- * set via hashtable_set_key_dtor() (if any) will be called and passed
- * k.
+ * returns the value to the caller. The key/value destructors (if any)
+ * set via hashtable_set_key_dtor() and hashtable_set_val_dtor() WILL
+ * NOT be called! If you want to remove an item and call the dtors for
+ * its key and value, use hashtable_remove().
  *
- * The ownership of the returned pointer is application-specific and
- * defined by the destructor set via hashtable_set_val_dtor(). This routine
- * does not call the value dtor. If you want to remove an item and call the
- * dtors for its key and value, use hashtable_remove().
+ * If (!h), (!k), or no match is found, then 0 is returned and k still
+ * belongs to the hashtable. If a match is found which is 0, 0 is
+ * still returned but ownership of k is returned to the caller. There
+ * is unfortunately no way for a caller to differentiate between these
+ * two cases.
  *
  * @name        hashtable_take
  * @param   h   the hashtable to remove the item from
- * @param   k   the key to search for  - does not claim ownership
+ * @param   k   the key to search for
  * @return      the value associated with the key, or NULL if none found
  */
 
 void *
-hashtable_take(hashtable *h, void const *k);
+hashtable_take(hashtable *h, void *k);
 
 /**
    Works like hashtable_take(h,k), but also calls the value dtor (set
@@ -223,7 +225,7 @@ hashtable_take(hashtable *h, void const *k);
 
    Returns 1 if it finds a value, else 0.
 */
-short hashtable_remove(hashtable *h, void const *k);
+short hashtable_remove(hashtable *h, void *k);
 
 #define DEFINE_HASHTABLE_TAKE(fnname, keytype, valuetype) \
 valuetype * fnname (hashtable *h, keytype const *k) \
@@ -249,7 +251,8 @@ hashtable_count(hashtable const * h);
 
 
 /*****************************************************************************
- * hashtable_destroy() cleans up resources allocated by a hashtable. After
+ * hashtable_destroy() cleans up resources allocated by a hashtable and calls
+ * the configured destructors for each key and value. After
  * this call, h is invalid.
  * 
  * @name        hashtable_destroy
