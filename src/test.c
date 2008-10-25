@@ -203,14 +203,14 @@ int test_strings()
     char const * src[] = {
     "\"a \\\"double-quoted\\\"  \\b\\bstring\"",
     "\"a mis-quoted string",
-    "'a !'single-quoted!' string!!'",
+    "'a \\\'single-quoted\\\' string!!'",
     "\"\"",
-    "'!t*!t*!t'",
+    //"'!t*!t*!t'",
     0 };
     pegc_parser * P = pegc_create_parser( 0, 0 );
     char * tgt = 0;
-    PegcRule const QD = pegc_r_string_quoted( P, '"', '\\', &tgt );
-    PegcRule const QS = pegc_r_string_quoted( P, '\'', '!', &tgt );
+    PegcRule const QD = pegc_r_string_quoted_unescape( P, '"', '\\', &tgt );
+    PegcRule const QS = pegc_r_string_quoted_unescape( P, '\'', '\\', 0 );
     PegcRule const R = pegc_r_list_ev( P, true, QD, QS, PegcRule_invalid );
     //PegcRule const R = pegc_r_list_ep( P, true, &QD, &QS, &PegcRule_invalid );
     //PegcRule const R = pegc_r_or( P, &QD, &QS );
@@ -218,6 +218,7 @@ int test_strings()
     int i = 0;
     for( i = 0 ; src[i]; ++i )
     {
+	tgt = 0;
 	pegc_set_input( P, src[i], -1 );
 	MARKER;printf("\tset input to [%s]\n",src[i]);
 	if( pegc_parse(P, &R) )
@@ -286,26 +287,33 @@ int test_until()
 {
     MARKER; printf("test until...\n");
     char const * src[] = {
-    "abc def",
-    "def 546",
+    "z12?abcdef-ghji",
+    "def!?:546",
     "xyz134as:jla",
+    "!",
     //"xyzla", // should fail
     0 };
     pegc_parser * P = pegc_create_parser( 0, 0 );
-    PegcRule const Look4 = 
-	pegc_r_notat_v(P,
 #if 0
-	  //pegc_r_or_ev( P,
-	  pegc_r_list_ev(P,true,
-			 PegcRule_alpha,
-			 PegcRule_digit,
-			 0 )
-		       /* segfaults at cleanup time??? */
-#else
-	      PegcRule_alpha
+    PegcRule AnIf =
+	pegc_r_if_then_else_v( P,
+			       pegc_r_char( 'a', false ),
+			       pegc_r_plus_v( P, PegcRule_alpha ),
+			       pegc_r_plus_v( P, PegcRule_digit )
+			       );
 #endif
-	);
-    PegcRule const R = pegc_r_until_v( P, Look4  );
+	//PegcRule Dubious  = pegc_r_or_ep( P,&PegcRule_alpha,&PegcRule_digit,&PegcRule_invalid );
+    // pegc_r_or_ev( P,PegcRule_alpha,PegcRule_digit,PegcRule_invalid )
+    /* ^^^^ segfaults at cleanup time??? */
+    PegcRule const NotAtAlpha = pegc_r_notat_p(&PegcRule_alpha);
+    PegcRule const UntilNonAlpha = pegc_r_until_v(P,NotAtAlpha);
+    PegcRule const R =
+#if 1
+	//NotAtAlpha
+	UntilNonAlpha
+	//pegc_r_plus_p( &NotAtAlpha )
+#endif
+	;
     //PegcRule const R = PegcRule_alpha;
     int i = 0;
     int rc = 0;

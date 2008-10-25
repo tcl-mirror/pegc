@@ -1026,14 +1026,14 @@ extern "C" {
     PegcRule pegc_r_notat_v( pegc_parser * st, PegcRule const proxy );
 
     /**
-       Creates a rule which consumes input until the proxy rule matches.
-       If proxy rule never matches then false is returned and input
-       is not consumed.
+       Creates a rule which consumes input until the proxy rule
+       matches. If the proxy never matches then false is returned and
+       input is not consumed.
 
        The match string will range from the pre-rule position to the
        end if the proxy parse. If you only want to parse up TO the proxy
        without consuming it, wrap the proxy in an "at" rule using
-        pegc_r_at_v() or  pegc_r_at_p().
+       pegc_r_at_v() or  pegc_r_at_p().
     */
     PegcRule pegc_r_until_p( PegcRule const * proxy );
 
@@ -1071,7 +1071,7 @@ extern "C" {
        most efficient (the others synthesize an array, which causes
        extra allocations, and call this routine).  ).
     */
-    PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const ** li );
+    PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const * li );
 
     /**
        Works like pegc_r_list_ap() but requires a NULL-terminated list of

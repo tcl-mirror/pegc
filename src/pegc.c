@@ -59,10 +59,12 @@ unsigned int pegc_strlen( pegc_const_iterator c )
 }
 
 /**
+   UNUSED?
+
    Allocates (count+1) rules, with the +1 rule intended for use as an
    end-of-list marker.
 */
-static PegcRule ** pegc_alloc_rules_ptr( unsigned int count )
+PegcRule ** pegc_alloc_rules_ptr( unsigned int count )
 {
     PegcRule ** li = (PegcRule **)calloc(count+1,sizeof(PegcRule));
     //MARKER;
@@ -1120,21 +1122,21 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
-PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const ** li )
+PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const * li )
 {
     if( ! st || !li ) return PegcRule_invalid;
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, 0 );
     int count = 0;
     if(st && li)
     {
-	PegcRule const ** counter = li;
-	for( ; counter && *counter && (*counter)->rule; ++counter )
+	PegcRule const * counter = li;
+	for( ; counter && counter->rule; ++counter )
 	{
 	    ++count;
 	}
     }
     if( ! count ) return r;
-    PegcRule const ** list = (PegcRule const **)pegc_alloc_rules_ptr( count );
+    PegcRule * list = (PegcRule *)calloc(count+1,sizeof(PegcRule));
     if( ! list )
     {
 	if(0)
@@ -1153,8 +1155,8 @@ PegcRule pegc_r_list_ap( pegc_parser * st, bool orOp, PegcRule const ** li )
     {
 	list[i] = li[i];
     }
-    list[i] = NULL;
-    //MARKER;printf("Added %d items to rule list.\n",i);
+    list[i] = PegcRule_invalid;
+    MARKER;printf("Added %d items to rule list. count=%d\n",i,count);
     return r;
 }
 
@@ -1175,7 +1177,7 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    //MARKER;printf("(re)allocating list for %u items.\n",count);
 	    if( ! li )
 	    {
-		li = (PegcRule const **)pegc_alloc_rules_ptr( count );
+		li = (PegcRule const **)calloc( count, sizeof(PegcRule*) );
 		if( ! li ) break;
 	    }
 	    else
@@ -1192,8 +1194,8 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	if(li) pegc_free(li);
 	return PegcRule_invalid;
     }
-    li[pos] = 0;
-    PegcRule r = pegc_r_list_ap( st, orOp, li );
+    li[pos] = 0; //&PegcRule_invalid;
+    PegcRule r = pegc_r_list_ap( st, orOp, *li );
     free(li);
     return r;
 }
@@ -1302,7 +1304,7 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 	return PegcRule_invalid;
     }
     li[pos] = PegcRule_invalid;
-    //MARKER;printf("Added %d item(s) to rule list.\n",pos);
+    MARKER;printf("Added %d item(s) to rule list.\n",pos);
     pegc_gc_add( st, li, pegc_free );
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or_v : PegcRule_mf_and_v, li );
     return r;
@@ -1899,98 +1901,6 @@ PegcRule pegc_r_pad( pegc_parser * st,
 
 
 /**
-   Internal data for pegc_r_string_quoted.
-*/
-struct pegc_string_quoted_data
-{
-    char * freeme;
-    pegc_char_t quote;
-    pegc_char_t esc;
-    pegc_char_t ** dest;
-};
-typedef struct pegc_string_quoted_data pegc_string_quoted_data;
-/**
-   GC dtor for pegc_string_quoted_data objects.
- */
-static void pegc_free_string_quoted_data(void *x)
-{
-    pegc_string_quoted_data * p = (pegc_string_quoted_data*)x;
-    if( p )
-    {
-	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", p, p->dest, *p->dest, *p->dest);
-	if( p->freeme ) pegc_free(p->freeme);
-	pegc_free(p);
-    }
-}
-
-/**
-   Main implementation of the quoted string parser.
-*/
-static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
-{
-    if( ! pegc_rule_check( self, st, true, false, false ) ) return false;
-    pegc_string_quoted_data * sd = (pegc_string_quoted_data*)pegc_gc_search( st, self->data );
-    if( ! sd ) return false;
-    Clob * cb = 0;
-    clob_init( &cb, 0, 5 );
-    pegc_const_iterator orig = pegc_pos(st);
-    if( *pegc_pos(st) != sd->quote ) return false;
-    pegc_bump(st);
-    bool ok = true;
-    while( pegc_isgood(st) )
-    {
-	pegc_char_t ch = *pegc_pos(st);
-	if( sd->esc == ch )
-	{
-	    if( ! pegc_bump(st) )
-	    {
-		ok = false;
-		break;
-	    }
-	    ch = *pegc_pos(st);
-	    if(sd->esc == '\\') switch(ch)
-	    {
-	      case 't': ch = '\t'; break;
-	      case 'n': ch = '\n'; break;
-	      case 'r': ch = '\r'; break;
-	      case 'v': ch = '\v'; break;
-	      case 'b': ch = '\b'; break;
-	      default:
-		  break;
-	    };
-	}
-	else if( sd->quote == ch )
-	{
-	    break;
-	}
-	clob_append_char_n( cb, ch, 1 );
-	pegc_bump(st);
-    }
-    if( (!ok)
-	|| (!pegc_isgood(st))
-	|| (*pegc_pos(st) != sd->quote) )
-    {
-	clob_finalize(cb);
-	pegc_set_pos( st, orig );
-	return false;
-    }
-    pegc_bump(st);
-    if( sd->freeme )
-    {
-	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
-	pegc_free(*sd->dest);
-	*sd->dest = 0;
-	sd->freeme = 0;
-    }
-    sd->freeme = clob_take_buffer(cb);
-    *sd->dest = sd->freeme;
-    clob_finalize(cb);
-    //MARKER; printf("setting match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
-    pegc_set_match( st, orig, pegc_pos(st), false );
-    return true;
-}
-
-/**
    Internal data for PegcRule_mf_if_then_else.
 */
 struct pegc_if_then_else
@@ -2056,11 +1966,17 @@ static bool PegcRule_mf_until( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_rule_check( self, st, false, true, true ) ) return false;
     pegc_const_iterator orig = pegc_pos(st);
+    pegc_const_iterator pos = orig;
     bool matched = self->proxy->rule( self->proxy, st );
+    bool isConsumer = (matched && (pos==pegc_pos(st)));
     while( !matched )
     {
 	if( ! pegc_bump(st) ) break;
 	matched = self->proxy->rule( self->proxy, st );
+	if(0) if( matched && !isConsumer )
+	{
+	    matched = false;
+	}
     }
     if( ! matched )
     {
@@ -2084,14 +2000,121 @@ PegcRule pegc_r_until_v( pegc_parser * st,
 			 PegcRule const proxy )
 {
     return st ?
-	pegc_r_until_p( pegc_copy_r_p(st,&proxy) )
+	pegc_r_until_p( pegc_copy_r_v(st,proxy) )
 	: PegcRule_invalid;
 }
 
-PegcRule pegc_r_string_quoted( pegc_parser * st,
-			       pegc_char_t quoteChar,
-			       pegc_char_t escChar,
-			       pegc_char_t ** target )
+
+
+/**
+   Internal data for pegc_r_string_quoted.
+*/
+struct pegc_string_quoted_data
+{
+    char * freeme;
+    pegc_char_t quote;
+    pegc_char_t esc;
+    pegc_char_t ** dest;
+};
+typedef struct pegc_string_quoted_data pegc_string_quoted_data;
+/**
+   GC dtor for pegc_string_quoted_data objects.
+ */
+static void pegc_free_string_quoted_data(void *x)
+{
+    pegc_string_quoted_data * p = (pegc_string_quoted_data*)x;
+    if( p )
+    {
+	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", p, p->dest, *p->dest, *p->dest);
+	if( p->freeme ) pegc_free(p->freeme);
+	pegc_free(p);
+    }
+}
+
+/**
+   Main implementation of the quoted string parser.
+*/
+static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_rule_check( self, st, true, false, false ) ) return false;
+    pegc_string_quoted_data * sd = (pegc_string_quoted_data*)pegc_gc_search( st, self->data );
+    if( ! sd ) return false;
+    Clob * cb = 0;
+    const bool doEscape = (0 != sd->dest);
+    if( doEscape )
+    {
+	clob_init( &cb, 0, 10 );
+    }
+    pegc_const_iterator orig = pegc_pos(st);
+    if( *pegc_pos(st) != sd->quote ) return false;
+    pegc_bump(st);
+    bool ok = true;
+    while( pegc_isgood(st) )
+    {
+	pegc_char_t ch = *pegc_pos(st);
+	if( sd->esc && (sd->esc == ch) )
+	{
+	    if( ! pegc_bump(st) )
+	    {
+		ok = false;
+		break;
+	    }
+	    ch = *pegc_pos(st);
+	    if( doEscape )
+	    {
+		if(sd->esc == '\\') switch(ch)
+		{
+		  case 't': ch = '\t'; break;
+		  case 'n': ch = '\n'; break;
+		  case 'r': ch = '\r'; break;
+		  case 'v': ch = '\v'; break;
+		  case 'b': ch = '\b'; break;
+		  default:
+		      break;
+		};
+	    }
+	}
+	else if( sd->quote == ch )
+	{
+	    break;
+	}
+	if( doEscape )
+	{
+	    clob_append_char_n( cb, ch, 1 );
+	}
+	pegc_bump(st);
+    }
+    if( (!ok)
+	|| (!pegc_isgood(st))
+	|| (*pegc_pos(st) != sd->quote) )
+    {
+	clob_finalize(cb);
+	pegc_set_pos( st, orig );
+	return false;
+    }
+    pegc_bump(st);
+    if( sd->freeme && doEscape )
+    {
+	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
+	pegc_free(sd->freeme);
+	*sd->dest = 0;
+	sd->freeme = 0;
+    }
+    if( doEscape )
+    {
+	sd->freeme = clob_take_buffer(cb);
+	*sd->dest = sd->freeme;
+    }
+    clob_finalize(cb);
+    //MARKER; printf("setting match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
+    pegc_set_match( st, orig, pegc_pos(st), false );
+    return true;
+}
+
+PegcRule pegc_r_string_quoted_unescape( pegc_parser * st,
+					pegc_char_t quoteChar,
+					pegc_char_t escChar,
+					pegc_char_t ** target )
 {
     if( ! st || !quoteChar ) return PegcRule_invalid;
     pegc_string_quoted_data * sd = (pegc_string_quoted_data*)malloc(sizeof(pegc_string_quoted_data));
@@ -2100,10 +2123,16 @@ PegcRule pegc_r_string_quoted( pegc_parser * st,
     sd->esc = escChar;
     sd->freeme = 0;
     sd->dest = target;
-    *sd->dest = 0;
-    pegc_gc_register( st, sd, pegc_free_string_quoted_data, sd, 0 );
+    if( sd->dest ) *sd->dest = 0;
+    pegc_gc_add( st, sd, pegc_free_string_quoted_data );
     //MARKER; printf("Register dest %c-style string @%p / %p / %p\n", sd->quote,sd, sd->dest, *sd->dest);
     return pegc_r( PegcRule_mf_string_quoted, sd );
+}
+PegcRule pegc_r_string_quoted( pegc_parser * st,
+			       pegc_char_t quoteChar,
+			       pegc_char_t escChar )
+{
+    return pegc_r_string_quoted_unescape( st, quoteChar, escChar, 0 );
 }
 
 #undef MARKER
