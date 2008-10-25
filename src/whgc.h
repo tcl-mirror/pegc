@@ -39,7 +39,7 @@ extern "C" {
 
        License: the core library is Public Domain, but some of the
        borrowed utility code is released under a BSD license (see
-       hashtable*.{c,h} for details).
+       whhash.{c,h} for details).
 
        Home page: whgc is part of the pegc project:
        http://fossil.wanderinghorse.net/repos/pegc/
@@ -143,10 +143,10 @@ extern "C" {
        If cx is null this function works just like malloc() and the dtor argument
        is ignored, otherwise:
 
-       It allocs using malloc() and transfers ownership of the allocated
-       memory (if not 0) to the given context and registers the given
-       destructor function for it. It also updates the memory allocation
-       statistics for cx.
+       It allocs using malloc() and transfers ownership of the
+       allocated memory (if not 0) by calling
+       whgc_add(cx,newObject,dtor). It also updates the memory
+       allocation statistics for cx.
     */
     void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor );
 
@@ -224,6 +224,8 @@ extern "C" {
 
     /**
        A type for storing some telemetry for a whgc_context.
+       Use whgc_get_stats() to collect the current stats of
+       a parser.
     */
     struct whgc_stats
     {
@@ -240,11 +242,11 @@ extern "C" {
 	*/
 	size_t take_count;
 	/**
-	   Rough approximate amount of memory allocated for
-	   whgc-specific internal structures used by the context. A
+	   A rough *approximatation* of amount of memory allocated for
+	   whgc-specific internal structures used by the context,
+	   including the size of the underlying hashtable(s). A
 	   context has no way of knowing how much memory is used by
-	   registered items, nor how much memory is in use by
-	   underlying tools like the hashtable(s).
+	   registered items.
 	*/
 	size_t alloced;
     };
@@ -319,9 +321,9 @@ extern "C" {
     /**
        A typedef for whgc context event listers. The primary use case
        of a listener is to help debug the lifetimes of GC'd items.
-
     */
     typedef void (*whgc_listener_f)( whgc_event const ev );
+
     /**
        Adds an event listener to the context. The listener is called
        when certain events happen within the given context.

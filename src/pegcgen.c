@@ -167,6 +167,7 @@ int main( int argc, char ** argv )
 	   (0==rc)
 	   ? "You win :)"
 	   : "You lose :(");
+
     whgc_destroy_context( PGApp.gc );
     pegc_destroy_parser( PGApp.P );
     return rc;

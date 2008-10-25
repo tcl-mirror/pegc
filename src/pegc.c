@@ -224,7 +224,13 @@ static void pegc_free_value( void * k )
 
 void pegc_gc_test_listener( whgc_event const event )
 {
-    MARKER; printf("GC event: cx=@%p event=%d key=%p value=@%p\n",event.cx,event.type,event.key,event.value);
+    //MARKER; printf("GC event: cx=@%p event=%d key=%p value=@%p\n",event.cx,event.type,event.key,event.value);
+    if( whgc_event_destructing_context == event.type )
+    {
+	whgc_stats const st = whgc_get_stats( event.cx );
+	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
+	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
+    }
 }
 
 bool pegc_gc_register( pegc_parser * st,
@@ -236,7 +242,7 @@ bool pegc_gc_register( pegc_parser * st,
     {
         st->gc = whgc_create_context(st);
 	if( ! st->gc ) return false;
-	//whgc_add_listener( st->gc, pegc_gc_test_listener );
+	whgc_add_listener( st->gc, pegc_gc_test_listener );
     }
     if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {

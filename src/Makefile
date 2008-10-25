@@ -32,24 +32,24 @@ INCLUDES += -I.
 
 ########################################################################
 # Hashtable lib:
-HASH_OBJ := $(patsubst %,%.o,hashtable hashtable_itr hashtable_utility)
-libhashtable.LIB.OBJECTS = $(HASH_OBJ)
-$(call ShakeNMake.CALL.RULES.LIBS,libhashtable)
+HASH_OBJ := $(patsubst %,%.o,whhash)
+libwhhash.LIB.OBJECTS = $(HASH_OBJ)
+$(call ShakeNMake.CALL.RULES.LIBS,libwhhash)
 
 ########################################################################
 # GC lib:
 WHGC_OBJ := whgc.o
 libwhgc.LIB.OBJECTS = $(WHGC_OBJ) $(HASH_OBJ)
 $(call ShakeNMake.CALL.RULES.LIBS,libwhgc)
-$(libwhgc.LIB): $(libhashtable.LIB)
+$(libwhgc.LIB): $(libwhhash.LIB)
 
 ########################################################################
 # pegc lib:
 libpegc.LIB.OBJECTS := clob.o vappendf.o pegc.o
 ifeq (1,1)
-  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS) $(libhashtable.LIB.OBJECTS)
+  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS) $(libwhhash.LIB.OBJECTS)
 else
-  libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libhashtable.LIB)
+  libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libwhhash.LIB)
 endif
 $(call ShakeNMake.CALL.RULES.LIBS,libpegc)
 $(libpegc.LIB): $(libwhgc.LIB)

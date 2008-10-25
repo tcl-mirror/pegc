@@ -1,9 +1,7 @@
 #include <stdlib.h>
 #include <string.h> /* memset() */
 #include "whgc.h"
-
-#include "hashtable.h"
-#include "hashtable_utility.h"
+#include "whhash.h"
 
 #include <stdio.h> /* only for debuggering. */
 
@@ -22,7 +20,7 @@ extern "C" {
 #define MARKER printf("**** MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-typedef hashval_t (*whgc_hash_f)(void const *key);
+typedef whhash_val_t (*whgc_hash_f)(void const *key);
 typedef int (*whgc_hash_cmp_f)(void const * lhs,void const *rhs);
 
 /**
@@ -63,7 +61,7 @@ static const whgc_listener whgc_listener_init = WHGC_LISTENER_INIT;
 struct whgc_context
 {
     void const * client;
-    hashtable * ht;
+    whhash_table * ht;
     /**
        Holds the right-most (most recently added) entry. A cleanup,
        the list is walked leftwards to free the entries in reverse
@@ -86,10 +84,10 @@ static const whgc_context whgc_context_init = WHGC_CONTEXT_INIT;
    A hash routine for use with the hashtable API. Simply
    casts k to the numeric value of its pointer address.
 */
-static hashval_t whgc_hash_void_ptr( void const * k )
+static whhash_val_t whgc_hash_void_ptr( void const * k )
 {
     typedef long kludge_t; /* must apparently be the same size as the platform's (void*) */
-    return (hashval_t) (kludge_t) k;
+    return (whhash_val_t) (kludge_t) k;
 }
 
 /**
@@ -103,12 +101,12 @@ static int whgc_hash_cmp_void_ptr( void const * k1, void const * k2 )
 
 /**
    A destructor for use with the hashtable API. Calls
-   hashtable_destroy((hashtable*)k).
+   whhash_destroy((whhash_table*)k).
 */
 static void whgc_free_hashtable( void * k )
 {
     //MARKER; printf("Freeing HASHTABLE @%p\n",k);
-    hashtable_destroy( (hashtable*)k );
+    whhash_destroy( (whhash_table*)k );
 }
 
 /**
@@ -198,19 +196,21 @@ static void whgc_free_noop( void * ARG_UNUSED(v) )
     //MARKER;printf("dtor no-op @%p\n",v);
 }
 
-static hashtable * whgc_hashtable( whgc_context * cx )
+static whhash_table * whgc_hashtable( whgc_context * cx )
 {
     if( ! cx ) return 0;
     if( cx->ht ) return cx->ht;
-    if( (cx->ht = hashtable_create( 10, whgc_hash_void_ptr, whgc_hash_cmp_void_ptr ) ) )
+    if( (cx->ht = whhash_create( 10, whgc_hash_void_ptr, whgc_hash_cmp_void_ptr ) ) )
     {
-	hashtable_set_dtors( cx->ht, whgc_free_noop, whgc_free_noop );
+	whhash_set_dtors( cx->ht, whgc_free_noop, whgc_free_noop );
 	/**
 	   We use no-op dtors so we can log the destruction process, but cx->ht
 	   does not own anything. Because we need predictable destruction order,
 	   we manage a list of entries and destroy them in reverse order.
 	*/
-	cx->stats.alloced += sizeof(*(cx->ht));
+	/* Reminder: we don't update cx->stats.alloced here. We accommodate the
+	   Hashtable size in whgc_get_stats().
+	*/
     }
     return cx->ht;
 }
@@ -253,7 +253,7 @@ bool whgc_register( whgc_context * cx,
 		    void * key, whgc_dtor_f keyDtor,
 		    void * value, whgc_dtor_f valDtor )
 {
-    if( !key || !whgc_hashtable(cx) || (0 != hashtable_search(cx->ht, key)) )
+    if( !key || !whgc_hashtable(cx) || (0 != whhash_search(cx->ht, key)) )
     {
 	return false;
     }
@@ -266,9 +266,9 @@ bool whgc_register( whgc_context * cx,
     e->value = value;
     e->valueDtor = valDtor;
     //MARKER;printf("Registering GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
-    hashtable_insert( cx->ht, key, e );
+    whhash_insert( cx->ht, key, e );
     ++(cx->stats.add_count);
-    cx->stats.entry_count = hashtable_count(cx->ht);
+    cx->stats.entry_count = whhash_count(cx->ht);
     if( cx->current )
     {
 	e->left = cx->current;
@@ -287,11 +287,11 @@ bool whgc_add( whgc_context * cx, void * key, whgc_dtor_f keyDtor )
 void * whgc_unregister( whgc_context * cx, void * key )
 {
     if( ! cx || !cx->ht || !key ) return 0;
-    whgc_gc_entry * e = (whgc_gc_entry*)hashtable_take( cx->ht, key );
+    whgc_gc_entry * e = (whgc_gc_entry*)whhash_take( cx->ht, key );
     void * ret = e ? e->value : 0;
     if( e )
     {
-	cx->stats.entry_count = hashtable_count(cx->ht);
+	cx->stats.entry_count = whhash_count(cx->ht);
 	++(cx->stats.take_count);
 	if( e->left ) e->left->right = e->right;
 	if( e->right ) e->right->left = e->left;
@@ -312,7 +312,7 @@ void * whgc_unregister( whgc_context * cx, void * key )
 void * whgc_search( whgc_context const * cx, void const * key )
 {
     if( ! cx || !key || !cx->ht ) return 0;
-    whgc_gc_entry * e = (whgc_gc_entry*)hashtable_search( cx->ht, key );
+    whgc_gc_entry * e = (whgc_gc_entry*)whhash_search( cx->ht, key );
     return e ? e->value : 0;
 }
 
@@ -324,7 +324,7 @@ void whgc_destroy_context( whgc_context * cx )
     //MARKER;printf("Cleaning up %u GC entries...\n",cx->stats.entry_count);
     if( cx->ht )
     {
-	//MARKER;printf("Cleaning up %u GC entries...\n",hashtable_count(cx->ht));
+	//MARKER;printf("Cleaning up %u GC entries...\n",whhash_count(cx->ht));
 	whgc_free_hashtable( cx->ht );
 	cx->ht = 0;
     }
@@ -359,7 +359,10 @@ void whgc_destroy_context( whgc_context * cx )
 
 whgc_stats whgc_get_stats( whgc_context const * cx )
 {
-    return cx ? cx->stats : whgc_stats_init;
+    whgc_stats s = cx ? cx->stats : whgc_stats_init;
+    if( ! cx ) return s;
+    s.alloced += whhash_bytes_alloced(cx->ht);
+    return s;
 }
 
 #if defined(__cplusplus)
