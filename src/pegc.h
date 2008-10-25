@@ -1039,23 +1039,46 @@ extern "C" {
     */
     bool PegcRule_mf_stringi( PegcRule const * self, pegc_parser * st );
 
+    /**
+       Requires that self->data be a non-null pegc_const_iterator.
+       Matches if the first char of that string matches st.
+    */
+    bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st );
+    /**
+       Requires that self->data be a non-null
+       pegc_const_iterator. Matches if the first char of that string
+       matches (case sensitively) st.
+    */
+    bool PegcRule_mf_notchar( PegcRule const * self, pegc_parser * st );
+    /**
+       Eqivalent to PegcRule_mf_notchar except that it is a case
+       insensitive comparison.
+    */
+    bool PegcRule_mf_notchari( PegcRule const * self, pegc_parser * st );
+
+
 
     /**
        Creates a rule which matches the given character, which must
        be in the range [0,255].
     */
     PegcRule pegc_r_char( pegc_char_t ch, bool caseSensitive );
-
     /**
-       Matches if the first char of that string matches st. Requires
-       that self->data be a non-null pegc_const_iterator.
+       Creates a rule wrapper around PegcRule_mf_notchar (if
+       caseSenstive is true) or PegcRule_mf_notchari (if caseSensitive
+       is false).
     */
-    bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st );
+    PegcRule pegc_r_notchar( pegc_char_t ch, bool caseSensitive );
 
     /**
        Case-insensitive form of PegcRule_mf_char.
     */
     bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st );
+
+    /**
+       A rule which matches only at EOF.
+     */
+    bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st );
 
     /**
        Returns a rule which matches any character in the inclusive
@@ -1387,6 +1410,11 @@ extern "C" {
 			   PegcRule const mainRule,
 			   PegcRule const rightRule,
 			   bool discardLeftRight);
+
+    /**
+       A rule matching any character except EOF.
+    */
+    extern const PegcRule PegcRule_noteof;
 
     /**
        An object implementing functionality identical to the

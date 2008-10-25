@@ -934,6 +934,34 @@ bool PegcRule_mf_char( PegcRule const * self, pegc_parser * st )
     return PegcRule_mf_char_impl(self,st,true);
 }
 
+bool PegcRule_mf_notchar( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_rule_check( self, st, true, false, true ) ) return false;
+    char const * d = (char const *)self->data;
+    pegc_const_iterator orig = pegc_pos(st);
+    if( *orig == *d ) return false;
+    pegc_set_match( st, orig, orig+1, true );
+    return true;
+}
+bool PegcRule_mf_notchari( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_rule_check( self, st, true, false, true ) ) return false;
+    char const * d = (char const *)self->data;
+    pegc_const_iterator orig = pegc_pos(st);
+    if( tolower(*orig) == tolower(*d) ) return false;
+    pegc_set_match( st, orig, orig+1, true );
+    return true;
+}
+
+PegcRule pegc_r_notchar( pegc_char_t input, bool caseSensitive )
+{
+    return pegc_r( caseSensitive
+		   ? PegcRule_mf_notchar
+		   : PegcRule_mf_notchari,
+		   pegc_latin1(input));
+}
+
+
 bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_char_impl(self,st,false);
@@ -1129,20 +1157,20 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
     const size_t blockSize = 5; /* number of rules to allocate at a time. */
-    size_t count = 0;
+    int count = 1;
     PegcRule const ** li = 0;
-    size_t pos = 0;
+    int pos = 0;
     bool ok = true;
     while( true )
     {
 	PegcRule const * vr = va_arg(ap,PegcRule const *);
 	if( ! pegc_is_rule_valid(vr) ) break;
-	if( pos == count )
+	if( (!pos) || (pos >=(count-1)) )
 	{ /* (re)allocate list */
 	    count += blockSize;
-	    //MARKER;printf("(re)allocating list for %u items.\n",count);
 	    if( ! li )
 	    {
+		//MARKER;printf("allocating list for %u items.\n",count);
 		li = (PegcRule const **)calloc( count, sizeof(PegcRule*) );
 		if( ! li )
 		{
@@ -1152,6 +1180,7 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    }
 	    else
 	    {
+		//MARKER;printf("re-allocating list for %u items.\n",count);
 		void * re = realloc( li, sizeof(PegcRule*) * count  );
 		if( ! re )
 		{
@@ -1246,29 +1275,31 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
     const size_t blockSize = 5; /* number of rules to allocate at a time. */
-    size_t count = 0;
+    int count = 1;
     PegcRule * li = 0;
-    size_t pos = 0;
+    int pos = 0;
     while( true )
     {
 	PegcRule const r = va_arg(ap,PegcRule const);
 	if( ! pegc_is_rule_valid(&r) ) break;
-	if( pos == count )
+	if( (!pos) || (pos >= (count-1)) )
 	{ /* (re)allocate list */
 	    count += blockSize;
-	    //MARKER;printf("(re)allocating list for %u items.\n",count);
 	    if( ! li )
 	    {
+		MARKER;printf("allocating list for %u items.\n",count);
 		li = calloc( count, sizeof(PegcRule) );
 		if( ! li ) break;
 	    }
 	    else
 	    {
-		void * re = realloc( li, sizeof(PegcRule) * (count)  );
+		MARKER;printf("REallocating list for %u items.\n",count);
+		PegcRule * re = (PegcRule *)realloc( li, sizeof(PegcRule) * (count)  );
 		if( ! re ) break;
-		li = (PegcRule *)re;
+		li = re;
 	    }
 	}
+	MARKER;printf("Added list item #%u\n",pos);
 	if( ! li ) break;
 	li[pos++] = r;
     }
@@ -1451,6 +1482,19 @@ PegcRule pegc_r_action_i_v( pegc_parser * st,
 }
 
 
+static bool PegcRule_mf_noteof( PegcRule const * self, pegc_parser * st )
+{
+    if( ! pegc_rule_check( self, st, false, false, true ) ) return false;
+    pegc_const_iterator orig = pegc_pos(st);
+    if( !pegc_eof(st) )
+    {
+	pegc_set_match( st, orig, orig +1, true );
+	return true;
+    }
+    return false;
+}
+const PegcRule PegcRule_noteof = PEGC_INIT_RULE1(PegcRule_mf_noteof);
+
 /**
    Internal implementation of star/plus rules.
 */
@@ -1566,12 +1610,11 @@ PegcRule pegc_r_opt_v( pegc_parser * st, PegcRule const proxy )
     return pegc_r_opt_p( pegc_copy_r_v( st, proxy ) );
 }
 
-static bool PegcRule_mf_eof( PegcRule const * self, pegc_parser * st )
+bool PegcRule_mf_eof( PegcRule const * ARG_UNUSED(self), pegc_parser * st )
 {
-    bool r = pegc_eof(st);
-    //MARKER; printf("at EOF? == %d\n",r);
-    return r;
+    return pegc_eof(st);
 }
+
 const PegcRule PegcRule_eof = PEGC_INIT_RULE2(PegcRule_mf_eof,0);
 static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
 {
