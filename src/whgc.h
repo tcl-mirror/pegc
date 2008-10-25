@@ -33,7 +33,7 @@ extern "C" {
       @section sec_about_whgc About whgc
 
       whgc (the WanderingHorse.net Garbage Collector) is a simple garbage
-      collector for C.
+      collector (GC) for C.
 
        Author: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
@@ -44,11 +44,11 @@ extern "C" {
        Home page: whgc is part of the pegc project:
        http://fossil.wanderinghorse.net/repos/pegc/
 
-       whgc is a small garbage collection library for C. It was
-       originally developed to provide predictable cleanup for C
-       structs which contained pointers to dynamically allocated
-       objects. The solution to that particular application turned out
-       to be fairly generic, so it was refactored into whgc.
+       whgc is a small garbage collection library for C. The library
+       provides context objects to which one can attach arbitrary
+       data (via void pointers) and arbitrary destructor functions.
+       When a GC context is destroyed, the destructors are called
+       for each attached item.
 
        The original use case for whgc was a parser toolkit which
        needed to allocate dynamic resources while generating a
@@ -134,17 +134,29 @@ extern "C" {
     typedef struct whgc_context whgc_context;
 
     /**
+       Typedef for deallocation functions symantically compatible with
+       free().
+    */
+    typedef void (*whgc_dtor_f)(void*);
+    
+    /**
+       If cx is null this function works just like malloc() and the dtor argument
+       is ignored, otherwise:
+
+       It allocs using malloc() and transfers ownership of the allocated
+       memory (if not 0) to the given context and registers the given
+       destructor function for it. It also updates the memory allocation
+       statistics for cx.
+    */
+    void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor );
+
+    /**
        Creates a gc context. The clientContext point may internally be
        used as a lookup key or some such but is otherwise unused by
        this API.
     */
     whgc_context * whgc_create_context( void const * clientContext );
 
-    /**
-       Typedef for deallocation functions symantically compatible with
-       free().
-    */
-    typedef void (*whgc_dtor_f)(void*);
 
     /**
        Registers an arbitrary key and value with the given garbage
@@ -215,9 +227,26 @@ extern "C" {
     */
     struct whgc_stats
     {
+	/**
+	   Number of entries in the context.
+	*/
 	size_t entry_count;
+	/**
+	   Number of registrations made in the context.
+	*/
 	size_t add_count;
+	/**
+	   Number of whgc_take() calls made in the context.
+	*/
 	size_t take_count;
+	/**
+	   Rough approximate amount of memory allocated for
+	   whgc-specific internal structures used by the context. A
+	   context has no way of knowing how much memory is used by
+	   registered items, nor how much memory is in use by
+	   underlying tools like the hashtable(s).
+	*/
+	size_t alloced;
     };
     typedef struct whgc_stats whgc_stats;
 

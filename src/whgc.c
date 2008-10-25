@@ -44,7 +44,8 @@ static const whgc_gc_entry whgc_gc_entry_init = WHGC_GC_ENTRY_INIT;
 #define WHGC_STATS_INIT {\
 	0, /* entry_count */			\
 	0, /* add_count */		\
-	0 /* take_count */ \
+	0, /* take_count */		\
+	0 /* alloced */		\
     }
 static const whgc_stats whgc_stats_init = WHGC_STATS_INIT;
 
@@ -117,6 +118,15 @@ static void whgc_free( void * k )
 {
     //MARKER; printf("Freeing GENERIC (void*) @%p\n",k);
     free(k);
+}
+
+void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor )
+{
+    void * ret = malloc( size );
+    if( ! ret || !cx ) return ret;
+    cx->stats.alloced += size;
+    whgc_add( cx, ret, dtor );
+    return ret;
 }
 
 /**
@@ -199,7 +209,8 @@ static hashtable * whgc_hashtable( whgc_context * cx )
 	   We use no-op dtors so we can log the destruction process, but cx->ht
 	   does not own anything. Because we need predictable destruction order,
 	   we manage a list of entries and destroy them in reverse order.
-	 */
+	*/
+	cx->stats.alloced += sizeof(*(cx->ht));
     }
     return cx->ht;
 }
@@ -209,6 +220,7 @@ whgc_context * whgc_create_context( void const * clientContext )
     whgc_context * cx = (whgc_context *)malloc(sizeof(whgc_context));
     if( ! cx ) return 0;
     *cx = whgc_context_init;
+    cx->stats.alloced += sizeof(whgc_context);
     cx->client = clientContext;
     return cx;
 }
@@ -217,11 +229,13 @@ bool whgc_add_listener( whgc_context *cx, whgc_listener_f f )
 {
     if( ! cx || !f ) return false;
     //MARKER;printf("Adding listener @%p() to cx @%p\n",f,cx);
-    whgc_listener * l = (whgc_listener *)malloc(sizeof(whgc_listener));
+    whgc_listener * l = (whgc_listener *)
+	whgc_alloc( cx, sizeof(whgc_listener), whgc_free_noop );
+	//malloc(sizeof(whgc_listener));
     if( ! l ) return 0;
     *l = whgc_listener_init;
     l->func = f;
-    whgc_add( cx, l, whgc_free_noop );
+    //whgc_add( cx, l, whgc_free_noop );
     whgc_listener * L = cx->listeners;
     if( L )
     {
@@ -243,8 +257,9 @@ bool whgc_register( whgc_context * cx,
     {
 	return false;
     }
-    whgc_gc_entry * e = (whgc_gc_entry*)malloc(sizeof(whgc_gc_entry));
+    whgc_gc_entry * e = (whgc_gc_entry*)whgc_alloc( 0, sizeof(whgc_gc_entry), 0 );
     if( ! e ) return false;
+    cx->stats.alloced += sizeof(whgc_gc_entry);
     *e = whgc_gc_entry_init;
     e->key = key;
     e->keyDtor = keyDtor;
@@ -285,8 +300,11 @@ void * whgc_unregister( whgc_context * cx, void * key )
 	   ^^^ this is pedantic. In theory cx->current must always be
 	   the right-most entry, so we could do: cx->current=e->left;
 	 */
-	whgc_fire_event( cx, whgc_event_unregistered, e->key, e->value );
-	free(e);
+	void * k = e->key;
+	void * v = e->value;
+	whgc_free(e);
+	cx->stats.alloced -= sizeof(whgc_gc_entry);
+	whgc_fire_event( cx, whgc_event_unregistered, k, v );
     }
     return ret;
 }
@@ -310,7 +328,6 @@ void whgc_destroy_context( whgc_context * cx )
 	whgc_free_hashtable( cx->ht );
 	cx->ht = 0;
     }
-#if 1
     /**
        Destroy registered entries in reverse order of
        their registration.
@@ -322,17 +339,19 @@ void whgc_destroy_context( whgc_context * cx )
 	//MARKER;printf("Want to clean up @%p\n",e);
 	whgc_gc_entry * left = e->left;
 	whgc_free_gc_entry(cx,e);
+	cx->stats.alloced -= sizeof(whgc_gc_entry);
 	e = left;
 	--(cx->stats.entry_count);
     }
     cx->current = 0;
-#endif
+
     whgc_listener * L = cx->listeners;
     cx->listeners = 0;
     while( L )
     {
 	whgc_listener * l = L->next;
-	free(L);
+	cx->stats.alloced -= sizeof(whgc_listener);
+	whgc_free(L);
 	L = l;
     }
     whgc_free(cx);
