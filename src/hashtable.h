@@ -1,8 +1,8 @@
 /* Copyright (C) 2002 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
 /* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
 /* Code taken from: http://www.cl.cam.ac.uk/~cwc22/hashtable/ */
-#ifndef __HASHTABLE_CWC22_SGB11_H__
-#define __HASHTABLE_CWC22_SGB11_H__
+#ifndef __HASHTABLE_CWC22_SGB12_H__
+#define __HASHTABLE_CWC22_SGB12_H__
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -149,11 +149,10 @@ void hashtable_set_dtors( hashtable * h, void (*keyDtor)( void * ), void (*valDt
  * This function will cause the table to expand if the insertion would take
  * the ratio of entries to table size over the maximum load factor.
  *
- * This function does not check for repeated insertions with a duplicate key.
- * The value returned when using a duplicate key is undefined -- when
- * the hashtable changes size, the order of retrieval of duplicate key
- * entries is reversed.
- * If in doubt, remove before insert.
+ * When a key is re-inserted with the same value, this function is
+ * effectively a noop and 1 is returned. If a key is re-mapped to a
+ * different value, this function operates like
+ * hashtable_replace(). If in doubt, remove before insert.
  *
  * Key/value ownership: one may set the ownership policy by using
  * hashtable_set_key_dtor() and hashtable_set_val_dtor(). The destructors
@@ -163,10 +162,29 @@ void hashtable_set_dtors( hashtable * h, void (*keyDtor)( void * ), void (*valDt
 
 int 
 hashtable_insert(hashtable *h, void *k, void *v);
-/**
-   
-*/
-int 
+
+/*****************************************************************************
+ * hashtable_replace
+ *
+ * Function to change the value associated with a key, where there
+ * already exists a value bound to the key in the hashtable. If (v ==
+ * existingValue) then this routine is a no-op, otherwise this
+ * function calls hashtable_free_val() for any existing value tied to
+ * k, so it may (or may not) deallocate an object.
+ *
+ * Source by Holger Schemel. Modified by Stephan Beal to use
+ * hashtable_free_value().
+ *
+ * Returns 0 if no match is found, -1 if a match is made and replaced,
+ * and 1 if (v == existingValue).
+ *
+ * @name    hashtable_replace
+ * @param   h   the hashtable
+ * @param   key
+ * @param   value
+ *
+ */
+int
 hashtable_replace(hashtable *h, void *k, void *v);
 
 #define DEFINE_HASHTABLE_INSERT(fnname, keytype, valuetype) \
@@ -249,6 +267,15 @@ short fnname (hashtable *h, keytype const *k) { return hashtable_remove(h,k);}
 size_t
 hashtable_count(hashtable const * h);
 
+/**
+   Returns the approximate number of bytes allocated for
+   hashtable-internal data associated with the given hashtable, or 0
+   if (!h). It has no way of knowing the sizes of inserted items which
+   are referenced by the hashtable.
+*/
+size_t
+hashtable_bytes_alloced(hashtable const * h);
+
 
 /*****************************************************************************
  * hashtable_destroy() cleans up resources allocated by a hashtable and calls
@@ -306,7 +333,7 @@ hashval_t hash_long( void const * n );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* __HASHTABLE_CWC22_SGB11_H__ */
+#endif /* __HASHTABLE_CWC22_SGB12_H__ */
 
 /*
  * Copyright (c) 2002, Christopher Clark

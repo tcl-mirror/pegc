@@ -16,7 +16,8 @@ hashtable_init = { 0, /*tablelength*/
 		   0, /* hashfn */
 		   0, /* eqfn */
 		   free, /* freeKey */
-		   0 /* freeVal */
+		   0, /* freeVal */
+		   0 /* alloced */
 };
 const hashval_t hashval_t_err = (hashval_t)-1;
 /*
@@ -36,12 +37,10 @@ static const hashval_t primes[] = {
 const hashval_t prime_table_length = sizeof(primes)/sizeof(primes[0]);
 const float max_load_factor = 0.65;
 
-#if 1
 size_t hashtable_index(size_t tablelength, size_t hashvalue)
 {
     return (hashvalue % tablelength);
 }
-#endif
 
 //#include "math.h"
 /**
@@ -89,6 +88,7 @@ hashtable_create(hashval_t minsize,
     h->hashfn       = hashf;
     h->eqfn         = eqf;
     h->loadlimit    = hashtable_ceil(size * max_load_factor);
+    h->alloced = sizeof(hashtable) + (sizeof(hashtable_entry*) * size);
     return h;
 }
 /*****************************************************************************/
@@ -111,7 +111,7 @@ void hashtable_free_val(hashtable const * h, void * val )
 
 /*****************************************************************************/
 hashval_t
-hash(hashtable *h, void const *k)
+hashtable_hash(hashtable *h, void const *k)
 {
     if( !h || !k ) return hashval_t_err;
     /* Aim to protect against poor hash functions by adding logic here
@@ -124,11 +124,17 @@ hash(hashtable *h, void const *k)
     return i;
 }
 
+size_t
+hashtable_bytes_alloced(hashtable const * h)
+{
+    return h ? h->alloced : 0;
+}
+
 /*****************************************************************************/
 static int
 hashtable_expand(hashtable *h)
 {
-    /* Double the size of the table to accomodate more entries */
+    /* Jump up to the next size in the primes table to accomodate more entries */
     hashtable_entry **newtable;
     hashtable_entry *e;
     hashtable_entry **pE;
@@ -136,7 +142,6 @@ hashtable_expand(hashtable *h)
     /* Check we're not hitting max capacity */
     if (h->primeindex == (prime_table_length - 1)) return 0;
     newsize = primes[++(h->primeindex)];
-
     newtable = (hashtable_entry **)malloc(sizeof(hashtable_entry*) * newsize);
     if (NULL != newtable)
     {
@@ -178,6 +183,8 @@ hashtable_expand(hashtable *h)
             }
         }
     }
+    h->alloced += (sizeof(hashtable_entry*) * newsize)
+	- (sizeof(hashtable_entry*) * h->tablelength);
     h->tablelength = newsize;
     h->loadlimit   = hashtable_ceil(newsize * max_load_factor);
     return -1;
@@ -190,12 +197,44 @@ hashtable_count(hashtable const * h)
     return h->entrycount;
 }
 
+int
+hashtable_replace(hashtable *h, void *k, void *v)
+{
+    hashtable_entry *e;
+    hashval_t hashvalue, index;
+    hashvalue = hashtable_hash(h,k);
+    index = hashtable_index(h->tablelength,hashvalue);
+    e = h->table[index];
+    while (NULL != e)
+    {
+        /* Check hash value to short circuit heavier comparison */
+        if (
+	    (k == e->k)
+	    ||
+	    ((hashvalue == e->h) && (h->eqfn(k, e->k)))
+	    )
+        {
+	    if( v == e->v ) return 1;
+	    hashtable_free_val( h, e->v );
+	    e->v = v;
+	    return -1;
+
+        }
+        e = e->next;
+    }
+    return 0;
+}
+
 /*****************************************************************************/
 int
 hashtable_insert(hashtable *h, void *k, void *v)
 {
-    /* historic: This method allows duplicate keys - but they shouldn't be used */
-  /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries. */
+    if( ! h || !k ) return 0;
+    /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries. */
+    void * dupev = hashtable_search(h, k);
+    if( dupev == v ) return 1;
+    int rc = hashtable_replace(h, k, v);
+    if( 0 != rc ) return rc;
     hashval_t index;
     hashtable_entry *e;
     if (++(h->entrycount) > h->loadlimit)
@@ -208,20 +247,13 @@ hashtable_insert(hashtable *h, void *k, void *v)
     }
     e = (hashtable_entry *)malloc(sizeof(hashtable_entry));
     if (NULL == e) { --(h->entrycount); return 0; } /*oom*/
-    void * dupev = hashtable_search(h, k);
-    if( dupev )
-    {
-      e->v = v;
-    }
-    else
-    {
-      e->h = hash(h,k);
-      index = hashtable_index(h->tablelength,e->h);
-      e->k = k;
-      e->v = v;
-      e->next = h->table[index];
-      h->table[index] = e;
-    }
+    h->alloced += sizeof(hashtable_entry);
+    e->h = hashtable_hash(h,k);
+    index = hashtable_index(h->tablelength,e->h);
+    e->k = k;
+    e->v = v;
+    e->next = h->table[index];
+    h->table[index] = e;
     return 1;
 }
 
@@ -231,7 +263,7 @@ hashtable_search(hashtable *h, void const *k)
 {
     hashtable_entry *e;
     hashval_t hashvalue, index;
-    hashvalue = hash(h,k);
+    hashvalue = hashtable_hash(h,k);
     index = hashtable_index(h->tablelength,hashvalue);
     e = h->table[index];
     while (NULL != e)
@@ -253,8 +285,8 @@ hashtable_take(hashtable *h, void *k)
     void *v;
     hashval_t hashvalue, index;
 
-    hashvalue = hash(h,k);
-    index = hashtable_index(h->tablelength,hash(h,k));
+    hashvalue = hashtable_hash(h,k);
+    index = hashtable_index(h->tablelength,hashtable_hash(h,k));
     pE = &(h->table[index]);
     e = *pE;
     while (NULL != e)
@@ -268,6 +300,7 @@ hashtable_take(hashtable *h, void *k)
             h->entrycount--;
             v = e->v;
             //hashtable_free_key( h, e->k );
+	    h->alloced -= sizeof(hashtable_entry);
             free(e);
             return v;
         }
@@ -311,6 +344,7 @@ static hashtable_entry * hashtable_free_entry( hashtable * h, hashtable_entry * 
     hashtable_free_key( h, e->k );
     hashtable_free_val( h, e->v );
     free(e);
+    h->alloced -= sizeof(hashtable_entry);
     return next;
 }
 

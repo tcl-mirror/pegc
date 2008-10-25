@@ -25,6 +25,7 @@ struct hashtable {
     int (*eqfn) (void const *k1, void const *k2);
     void (*freeKey)( void * );
     void (*freeVal)( void * );
+    size_t alloced;
 };
 typedef struct hashtable  hashtable;
 
@@ -34,7 +35,7 @@ typedef struct hashtable  hashtable;
    Returns h->hashfn(k), or hashval_t_err if either h or k are 0.
 */
 hashval_t
-hash(hashtable *h, void const *k);
+hashtable_hash(hashtable *h, void const *k);
 
 /*****************************************************************************/
 /* Returns (hashvalue % tablelength) */
