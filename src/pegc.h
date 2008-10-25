@@ -827,7 +827,7 @@ extern "C" {
     bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
 
     /**
-       The PEGC_INIT_RULE family of macros are for use in places where a
+       The PEGCRULE_INIT family of macros are for use in places where a
        const expression is needed in place of PegcRule_init. The numeric
        suffix on the macro name is the number of arguments it takes, from
        0 to 2 arguments:
@@ -835,7 +835,7 @@ extern "C" {
        RF = a PegcRule_mf
        D = static rule data
     */
-#define PEGC_INIT_RULE2(RF,D) { \
+#define PEGCRULE_INIT2(RF,D) { \
      RF /* rule */,\
      D /* data */,\
      0 /* proxy */,\
@@ -844,11 +844,11 @@ extern "C" {
     /**
        A rule using RF as its rule function.
      */
-#define PEGC_INIT_RULE1(RF) PEGC_INIT_RULE2(RF,0)
+#define PEGCRULE_INIT1(RF) PEGCRULE_INIT2(RF,0)
     /**
        An invalid rule.
      */
-#define PEGC_INIT_RULE PEGC_INIT_RULE1(0)
+#define PEGCRULE_INIT PEGCRULE_INIT1(0)
 
 
     /**
@@ -1335,6 +1335,7 @@ extern "C" {
        pegc_set_error_e() is called and false is returned.
     */
     bool pegc_trigger_actions( pegc_parser * st );
+    void pegc_clear_actions( pegc_parser * st );
 
     /**
        Creates a rule which matches between min and max

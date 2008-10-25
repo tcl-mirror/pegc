@@ -6,7 +6,8 @@ ifeq (1,$(TCC))
   # If you have (want to use) tcc, try this:
   CC := tcc
   CXX := tcc
-  CPPFLAGS += -g \
+  CPPFLAGS += -gb -bt 10 \
+	-Wwrite-strings \
 	-Wunsupported \
 	-Wall
 else
@@ -14,7 +15,7 @@ else
   CPPFLAGS += \
 	-Wimplicit-function-declaration \
 	-Wall \
-	-g -O0
+	-g
 endif
 
 # CPPFLAGS ?= -g
@@ -47,7 +48,7 @@ $(libwhgc.LIB): $(libwhhash.LIB)
 # pegc lib:
 libpegc.LIB.OBJECTS := clob.o vappendf.o pegc.o
 ifeq (1,1)
-  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS) $(libwhhash.LIB.OBJECTS)
+  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS)
 else
   libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libwhhash.LIB)
 endif
@@ -60,7 +61,7 @@ $(test.BIN): $(libpegc.LIB)
 bins: test.BIN
 
 pegcgen.BIN.LDFLAGS := $(libpegc.LIB)
-pegcgen.BIN.OBJECTS := pegcgen.o
+pegcgen.BIN.OBJECTS := pegcgen.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,pegcgen)
 $(pegcgen.BIN): $(libpegc.LIB)
 bins: pegcgen.BIN

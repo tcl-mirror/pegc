@@ -27,8 +27,8 @@ extern "C" {
 
 
 const pegc_cursor pegc_cursor_init = PEGC_CURSOR_INIT;
-const PegcRule PegcRule_init = PEGC_INIT_RULE;
-const PegcRule PegcRule_invalid = PEGC_INIT_RULE;
+const PegcRule PegcRule_init = PEGCRULE_INIT;
+const PegcRule PegcRule_invalid = PEGCRULE_INIT;
 
 size_t pegc_strnlen( size_t n, pegc_const_iterator c )
 {
@@ -308,11 +308,14 @@ pegc_parser * pegc_create_parser( char const * inp, long len )
     return p;
 }
 
-bool pegc_destroy_parser( pegc_parser * st )
+void pegc_clear_actions( pegc_parser * st )
 {
-    if( ! st ) return false;
-    pegc_set_error_e( st, 0, 0 );
-#if 0
+    if( ! st || ! st->actions ) return;
+    if( st->actions->right )
+    {
+	/* Shouldn't happen. This would be indicative of mismanagement elsewhere. */
+	while( st->actions->right ) st->actions = st->actions->right;
+    }
     while( st->actions )
     {
 	pegc_action * p = st->actions->left;
@@ -320,7 +323,13 @@ bool pegc_destroy_parser( pegc_parser * st )
 	pegc_free(st->actions);
 	st->actions = p;
     }
-#endif
+}
+
+bool pegc_destroy_parser( pegc_parser * st )
+{
+    if( ! st ) return false;
+    pegc_set_error_e( st, 0, 0 );
+    pegc_clear_actions( st );
     if( st->gc )
     {
         whgc_destroy_context( st->gc );
@@ -641,7 +650,7 @@ bool pegc_matches_string( pegc_parser const * st, pegc_const_iterator str, long 
 
 PegcRule pegc_r( PegcRule_mf rule, void const * data )
 {
-    PegcRule r = PEGC_INIT_RULE2(rule,data);
+    PegcRule r = PEGCRULE_INIT2(rule,data);
     return r;
 }
 
@@ -663,7 +672,7 @@ static bool PegcRule_mf_has_error( PegcRule const * ARG_UNUSED(self), pegc_parse
 {
     return pegc_has_error(st);
 }
-const PegcRule PegcRule_has_error = PEGC_INIT_RULE2(PegcRule_mf_has_error,0);
+const PegcRule PegcRule_has_error = PEGCRULE_INIT2(PegcRule_mf_has_error,0);
 
 static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
 {
@@ -827,12 +836,12 @@ bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
     return false;
 }
-const PegcRule PegcRule_failure = PEGC_INIT_RULE2(PegcRule_mf_failure,0);
+const PegcRule PegcRule_failure = PEGCRULE_INIT2(PegcRule_mf_failure,0);
 static bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
 {
     return true;
 }
-const PegcRule PegcRule_success = PEGC_INIT_RULE2(PegcRule_mf_success,0);
+const PegcRule PegcRule_success = PEGCRULE_INIT2(PegcRule_mf_success,0);
 
 
 /**
@@ -1287,19 +1296,19 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 	    count += blockSize;
 	    if( ! li )
 	    {
-		MARKER;printf("allocating list for %u items.\n",count);
+		//MARKER;printf("allocating list for %u items.\n",count);
 		li = calloc( count, sizeof(PegcRule) );
 		if( ! li ) break;
 	    }
 	    else
 	    {
-		MARKER;printf("REallocating list for %u items.\n",count);
+		//MARKER;printf("REallocating list for %u items.\n",count);
 		PegcRule * re = (PegcRule *)realloc( li, sizeof(PegcRule) * (count)  );
 		if( ! re ) break;
 		li = re;
 	    }
 	}
-	MARKER;printf("Added list item #%u\n",pos);
+	//MARKER;printf("Added list item #%u\n",pos);
 	if( ! li ) break;
 	li[pos++] = r;
     }
@@ -1355,7 +1364,7 @@ static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
     { /* we should report an error, but we don't want to malloc now! */
 	return false;
     }
-    pegc_gc_add( st, info, pegc_free );
+    //pegc_gc_add( st, info, pegc_free );
     *info = pegc_action_init;
     info->action = *theact;
     info->action.match.begin = orig;
@@ -1493,7 +1502,7 @@ static bool PegcRule_mf_noteof( PegcRule const * self, pegc_parser * st )
     }
     return false;
 }
-const PegcRule PegcRule_noteof = PEGC_INIT_RULE1(PegcRule_mf_noteof);
+const PegcRule PegcRule_noteof = PEGCRULE_INIT1(PegcRule_mf_noteof);
 
 /**
    Internal implementation of star/plus rules.
@@ -1561,7 +1570,7 @@ static bool PegcRule_mf_ ## F( PegcRule const * self, pegc_parser * st ) \
     } \
     return false; \
 }\
-const PegcRule PegcRule_ ## F = PEGC_INIT_RULE2(PegcRule_mf_ ## F,0);
+const PegcRule PegcRule_ ## F = PEGCRULE_INIT2(PegcRule_mf_ ## F,0);
 /* SunStudio compiler says: warning: syntax error:  empty declaration. No clue what he's talking about. */
 
 ACPRULE_ISA(alnum);
@@ -1615,7 +1624,7 @@ bool PegcRule_mf_eof( PegcRule const * ARG_UNUSED(self), pegc_parser * st )
     return pegc_eof(st);
 }
 
-const PegcRule PegcRule_eof = PEGC_INIT_RULE2(PegcRule_mf_eof,0);
+const PegcRule PegcRule_eof = PEGCRULE_INIT2(PegcRule_mf_eof,0);
 static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_rule_check( self, st, false, false, false ) ) return false;
@@ -1625,7 +1634,7 @@ static bool PegcRule_mf_eol( PegcRule const * self, pegc_parser * st )
     return nl.rule( &nl, st );
 }
 
-const PegcRule PegcRule_eol = PEGC_INIT_RULE2(PegcRule_mf_eol,0);
+const PegcRule PegcRule_eol = PEGCRULE_INIT2(PegcRule_mf_eol,0);
 
 static bool PegcRule_mf_bol( PegcRule const * self, pegc_parser * st )
 {
@@ -1634,7 +1643,7 @@ static bool PegcRule_mf_bol( PegcRule const * self, pegc_parser * st )
     return ( pegc_begin(st) == orig )
 	|| ('\n' == orig[-1]);
 }
-const PegcRule PegcRule_bol = PEGC_INIT_RULE2(PegcRule_mf_bol,0);
+const PegcRule PegcRule_bol = PEGCRULE_INIT2(PegcRule_mf_bol,0);
 
 static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
 {
