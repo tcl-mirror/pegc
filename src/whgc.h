@@ -50,11 +50,31 @@ extern "C" {
        objects. The solution to that particular application turned out
        to be fairly generic, so it was refactored into whgc.
 
-       The main feature of whgc is that it allows one to bind key/value
-       pairs to a context object. When that object is destroyed,
-       client-defined destructor functions will be called on for all
-       of the keys and values. This greatly simplifies management of
-       dynamically allocated memory in some contexts.
+       The original use case for whgc was a parser toolkit which
+       needed to allocate dynamic resources while generating a
+       grammar. By attaching the dynamic data to the parser's GC, we
+       eliminated a number of headaches involved with ownership of the
+       dynamic data. It also simplified many lookup operations when we
+       needed to find shared data.
+
+       @section set_features Features and Misfeatures
+
+       The main feature of whgc are:
+
+       - It allows one to bind key/value pairs to a context
+       object. When that object is destroyed, client-defined
+       destructor functions will be called on for all of the keys and
+       values. This greatly simplifies management and ownership of
+       dynamically allocated memory for some use cases.
+
+       - It supports event listeners, to assist in debugging the
+       lifetimes of GC'd objects.
+
+       - Aside from GC, it's sometimes useful as a general-purposes lookup
+       table (a hashtable of (key=void *,value=void *)).
+
+
+       @section sec_example Example
 
        An exceedingly simple example of using it:
 
@@ -93,13 +113,6 @@ extern "C" {
        allows us to transfer ownership to the GC context, so that we can
        map arbitrary data to an arbitrary object and not have to worry
        about whether or not that memory will be deallocated later.
-
-       The original use case for whgc was a parser toolkit which
-       needed to allocate dynamic resources while generating a
-       grammar. By attaching the dynamic data to the parser's GC, we
-       eliminated a number of headaches involved with ownership of the
-       dynamic data. It also simplified many lookup operations when we
-       needed to find shared data.
 
        @section sec_threadsafety Thread safety
 
@@ -179,7 +192,7 @@ extern "C" {
        Removes the given key from the given context, transfering ownership
        of the key and the associated value to the caller.
     */
-    void * whgc_take( whgc_context * cx, void * key );
+    void * whgc_unregister( whgc_context * cx, void * key );
 
     /**
        Frees all resources associated with the given context.
@@ -196,6 +209,82 @@ extern "C" {
        key is not found. Ownership of the returned objet is not changed.
     */
     void * whgc_search( whgc_context const * cx, void const * key );
+
+    /**
+       A type for storing some telemetry for a whgc_context.
+    */
+    struct whgc_stats
+    {
+	size_t entry_count;
+	size_t add_count;
+	size_t take_count;
+    };
+    typedef struct whgc_stats whgc_stats;
+
+    /**
+       Returns the current stats for the given context.
+    */
+    whgc_stats whgc_get_stats( whgc_context const * );
+
+    /**
+       Enum for whgc event types.
+    */
+    enum whgc_events {
+    /**
+       Signal that a GC item has been registered.
+    */
+    whgc_event_registered = 1,
+    /**
+       Signal that a GC item has been unregistered.
+    */
+    whgc_event_unregistered = 2,
+    /**
+       Signal that a key/val pair is about to e passed through the
+       item's dtor functions.
+    */
+    whgc_event_destructing_item = 3,
+    /**
+       Signal that a context is about to be destroyed.
+    */
+    whgc_event_destructing_context = 4
+    };
+    /**
+       A typedef for whgc context event listers. The primary use case
+       of a listener is to help debug the lifetimes of GC'd items.
+
+       The arguments are:
+
+       cx: the context from which the event originated.
+
+       event: an event type (see below)
+
+       key, val: the key and value associated with the event
+       (see below).
+
+       The event types:
+
+       (whgc_event_registered) signals that the key/value parameters have
+       just been registered with the context.
+
+       (whgc_event_unregistered) signals that the key/value parameters
+       have just been unregistered from the context.
+
+       (whgc_event_destructing_item) signals that the key/value
+       parameters are about to be passed to their registered dtor
+       functions (if any).
+
+       (whgc_event_destructing_context) signals that the cx parameter
+       is about to be destroyed (key/value will be 0).
+    */
+    typedef void (*whgc_listener_f)( whgc_context const *cx,
+				     enum whgc_events event,
+				     void const * key,
+				     void const * value );
+    /**
+       Adds an event listener to the context. The listener is called
+       when certain events happen within the given context.
+    */
+    bool whgc_add_listener( whgc_context *, whgc_listener_f f );
 
 #ifdef __cplusplus
 } // extern "C"
