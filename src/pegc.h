@@ -15,7 +15,7 @@ utility code is released under a BSD license (see hashtable*.{c,h} for details).
 
 Home page: http://fossil.wanderinghorse.net/repos/pegc/
 
-@section sec_about_pegc About
+@section pegc_sec_about_pegc About
 
 pegc attempts to implement a model of parser which has become quite
 popular in C++, but attempts to do so within the limitations of C (e.g. lack of type
@@ -52,7 +52,7 @@ read a lex/yacc/lemon-like grammar and generate parsers which
 themselves use the pegc API. That is, a PEGC-parsed grammar which in
 turn generates PEGC parser code.
 
-@section sec_features_misfeatures Features and Misfeatures
+@section pegc_sec_features_misfeatures Features and Misfeatures
 
 pegc's main features include:
 
@@ -91,7 +91,7 @@ succeed. To help avoid this, all but the most trivial core rules check
 the error state before doing anything.
 
 
-@section sec_apinotes API Notes and Conventions:
+@section pegc_sec_overview Overview of Parsers and Rules
 
 Parsers are created using pegc_create_parser() and destroyed using
 pegc_destroy_parser(). A parser object is an opaque type used by
@@ -152,7 +152,8 @@ The API provides routines for creating rule lists, but care must be
 taken to always terminate such lists with a NULL entry so that this
 API can avoid overrunning the bounds of a rule list.
 
-@section sec_requirements Requirements and Prerequisites
+
+@section pegc_sec_requirements Requirements and Prerequisites
 
 pegc has no external dependencies other than the standard C
 library. That said, some code relies on features which are not part of the
@@ -182,8 +183,36 @@ int foo() {
 
 Additionally, there may be instances of C++-style to-end-of-line comments (<tt>//</tt>).
 
+@section pegc_sec_api_naming_conventions API naming conventions.
 
-@section sec_threadsafety Thread safety:
+This API follows the following naming conventions:
+
+	- All routines start with the pegc_ prefix.
+	- All shared instances of PegcRule ojects are named PegcRule_something.
+	- All PegcRule_mf implementations are named PegcRule_mf_something.
+	- All PegcRule factory functions are named pegc_r_something.
+
+Additionally, many of the pegc rule factory functions have odd
+suffixes like <tt>_vv</tt>, and <tt>_ep</tt>.  Since C does not allow
+function overloading, we have to add suffixes to functions which have
+the same functionality but take different argument types. The
+conventions are:
+
+	- _a = the argument is a pointer to a null-terminated list. e.g. pegc_r_list_a()
+	- _p = the argument is a non-null pointer. e.g. pegc_copy_r_p()
+	- _v = the argument is a va_list. e.g. pegc_set_error_v()
+	- _e = the argument is an elipse list. e.g. pegc_set_error_v()
+	- _vv = the argument is a va_list containing full-fledged VALUES of
+	the type documented for the function. e.g. pegc_r_list_vv().
+	- _vp = the argument is a va_list containing POINTERS to object of
+	the type documented for the function. e.g. pegc_r_list_vp()
+	- _ev = as _vv but an elipse list instead of a va_list. e.g. pegc_r_or_ev().
+	- _ep = as _vp but an elipse list instead of a va_list. e.g. pegc_r_and_ep().
+
+These seem a little unweildy at first, but one gets used to them.
+
+
+@section pegc_sec_threadsafety Thread safety:
 
 It is never legal to use the same instance of a parser in multiple
 threads at one time, as the parsing process continually updates the
@@ -195,7 +224,7 @@ effectively const) are more or less thread-safe after they are initialized
 cleanup). That said, many rules have an association with a specific parser
 instance, and those rules must be treated as non-thread-safe.
 
-@section sec_aboutbooleans About boolean types:
+@section pegc_sec_aboutbooleans About boolean types:
 
 By default this code defines its own macros for true/false and the bool
 keyword. If PEGC_HAVE_STDBOOL is defined to a true value then <stdbool.h>
@@ -203,7 +232,7 @@ is used instead. When compiling under C++ (i.e. __cplusplus is defined),
 stdbool.h is not necessary and we use the C++-defined bool/true/false
 (and PEGC_HAVE_STDBOOL is ignored entirely).
 
-@section sec_credits Credits
+@section pegc_sec_credits Credits
 
 Bryan Ford (http://www.brynosaurus.com) is, AFAIK, the originator of the
 PEG concept.
@@ -421,7 +450,7 @@ extern "C" {
 
        Note that the library internally allocates some storage
        associated with the parser for certain operations (e.g.  see
-       pegc_r_action_i() and pegc_r_list()). That memory is not freed
+       pegc_r_action_i_vv() and pegc_r_list_vv()). That memory is not freed
        until this function is called. Thus if parsers are not properly
        finalized, leak detection tools may report that this code
        leaks resources.
@@ -1199,6 +1228,7 @@ extern "C" {
        Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
     */
     PegcRule pegc_r_list_ep( pegc_parser * st, bool orOp, ... );
+
     /**
        Functionally equivalent to pegc_r_list_vv(), but takes (...)
        instead of a va_list.
@@ -1206,8 +1236,17 @@ extern "C" {
     PegcRule pegc_r_list_ev( pegc_parser * st, bool orOp, ... );
 
     /**
-       Works like pegc_r_list_vp() but requires a NULL-terminated list of
-       (PegcRule const *). If the list cannot be constructed for some
+       Works like pegc_r_list_a(), requiring a null-terminated list of
+       PegcRule pointers. If the internal list cannot be constructed
+       for some reason then an invalid rule is returned.
+
+       Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
+    */
+    PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap );
+    /**
+       Works like pegc_r_list_a(), but requires a list of PegcRule
+	objects (NOT pointers) which is termined by an invalid
+	rule. If the internal list cannot be constructed for some
        reason then an invalid rule is returned.
 
        Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.

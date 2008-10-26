@@ -14,8 +14,6 @@
 
 #define WHCLOB_DEBUG 0
 
-/** WHCLOB_INIT(B) is a convenience form of whclob_init(B,0,0). */
-#define WHCLOB_INIT(B) whclob_init(B,0,0)
 
 
 const whclobrc_t whclobrc = {0, /*  OK */
@@ -26,6 +24,7 @@ const whclobrc_t whclobrc = {0, /*  OK */
 			 -5, /* IOError */
 			 -6  /* ArgError */
 };
+
 
 struct whclob
 {
@@ -75,6 +74,12 @@ static const whclob Clob_empty = {0, /* aData */
 };
 
 /**
+  A debugging-only function. Do not use it in client code.
+*/
+void whclob_dump( whclob * cb, int doString );
+
+
+/**
    Default alloc size policy, simply returns n.
 */
 static long whclob_default_alloc_policy( long n )
@@ -105,26 +110,26 @@ RePol whclob_set_alloc_policy( RePol f )
 #define WHCLOB_DUMP(X,B) if(WHCLOB_DEBUG) { printf(X ": blob [%s]: ", # B ); whclob_dump(B,1); }
 void whclob_dump( whclob * cb, int doString )
 {
-	whclob * dest;
-	WHCLOB_INIT(&dest);
-	whclob_appendf( dest,
-		      "whclob@%p[nUsed=%d, nAlloc=%d, nCursor=%d][data@%p]",
-		      cb, cb->nUsed, cb->nAlloc, cb->nCursor, cb->aData
-		       //,(doString ? (cb->nUsed ? cb->aData : "NULL") : "...")
-		       );
-	if( doString )
+    whclob * dest = whclob_new();
+    if( ! dest ) return;
+    whclob_appendf( dest,
+		    "whclob@%p[nUsed=%d, nAlloc=%d, nCursor=%d][data@%p]",
+		    cb, cb->nUsed, cb->nAlloc, cb->nCursor, cb->aData
+		    //,(doString ? (cb->nUsed ? cb->aData : "NULL") : "...")
+		    );
+    if( doString )
+    {
+	if( cb->nAlloc && cb->aData[0] )
 	{
-		if( cb->nAlloc && cb->aData[0] )
-		{
-			whclob_appendf( dest, "=[%s]", whclob_buffer(cb) );
-		}
-		else
-		{
-			whclob_appendf( dest, "=[NULL]", cb );
-		}
+	    whclob_appendf( dest, "=[%s]", whclob_buffer(cb) );
 	}
-        fappendf( stdout, "%s\n", whclob_buffer( dest ) );
-	whclob_finalize( dest );
+	else
+	{
+	    whclob_appendf( dest, "=[NULL]", cb );
+	}
+    }
+    fappendf( stdout, "%s\n", whclob_buffer( dest ) );
+    whclob_finalize( dest );
 }
 
 

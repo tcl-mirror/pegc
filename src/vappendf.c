@@ -29,33 +29,33 @@ remove certain features/extensions.
 typedef long double LONGDOUBLE_TYPE;
 
 /*
-** If VAPPENDF_OMIT_FLOATING_POINT is defined to a true value, then
-** floating point conversions are disabled.
+   If VAPPENDF_OMIT_FLOATING_POINT is defined to a true value, then
+   floating point conversions are disabled.
 */
 #ifndef VAPPENDF_OMIT_FLOATING_POINT
 #  define VAPPENDF_OMIT_FLOATING_POINT 0
 #endif
 
 /*
-** If VAPPENDF_OMIT_SIZE is defined to a true value, then
-** the %n specifier is disabled.
+   If VAPPENDF_OMIT_SIZE is defined to a true value, then
+   the %n specifier is disabled.
 */
 #ifndef VAPPENDF_OMIT_SIZE
 #  define VAPPENDF_OMIT_SIZE 0
 #endif
 
 /*
-** If VAPPENDF_OMIT_SQL is defined to a true value, then
-** the %q and %Q specifiers are disabled.
+   If VAPPENDF_OMIT_SQL is defined to a true value, then
+   the %q and %Q specifiers are disabled.
 */
 #ifndef VAPPENDF_OMIT_SQL
 #  define VAPPENDF_OMIT_SQL 0
 #endif
 
 /*
-** If VAPPENDIF_OMIT_HTML is defined to a true value then the %h (HTML
-** escape), %t (URL escape), and %T (URL unescape) specifiers are
-** disabled.
+   If VAPPENDIF_OMIT_HTML is defined to a true value then the %h (HTML
+   escape), %t (URL escape), and %T (URL unescape) specifiers are
+   disabled.
 */
 #ifndef VAPPENDIF_OMIT_HTML
 #  define VAPPENDIF_OMIT_HTML 0
@@ -94,8 +94,8 @@ This exists mainly so this code can compile with the tcc compiler.
 #endif
 
 /*
-** Conversion types fall into various categories as defined by the
-** following enumeration.
+   Conversion types fall into various categories as defined by the
+   following enumeration.
 */
 enum PrintfCategory {etRADIX = 1, /* Integer types.  %d, %x, %o, and so forth */
 		     etFLOAT = 2, /* Floating point.  %f */
@@ -125,13 +125,13 @@ enum PrintfCategory {etRADIX = 1, /* Integer types.  %d, %x, %o, and so forth */
 };
 
 /*
-** An "etByte" is an 8-bit unsigned value.
+   An "etByte" is an 8-bit unsigned value.
 */
 typedef unsigned char etByte;
 
 /*
-** Each builtin conversion character (ex: the 'd' in "%d") is described
-** by an instance of the following structure
+   Each builtin conversion character (ex: the 'd' in "%d") is described
+   by an instance of the following structure
 */
 typedef struct et_info {   /* Information about each format field */
   char fmttype;            /* The format field code letter */
@@ -143,7 +143,7 @@ typedef struct et_info {   /* Information about each format field */
 } et_info;
 
 /*
-** Allowed values for et_info.flags
+   Allowed values for et_info.flags
 */
 enum et_info_flags { FLAG_SIGNED = 1,    /* True if the value to convert is signed */
 		     FLAG_EXTENDED = 2,  /* True if for internal/extended use only. */
@@ -151,8 +151,8 @@ enum et_info_flags { FLAG_SIGNED = 1,    /* True if the value to convert is sign
 };
 
 /*
-** The following table is searched linearly, so it is good to put the
-** most frequently used conversion types first.
+   The following table is searched linearly, so it is good to put the
+   most frequently used conversion types first.
 */
 static const char aDigits[] = "0123456789ABCDEF0123456789abcdef";
 static const char aPrefix[] = "-x0\000X0";
@@ -194,17 +194,17 @@ static const et_info fmtinfo[] = {
 
 #if ! VAPPENDF_OMIT_FLOATING_POINT
 /*
-** "*val" is a double such that 0.1 <= *val < 10.0
-** Return the ascii code for the leading digit of *val, then
-** multiply "*val" by 10.0 to renormalize.
+   "*val" is a double such that 0.1 <= *val < 10.0
+   Return the ascii code for the leading digit of *val, then
+   multiply "*val" by 10.0 to renormalize.
 **
-** Example:
-**     input:     *val = 3.14159
-**     output:    *val = 1.4159    function return = '3'
+   Example:
+       input:     *val = 3.14159
+       output:    *val = 1.4159    function return = '3'
 **
-** The counter *cnt is incremented each time.  After counter exceeds
-** 16 (the number of significant digits in a 64-bit float) '0' is
-** always returned.
+   The counter *cnt is incremented each time.  After counter exceeds
+   16 (the number of significant digits in a 64-bit float) '0' is
+   always returned.
 */
 static int et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
   int digit;
@@ -219,9 +219,9 @@ static int et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
 #endif /* !VAPPENDF_OMIT_FLOATING_POINT */
 
 /*
-** On machines with a small stack size, you can redefine the
-** VAPPENDF_BUF_SIZE to be less than 350.  But beware - for
-** smaller values some %f conversions may go into an infinite loop.
+   On machines with a small stack size, you can redefine the
+   VAPPENDF_BUF_SIZE to be less than 350.  But beware - for
+   smaller values some %f conversions may go into an infinite loop.
 */
 #ifndef VAPPENDF_BUF_SIZE
 #  define VAPPENDF_BUF_SIZE 350  /* Size of the output buffer */
@@ -239,7 +239,7 @@ static int et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
 #endif
 
 #if 0
-/** Not yet used. */
+/   Not yet used. */
 enum PrintfArgTypes {
 TypeInt = 0,
 TypeIntP = 1,
@@ -251,10 +251,10 @@ TypeCString = 4
 
 
 #if 0
-/** Not yet used. */
+/   Not yet used. */
 typedef struct vappendf_spec_handler_def
 {
-	char letter; /** e.g. %s */
+	char letter; /   e.g. %s */
 	int xtype; /* reference to the etXXXX values, or fmtinfo[*].type. */
 	int ntype; /* reference to PrintfArgTypes enum. */
 } spec_handler;
@@ -559,43 +559,43 @@ static long spech_sqlstring3( vappendf_appender pf,
 				      
 
 /*
-** The root printf program.  All variations call this core.  It
-** implements most of the common printf behaviours plus (optionally)
-** some extended ones.
+   The root printf program.  All variations call this core.  It
+   implements most of the common printf behaviours plus (optionally)
+   some extended ones.
 **
-** INPUTS:
+   INPUTS:
 **
-**   pfAppend : The is a vappendf_appender function which is responsible
-**   for accumulating the output. If pfAppend returns a negative integer
-**   then processing stops immediately.
+     pfAppend : The is a vappendf_appender function which is responsible
+     for accumulating the output. If pfAppend returns a negative integer
+     then processing stops immediately.
 **
-**   pfAppendArg : is ignored by this function but passed as the first
-**   argument to pfAppend. pfAppend will presumably use it as a data
-**   store for accumulating its string.
+     pfAppendArg : is ignored by this function but passed as the first
+     argument to pfAppend. pfAppend will presumably use it as a data
+     store for accumulating its string.
 **
-**   fmt : This is the format string, as in the usual printf().
+     fmt : This is the format string, as in the usual printf().
 **
-**   ap : This is a pointer to a list of arguments.  Same as in
-**   vprintf() and friends.
+     ap : This is a pointer to a list of arguments.  Same as in
+     vprintf() and friends.
 **
-** OUTPUTS:
-**          The return value is the total number of characters sent to
-**          the function "func".  Returns -1 on a error.
+   OUTPUTS:
 **
-** Note that the order in which automatic variables are declared below
-** seems to make a big difference in determining how fast this beast
-** will run.
+   The return value is the total number of characters sent to the
+   function "func".  Returns -1 on a error.
 **
-** Much of this code dates back to the early 1980's, supposedly.
+   Note that the order in which automatic variables are declared below
+   seems to make a big difference in determining how fast this beast
+   will run.
 **
+   Much of this code dates back to the early 1980's, supposedly.
 **
-** Known change history (most historic info has been lost):
+   Known change history (most historic info has been lost):
 **
-** 10 Feb 2008 by Stephan Beal: refactored to remove the 'useExtended'
-** flag (which is now always on). Added the vappendf_appender typedef to
-** make this function generic enough to drop into other source trees
-** without much work.
-** 
+   10 Feb 2008 by Stephan Beal: refactored to remove the 'useExtended'
+   flag (which is now always on). Added the vappendf_appender typedef to
+   make this function generic enough to drop into other source trees
+   without much work.
+   
 */
 long vappendf(
   vappendf_appender pfAppend,          /* Accumulate results here */
@@ -603,6 +603,14 @@ long vappendf(
   const char *fmt,                   /* Format string */
   va_list ap                         /* arguments */
 ){
+    /**
+       HISTORIC NOTE (author and year unknown):
+
+       Note that the order in which automatic variables are declared below
+       seems to make a big difference in determining how fast this beast
+       will run.
+    */
+
   const int useExtended = 1; /* Allow extended %-conversions */
   long outCount = 0;          /* accumulated output count */
   int pfrc = 0;              /* result from calling pfAppend */
@@ -761,25 +769,25 @@ if(1){				       \
     }
 
     /*
-    ** At this point, variables are initialized as follows:
+       At this point, variables are initialized as follows:
     **
-    **   flag_alternateform          TRUE if a '#' is present.
-    **   flag_altform2               TRUE if a '!' is present.
-    **   flag_plussign               TRUE if a '+' is present.
-    **   flag_leftjustify            TRUE if a '-' is present or if the
-    **                               field width was negative.
-    **   flag_zeropad                TRUE if the width began with 0.
-    **   flag_long                   TRUE if the letter 'l' (ell) prefixed
-    **                               the conversion character.
-    **   flag_longlong               TRUE if the letter 'll' (ell ell) prefixed
-    **                               the conversion character.
-    **   flag_blanksign              TRUE if a ' ' is present.
-    **   width                       The specified field width.  This is
-    **                               always non-negative.  Zero is the default.
-    **   precision                   The specified precision.  The default
-    **                               is -1.
-    **   xtype                       The class of the conversion.
-    **   infop                       Pointer to the appropriate info struct.
+         flag_alternateform          TRUE if a '#' is present.
+         flag_altform2               TRUE if a '!' is present.
+         flag_plussign               TRUE if a '+' is present.
+         flag_leftjustify            TRUE if a '-' is present or if the
+                                     field width was negative.
+         flag_zeropad                TRUE if the width began with 0.
+         flag_long                   TRUE if the letter 'l' (ell) prefixed
+                                     the conversion character.
+         flag_longlong               TRUE if the letter 'll' (ell ell) prefixed
+                                     the conversion character.
+         flag_blanksign              TRUE if a ' ' is present.
+         width                       The specified field width.  This is
+                                     always non-negative.  Zero is the default.
+         precision                   The specified precision.  The default
+                                     is -1.
+         xtype                       The class of the conversion.
+         infop                       Pointer to the appropriate info struct.
     */
     switch( xtype ){
       case etPOINTER:
@@ -909,8 +917,8 @@ if(1){				       \
         }
         bufpt = buf;
         /*
-        ** If the field type is etGENERIC, then convert to either etEXP
-        ** or etFLOAT, as appropriate.
+           If the field type is etGENERIC, then convert to either etEXP
+           or etFLOAT, as appropriate.
         */
         flag_exp = xtype==etEXP;
         if( xtype!=etFLOAT ){
@@ -952,7 +960,7 @@ if(1){				       \
           *(bufpt++) = '.';
         }
         /* "0" digits after the decimal point but before the first
-        ** significant digit of the number */
+           significant digit of the number */
         for(e2++; e2<0 && precision>0; precision--, e2++){
           *(bufpt++) = '0';
         }
@@ -990,13 +998,13 @@ if(1){				       \
         *bufpt = 0;
 
         /* The converted number is in buf[] and zero terminated. Output it.
-        ** Note that the number is in the usual order, not reversed as with
-        ** integer conversions. */
+           Note that the number is in the usual order, not reversed as with
+           integer conversions. */
         length = bufpt-buf;
         bufpt = buf;
 
         /* Special case:  Add leading zeros if the flag_zeropad flag is
-        ** set and we are not left justified */
+           set and we are not left justified */
         if( flag_zeropad && !flag_leftjustify && length < width){
           int i;
           int nPad = width - length;
@@ -1082,9 +1090,9 @@ if(1){				       \
 #endif /* !VAPPENDF_OMIT_SQL */
     }/* End switch over the format type */
     /*
-    ** The text of the conversion is pointed to by "bufpt" and is
-    ** "length" characters long.  The field width is "width".  Do
-    ** the output.
+       The text of the conversion is pointed to by "bufpt" and is
+       "length" characters long.  The field width is "width".  Do
+       the output.
     */
     if( !flag_leftjustify ){
       int nspace;

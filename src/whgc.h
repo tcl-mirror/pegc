@@ -91,7 +91,7 @@ extern "C" {
        my->bar = 42.42;
        // Assume this function exists:
        //   void mystruct_dtor(void*);
-       // and that it deallocated mystruct objects.
+       // and that it deallocates mystruct objects.
        whgc_add( cx, my, mystruct_dtor );
 
        ...

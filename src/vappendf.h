@@ -4,17 +4,27 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/**
-   This code implements a printf-like implementation which supports
+/**@page vappendf_page_main vappendf: generic printf-like utilities.
+
+   The vappendf API implements a printf-like implementation which supports
    aribtrary data destinations.
 
    Authors: many, probably. This code supposedly goes back to the
    early 1980's.
 
    License: Public Domain.
+
+   The primary functions of interest are vappendf() and appendf(), which works
+   similarly to printf() except that they take a callback function which they
+   use to send the generated output to arbitrary destinations. e.g. one can
+   supply a callback to output formatted text to a UI widget or a C++ stream
+   object.
 */
 
 /**
+   @typedef long (*vappendf_appender)( void * arg, char const * data, long n )
+
+
    The vappendf_appender typedef is used to provide vappendf()
    with a flexible output routine, so that it can be easily
    send its output to arbitrary targets.
@@ -45,7 +55,7 @@ typedef long (*vappendf_appender)( void * arg,
 				   long n );
 
 
-/*
+/**
   This function works similarly to classical printf implementations,
   but instead of outputing somewhere specific, it uses a callback
   function to push its output somewhere. This allows it to be used for
@@ -83,39 +93,30 @@ typedef long (*vappendf_appender)( void * arg,
 
  CURRENT (documented) PRINTF EXTENSIONS:
 
- %z works like %s, but takes a non-const (char *) in the va_list, and
- vappendf deletes the string (using free()) after appending it to the
- output.
+ %%z works like %%s, but takes a non-const (char *) and vappendf
+ deletes the string (using free()) after appending it to the output.
 
- %h (HTML) works like %s but converts certain characters (like '<' and '&' to
+ %%h (HTML) works like %s but converts certain characters (like '<' and '&' to
  their HTML escaped equivalents.
 
- %t (URL encode) works like %s but converts certain characters into a representation
- suitable for use in an HTTP URL. (e.g. ' ' gets converted to %20)
+ %%t (URL encode) works like %%s but converts certain characters into a representation
+ suitable for use in an HTTP URL. (e.g. ' ' gets converted to %%20)
 
- %T (URL decode) does the opposite of %t - it decodes URL-encoded
+ %%T (URL decode) does the opposite of %t - it decodes URL-encoded
  strings.
 
- %n requires an (int*) in the va_list, which gets assigned
- the number of bytes this function has appended to cb so far.
-
- %r requires an int and renders it in "ordinal form". That is,
+ %%r requires an int and renders it in "ordinal form". That is,
  the number 1 converts to "1st" and 398 converts to "398th".
 
- %q quotes a string as required for SQL. That is, '\'' characters get
+ %%q quotes a string as required for SQL. That is, '\'' characters get
  doubled.
 
- %Q as %q, but includes the outer '\'' characters and null pointers
+ %%Q as %%q, but includes the outer '\'' characters and null pointers
  replaced by SQL NULL.
 
- (The %q and %Q specifiers are options inherited from this printf
+ (The %%q and %%Q specifiers are options inherited from this printf
  implementation's sqlite3 genes.)
 
- HISTORIC NOTE (author and year unknown):
-
- Note that the order in which automatic variables are declared below
- seems to make a big difference in determining how fast this beast
- will run.
 */
 long vappendf(
   vappendf_appender pfAppend,          /* Accumulate results here */

@@ -113,8 +113,19 @@ extern const whclobrc_t whclobrc;
 \code
    whclob * c;
    if( whclobrc.OK != whclob_init(c,0,0) ) { ... error ... }
+   ...
    whclob_finalize( c );
 \endcode
+
+Or to use the whclob_new() convenience function:
+
+\code
+   whclob * c = whclob_new();
+   if( !c ) { ... OOM ... }
+   ...
+   whclob_finalize( c );
+\endcode
+
 */
 typedef struct whclob whclob;
 
@@ -438,7 +449,7 @@ long whclob_append( whclob * cb, char const * data, long dsize );
 */
 long whclob_append_char_n( whclob * cb, char ch, const long n );
 
-/*
+/**
   Makes a deep copy of src, placing it into dest.
 
   Neither src nor dest may be 0. dest is deallocated before the copy
@@ -476,7 +487,8 @@ long whclob_vappendf( whclob * cb, char const * fmt, va_list vargs );
 
 
 /**
-   See whclob_vappendf(whclob*,char const *,va_list).
+   See whclob_vappendf(whclob*,char const *,va_list). This is identical
+   except that it takes an elipses list instead of va_list.
 */
 long whclob_appendf( whclob * cb, const char * fmt, ... );
 
@@ -664,11 +676,6 @@ long whclob_importer_FILE( whclob * target, void * arg );
    opened as a file, in which case whclobrc.IOError is returned.
 */
 long whclob_importer_filename( whclob * target, void * arg );
-
-/*
-  A debugging-only function. Do not use it in client code.
-*/
-void whclob_dump( whclob * cb, int doString );
 
 /**
    Sends cb's blob to the given file. Returns the number
