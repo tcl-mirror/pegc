@@ -1333,11 +1333,16 @@ extern "C" {
     /**
        Causes queued actions to be activated, in the order they were
        queued. This function returns true if there are no queued
-       actions or if all queued actions return. If an action returns
-       false then this function stops processing actions and returns
-       false. If st is null or pegc_has_error() returns true then this
-       routine returns false. On a severe error (e.g. internal errors)
-       pegc_set_error_e() is called and false is returned.
+       actions or if all queued actions return true. If an action
+       returns false then this function stops processing actions and
+       returns false. If st is null or pegc_has_error() returns true
+       then this routine returns false. On a severe error
+       (e.g. internal errors) pegc_set_error_e() is called and false
+       is returned.
+
+       The action queue is not emptied by this operation, which means its
+       possible to replay all queued actions. Use pegc_clear_actions()
+       to clear the queue.
     */
     bool pegc_trigger_actions( pegc_parser * st );
 
@@ -1345,6 +1350,21 @@ extern "C" {
        Deallocates all queued actions.
     */
     void pegc_clear_actions( pegc_parser * st );
+
+    /**
+       A rule which triggers and clears the action queue. It returns
+       the same as pegc_trigger_actions(). Note that the whole queue
+       is cleared, even if processing stops due to a failed action.
+    */
+    bool PegcRule_mf_flush_actions( PegcRule const * self, pegc_parser * st );
+    /**
+       A rule for PegcRule_mf_flush_actions().
+    */
+    extern const PegcRule PegcRule_flush_actions;
+    /**
+       Returns PegcRule_flush_actions.
+    */
+    PegcRule pegc_r_flush_actions();
 
     /**
        Creates a rule which matches between min and max

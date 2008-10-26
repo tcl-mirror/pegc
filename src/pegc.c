@@ -424,8 +424,8 @@ bool pegc_set_error_v( pegc_parser * st, char const * fmt, va_list vargs )
     {
 	pegc_line_col( st, &(st->errinfo.line), &(st->errinfo.col) );
 	Clob * cb = clob_new();
+	clob_appendf(cb,"pegc_set_error_v(): near line %u, col %u\n",st->errinfo.line,st->errinfo.col);
 	clob_vappendf(cb,fmt,vargs);
-	clob_appendf(cb,"\npegc_set_error_v() says: near line %u, col %u",st->errinfo.line,st->errinfo.col);
 	st->errinfo.message = clob_take_buffer(cb);
 	clob_finalize(cb);
 	if( ! st->errinfo.message ) return false;
@@ -776,9 +776,10 @@ PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec )
 
 static bool PegcRule_mf_error( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_rule_check( self, st, false, false, true ) ) return false;
+    //if( ! pegc_rule_check( self, st, false, false, true ) ) return false;
+    if( ! self || !self->data || !st ) return false;
     char const * msg = self->data ? (char const *)self->data : "unspecified error";
-    pegc_set_error_e( st, msg );
+    pegc_set_error_e( st, "%s", msg );
     return false;
 }
 
@@ -1020,13 +1021,12 @@ bool PegcRule_mf_chari( PegcRule const * self, pegc_parser * st )
 static bool PegcRule_mf_star( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_rule_check( self, st, false, true, true ) ) return false;
-    int matches = 0;
+    size_t matches = 0;
     pegc_const_iterator orig = pegc_pos(st);
     pegc_const_iterator p2 = orig;
-    bool matched = false;
     do
     {
-	if( (matched = self->proxy->rule( self->proxy, st )) )
+	if( self->proxy->rule( self->proxy, st ) )
 	{
 	    ++matches;
 	    if( p2 == pegc_pos(st) )
@@ -1448,7 +1448,7 @@ bool pegc_trigger_actions( pegc_parser * st )
 {
     if( pegc_has_error(st) ) return false;
     pegc_action * a = st->actions;
-    if( ! a ) return false;
+    if( ! a ) return true;
     while( a && a->left ) a = a->left;
     while( a )
     {
@@ -1466,6 +1466,20 @@ bool pegc_trigger_actions( pegc_parser * st )
 	a = a->right;
     }
     return true;
+}
+
+const PegcRule PegcRule_flush_actions = PEGCRULE_INIT1(PegcRule_mf_flush_actions);
+bool PegcRule_mf_flush_actions( PegcRule const * self, pegc_parser * st )
+{
+    if( !self || !st ) return false;
+    bool ret = pegc_trigger_actions(st);
+    pegc_clear_actions(st);
+    return ret;
+}
+
+PegcRule pegc_r_flush_actions()
+{
+    return PegcRule_flush_actions;
 }
 
 static bool PegcRule_mf_action( PegcRule const * self, pegc_parser * st )
@@ -1998,21 +2012,26 @@ static bool PegcRule_mf_if_then_else( PegcRule const * self, pegc_parser * st )
     if( ! pegc_rule_check( self, st, true, false, true ) ) return false;
     pegc_if_then_else const * ite = (pegc_if_then_else const *)self->data;
     pegc_const_iterator orig = pegc_pos(st);
-    if( ite->If->rule( ite->If, st ) )
+    if( ite->If->rule && ite->If->rule( ite->If, st ) )
     {
-	if( ite->Then->rule( ite->Then, st ) )
+	//MARKER;printf("IF succeeded.\n");
+	if( ite->Then && ite->Then->rule( ite->Then, st ) )
 	{
+	    //MARKER;printf("THEN succeeded.\n");
 	    pegc_set_match( st, orig, pegc_pos(st), false );
 	    return true;
 	}
 	pegc_set_pos( st, orig );
+	//MARKER;printf("THEN failed.\n");
 	return false;
     }
-    else if( ite->Else && ite->Else->rule( ite->Else, st ) )
+    else if( ite->Else && ite->Else->rule && ite->Else->rule( ite->Else, st ) )
     {
+	//MARKER;printf("ELSE succeeded.\n");
 	pegc_set_match( st, orig, pegc_pos(st), false );
 	return true;
     }
+    //MARKER;printf("IF/THEN/ELSE succeeded.\n");
     pegc_set_pos( st, orig );
     return false;
 }
