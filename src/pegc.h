@@ -991,6 +991,7 @@ extern "C" {
        match to avoid an endless loop.
     */
     PegcRule pegc_r_star_p( PegcRule const * proxy );
+
     /**
        Functionally equivalent to pegc_r_star_p() except that it must
        allocate a (shallow) copy of the proxy rule.

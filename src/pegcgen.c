@@ -149,12 +149,50 @@ static const PegcRule PG_op_larrow = PEGCRULE_INIT2(PegcRule_mf_string,"<-");
 static const PegcRule PG_op_cap_open = PEGCRULE_INIT2(PegcRule_mf_string,"<");
 static const PegcRule PG_op_cap_close = PEGCRULE_INIT2(PegcRule_mf_string,">");
 static const PegcRule PG_end = PEGCRULE_INIT;
+//static const PegcRule * PG_endp = 0;
+static const PegcRule PG_endv = PEGCRULE_INIT;
 static const PegcRule PG_alpha_uscor =
     PEGCRULE_INIT2(PegcRule_mf_oneofi,"abcdebfhijklmnopqrstuvwxyz_");
 
+static bool PG_ws( PegcRule const * self, pegc_parser * p )
+{
+    if( !self || !self->proxy || !self->proxy->rule || !p || pegc_has_error(p) ) return false;
+    //pegc_const_iterator orig = pegc_pos(p);
+    PegcRule const spaces = pegc_r_star_p(&PegcRule_space);
+    spaces.rule(&spaces,p);
+    pegc_const_iterator p1 = pegc_pos(p);
+    if( ! self->proxy->rule( self->proxy, p ) )
+    {
+	/*
+	  We're gonna break a pegc prime rule here and possibly
+	  consume even though we return false. We don't want to parse
+	  those spaces again.
+	 */
+	pegc_set_pos( p, p1 );
+	return false;
+    }
+    pegc_const_iterator p2 = pegc_pos(p);
+#if 0
+    spaces.rule(&spaces,p);
+#endif
+    pegc_set_match( p, p1, p2, false );
+    return true;
+}
+
+
 PegcRule pg_r_skipws( pegc_parser * p, PegcRule const R )
 {
-    return pegc_r_pad_v(p, PG_spacing, R, PegcRule_success, true );
+    //return pegc_r_pad_v(p, PG_spacing, R, PegcRule_success, true );
+    PegcRule r = pegc_r(PG_ws,0);
+    r.proxy = pegc_copy_r_v(p,R);
+    return r;
+}
+PegcRule pg_r_skipws_p( pegc_parser * p, PegcRule const * R )
+{
+    //return pegc_r_pad_v(p, PG_spacing, R, PegcRule_success, true );
+    PegcRule r = pegc_r(PG_ws,0);
+    r.proxy = R;
+    return r;
 }
 
 bool PG_mf_identifier( PegcRule const * self, pegc_parser * p )
@@ -173,18 +211,30 @@ bool PG_mf_identifier( PegcRule const * self, pegc_parser * p )
     }
     else
     {
-	PegcRule const idstart =
-	    //pegc_r_oneof("abcdebfhijklmnopqrstuvwxyz_",false)
-	    //pegc_r_char_spec(p,"[a-zA-Z_]")
-	    PG_alpha_uscor
-	    ;
-	PegcRule const idcont = pegc_r_star_v(p,pegc_r_or_ev(p,idstart,PegcRule_digit,PG_end));
+#if 0
+#define cp pegc_copy_r_v
+	PegcRule const * idstart = &PG_alpha_uscor;
+	PegcRule const * subsequent = cp(p,pegc_r_or_ep(p,idstart,&PegcRule_digit,PG_endp));
+	PegcRule const * idcont = cp(p,pegc_r_star_p(subsequent));
+	PegcRule const * id = cp(p,pegc_r_and_ep(p, idstart, idcont, PG_endp));
+	PegcRule const * pad = cp(p,pg_r_skipws_p( p, id ));
+	//PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_spacing, PG_end);
+	PegcRule * act = cp(p,pegc_r_action_i_p( p, pad, pg_test_action, "PG_mf_identifier()"));
+	r = act;
+	pegc_gc_register( p, (void *)PG_mf_identifier, 0, r, 0 );
+#undef cp
+#else
+	PegcRule const idstart = PG_alpha_uscor;
+	PegcRule const subsequent = pegc_r_or_ev(p,idstart,PegcRule_digit,PG_end);
+	PegcRule const idcont = pegc_r_star_v(p,subsequent);
 	PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_end);
 	PegcRule const pad = pg_r_skipws( p, id );
 	//PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_spacing, PG_end);
 	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "PG_mf_identifier()");
-	r = pegc_copy_r_v( p, act );
+	r = pegc_copy_r_v(p, act );
 	pegc_gc_register( p, (void *)PG_mf_identifier, 0, r, 0 );
+#endif
+	MARKER;printf("Created IDENTIFIER rule @%p w/ rule @%p()\n",r,r->rule);
     }
     if( r && r->rule ) return r->rule(r,p);
     else return false;
@@ -598,6 +648,7 @@ int a_test()
     pegc_parser * P = PGApp.P;//pegc_create_parser( src, -1 );
     pegc_set_input( P, src, -1 );
     PegcRule const R = pegc_r_or_ev(P,
+				    PegcRule_eof,
 				    PG_r_primary,
 				    PG_spacing,
 				    pegc_r_action_i_v( P, PG_r_comment_cpp, pg_test_action, "PG_r_comment_cpp"),

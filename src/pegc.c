@@ -1224,15 +1224,16 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    else
 	    {
 		//MARKER;printf("re-allocating list for %u items.\n",count);
-		void * re = realloc( li, sizeof(PegcRule*) * count  );
+		PegcRule const ** re = (PegcRule const **)realloc( li, sizeof(PegcRule*) * count  );
 		if( ! re )
 		{
 		    ok = false;
 		    break;
 		}
-		li = (PegcRule const **)re;
+		li = re;
 	    }
 	}
+	if( ! li ) break;
 	li[pos++] = vr;
     }
     if( !ok || !pos || !li )
