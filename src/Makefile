@@ -12,11 +12,11 @@ ifeq (1,$(TCC))
 	-Wall
 else
   # Assume gcc-compatible flags:
-  CXXFLAGS += -g
+#  CXXFLAGS += -g
+  CXXFLAGS += -Os
   CPPFLAGS += \
 	-Wimplicit-function-declaration \
-	-Wall \
-	-g
+	-Wall
 endif
 
 # CPPFLAGS ?= -g
@@ -46,12 +46,22 @@ $(call ShakeNMake.CALL.RULES.LIBS,libwhgc)
 $(libwhgc.LIB): $(libwhhash.LIB)
 
 ########################################################################
+# Clob lib
+WHCLOB_OBJ := whclob.o vappendf.o
+libwhclob.LIB.OBJECTS = $(WHCLOB_OBJ)
+$(call ShakeNMake.CALL.RULES.LIBS,libwhclob)
+libs: $(libwhclob.LIB)
+
+
+########################################################################
 # pegc lib:
-libpegc.LIB.OBJECTS := clob.o vappendf.o pegc.o
+libpegc.LIB.EXTRALIBS :=  $(libwhgc.LIB) $(libwhhash.LIB) $(libwhclob.LIB)
+libpegc.LIB.EXTRAOBJ :=  $(libwhgc.LIB.OBJECTS) $(libwhclob.LIB.OBJECTS)
+libpegc.LIB.OBJECTS := pegc.o
 ifeq (1,1)
-  libpegc.LIB.OBJECTS += $(libwhgc.LIB.OBJECTS)
+  libpegc.LIB.OBJECTS += $(libpegc.LIB.EXTRAOBJ)
 else
-  libpegc.LIB.OBJECTS += $(libwhgc.LIB) $(libwhhash.LIB)
+  libpegc.LIB.OBJECTS += $(libpegc.LIB.EXTRALIBS)
 endif
 $(call ShakeNMake.CALL.RULES.LIBS,libpegc)
 $(libpegc.LIB): $(libwhgc.LIB)
@@ -60,7 +70,7 @@ test.BIN.OBJECTS := test.o
 $(call ShakeNMake.CALL.RULES.BINS,test)
 $(test.BIN): $(libpegc.LIB)
 
-pegcgen.BIN.LDFLAGS := $(libpegc.LIB)
+pegcgen.BIN.LDFLAGS := -L. -lpegc
 pegcgen.BIN.OBJECTS := pegcgen.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,pegcgen)
 $(pegcgen.BIN): $(libpegc.LIB)

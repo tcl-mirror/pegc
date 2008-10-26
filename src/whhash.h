@@ -56,7 +56,7 @@ extern "C" {
    whgc_destroy( h );
    @endcode
 
-   @seciond whhash_sec_ownership Memory ownership
+   @section whhash_sec_ownership Memory ownership
 
    By default a hashtable does no memory management of its keys or
    values.  However, whhash_set_key_dtor() and whhash_set_val_dtor()
@@ -143,7 +143,7 @@ extern "C" {
  */
 typedef unsigned long whhash_val_t;
 
-/* @var whhash_val_t hashval_t_err
+/* @var const whhash_val_t hashval_t_err
 
    hashval_t_err is ((whhash_val_t)-1). It is used to report
    hash value errors. Hash routines which want to report
@@ -178,22 +178,22 @@ whhash_create(whhash_val_t minsize,
 	      int (*key_eq_fn) (void const *,void const *));
 
 
-/************************************************************************
-Sets the destructor function for h's keys, which are cleaned up when
-items are removed or the whhash_table is destroyed. By default a
-whhash_table owns its keys and will call free() to release them. If you
-use keys from managed memory and don't want them destroyed by the
-whhash_table, simply pass 0 as the dtor argument.
+/**
+   Sets the destructor function for h's keys, which are cleaned up
+   when items are removed or the whhash_table is destroyed. By default
+   a whhash_table owns its keys and will call free() to release
+   them. If you use keys from managed memory and don't want them
+   destroyed by the whhash_table, simply pass 0 as the dtor argument.
  */
 void whhash_set_key_dtor( whhash_table * h, void (*dtor)( void * ) );
 
-/************************************************************************
-This is similar to whhash_set_key_dtor(), but applies to whhash_table
-values instead of keys. By default a whhash_table does not own its values
-and will not delete them under any circumstances. To make the
-whhash_table take ownership, simply pass 'free' (or suitable function for
-your type, e.g. many structs may need a custom destructor) to this
-function.
+/**
+   This is similar to whhash_set_key_dtor(), but applies to
+   whhash_table values instead of keys. By default a whhash_table does
+   not own its values and will not delete them under any
+   circumstances. To make the whhash_table take ownership, simply pass
+   'free' (or suitable function for your type, e.g. many structs may
+   need a custom destructor) to this function.
  */
 void whhash_set_val_dtor( whhash_table * h, void (*dtor)( void * ) );
 
@@ -205,16 +205,7 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
 
 
 /*****************************************************************************
- * whhash_insert
-   
- @name        whhash_insert
- @param   h   the whhash_table to insert into
- @param   k   the key - whhash_table claims ownership and will free on removal (but see below)
- @param   v   the value - does not claim ownership. v must outlive this whhash_table. (See below)
- @return      non-zero for successful (re)insertion or update.
-
- This function will cause the table to expand if the insertion would take
- the ratio of entries to table size over the maximum load factor.
+ whhash_insert() adds new entries to a hashtable.
 
  None of the parameters may be 0. Theoretically a value of 0 is okay but
  in practice it means we cannot differentiate between "not found" and
@@ -222,20 +213,30 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
 
  When a key is re-inserted (already mapped to something) then this
  function operates like whhash_replace() and non-zero is
- returned.
+ returned. As that may trigger a deallocation of the associated value,
+ when in doubt you should use whhash_take() to remove the entry before
+ re-adding it (but then freeing the old value becomes your responsibility).
 
- Key/value ownership: one may set the ownership policy by using
- whhash_set_key_dtor() and whhash_set_val_dtor(). The destructors
- are used whenever items are removed from the whhash_table or the whhash_table
- is destroyed.
+ This function will cause the table to expand if the insertion would take
+ the ratio of entries to table size over the maximum load factor.
+
+ Key/value ownership: By default a hashtable does not own its keys nor
+ its values. You may set the ownership policy by using
+ whhash_set_key_dtor() and whhash_set_val_dtor(). The destructors are
+ called whenever items are removed from the whhash_table or the
+ whhash_table is destroyed.
+   
+ @name        whhash_insert
+ @param   h   the whhash_table to insert into
+ @param   k   the key - whhash_table claims ownership and will free on removal (but see below)
+ @param   v   the value - does not claim ownership. v must outlive this whhash_table. (See below)
+ @return      non-zero for successful (re)insertion or update.
  */
 int 
 whhash_insert(whhash_table *h, void *k, void *v);
 
 /*****************************************************************************
- whhash_replace
-
- Function to change the value associated with a key, where there
+ whhash_replace() changes the value associated with a key, where there
  already exists a value bound to the key in the whhash_table. If (v ==
  existingValue) then this routine has no side effects, otherwise this
  function calls whhash_free_val() for any existing value tied to

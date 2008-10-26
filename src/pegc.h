@@ -1,6 +1,7 @@
 #ifndef WANDERINGHORSE_NET_PEGC_H_INCLUDED
 #define WANDERINGHORSE_NET_PEGC_H_INCLUDED
-/*! @mainpage pegc: PEG parser generation library
+/*!
+@page pegc_page_main pegc: PEG parser generation library
 
 pegc is a toolkit for writing PEG-style parsers in C using something
 similar to functional composition, conceptually similar to C++ parsing
@@ -310,14 +311,16 @@ extern "C" {
        adjusted so that they exclude any leading or trailing spaces.
     */
     pegc_cursor pegc_cursor_trimmed( pegc_cursor const cur );
+    struct pegc_parser;
     /**
+       @typedef struct pegc_parser
+
        pegc_parser is the parser class used by the pegc API. It is an
        opaque type used by almost all functions in the API. This type
        holds information about the current state of a given parse,
        such as the input range, a pointer to the current position of
        the input, and memory dynamically allocated by various rules.
     */
-    struct pegc_parser;
     typedef struct pegc_parser pegc_parser;
 
     /**
@@ -697,7 +700,8 @@ extern "C" {
 
 
     struct PegcRule;
-    /**
+    /*! @typedef bool (*PegcRule_mf) ( struct PegcRule const * self, pegc_parser * state )
+
        A typedef for "member functions" of PegcRule objects.
 
        Conventions:

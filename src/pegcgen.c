@@ -637,13 +637,13 @@ bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p )
 int a_test()
 {
     char const * src = 0;
-    Clob * cb = 0;
+    whclob * cb = 0;
     if( PGApp.argv && *PGApp.argv )
     {
-	cb = clob_new();
-	if( ClobRC.IOError != clob_importer_filename( cb, *PGApp.argv ) )
+	cb = whclob_new();
+	if( ClobRC.IOError != whclob_importer_filename( cb, *PGApp.argv ) )
 	{
-	    src = clob_bufferc(cb);
+	    src = whclob_bufferc(cb);
 	    MARKER;printf("Read in file [%s]\n",*PGApp.argv);
 	}
     }
@@ -705,7 +705,7 @@ int a_test()
 	pegc_clear_actions( PGApp.P );
     }
     pegc_set_input(P,0,0);
-    clob_finalize(cb);
+    whclob_finalize(cb);
     //pegc_destroy_parser(P);
     return rc;
 }

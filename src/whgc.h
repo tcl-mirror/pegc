@@ -125,15 +125,17 @@ extern "C" {
        is reentrant and does not need to be locked.
     */
 
-    /**
+    struct whgc_context;
+    /*!\typedef whgc_context
+
        whgc_context is an opaque handle for use with the whgc_xxx()
        routines. They are created using whgc_create_context() and
        destroyed using whgc_destroy_context().
     */
-    struct whgc_context;
     typedef struct whgc_context whgc_context;
 
-    /**
+    /*!\typedef void (*whgc_dtor_f)(void*)
+
        Typedef for deallocation functions symantically compatible with
        free().
     */
@@ -162,7 +164,7 @@ extern "C" {
        whgc_create_context() for the given context. It is sometimes
        useful as a lookup key.
     */
-    void const * whgc_get_client_context(whgc_context const *);
+    void const * whgc_get_context_client(whgc_context const *);
 
 
     /**
@@ -194,9 +196,7 @@ extern "C" {
        same context. Doing so will cause false to be returned.
 
        Note that the destruction order of items cleaned up using this
-       mechanism is technically undefined. Currently it is in reverse
-       order of their registration, but this has a significant overhead
-       (+3 pointers per entry), so it might be removed.
+       mechanism is in reverse order of their registration.
     */
     bool whgc_register( whgc_context * cx,
 			void * key, whgc_dtor_f keyDtor,
@@ -222,6 +222,23 @@ extern "C" {
        registration (FIFO).
     */
     void whgc_destroy_context( whgc_context * );
+
+    /**
+       A destructor for use with functions taking a whgc_dtor_f parameter.
+       It requires that its argument be a whgc_context pointer, on which
+       it calls whgc_destroy_context().
+
+       This can be useful if you want one gc context to manage multiple
+       other contexts. Simply use, e.g.:
+
+       @code
+       whgc_gc_add( mainCtx, subCtx, whgc_context_dtor );
+       @endcode
+
+       where mainCtx is the primary context and subCtx is a context which
+       belongs to mainCtx.
+    */
+    void whgc_context_dtor( void * );
 
     /**
        Searches the given context for the given key. Returns 0 if the

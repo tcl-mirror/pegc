@@ -3,6 +3,34 @@
 #include "whgc.h"
 #include "whhash.h"
 
+/**
+   Partial list of changes changes by Stephan Beal:
+
+   - from unsigned int to unsigned long for hash keys.
+
+   - created typedef whhash_val_t.
+
+   - Added whhash_hash_cstring_{djb2,sdbm}() algorithms,
+   taken from: http://www.cse.yorku.ca/~oz/hash.html
+
+   - whhash_iter() now returns 0 if the whhash_table
+   is empty, simplifying iteration error checking a bit.
+
+   - The API is now const-safe, insofar as feasible. That is, funcs
+   which can get away with (void const *) instead of (void*) now use
+   const parameters.
+
+   - Added ability to set a custom key/value dtors for each
+   whhash_table.
+
+   - Slightly changed semantics of some routines to accommodate the
+   dtor handling.
+
+   - Default dtor for keys is now null instead of free.
+*/
+
+
+
 #include <stdio.h> /* only for debuggering. */
 
 #if defined(__cplusplus)
@@ -55,12 +83,13 @@ struct whgc_listener
 typedef struct whgc_listener whgc_listener;
 #define WHGC_LISTENER_INIT {0,0}
 static const whgc_listener whgc_listener_init = WHGC_LISTENER_INIT;
-/**
-   The main handle type used by the whgc API.
-*/
+
 struct whgc_context
 {
     void const * client;
+    /**
+       Hashtable of (void*) to (whgc_gc_entry*)
+    */
     whhash_table * ht;
     /**
        Holds the right-most (most recently added) entry. A cleanup,
@@ -68,7 +97,13 @@ struct whgc_context
        order.
     */
     whgc_gc_entry * current;
+    /**
+       Event listeners.
+    */
     whgc_listener * listeners;
+    /**
+       Informal stats.
+    */
     whgc_stats stats;
 };
 
@@ -127,7 +162,7 @@ void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor )
     return ret;
 }
 
-void const * whgc_get_client_context(whgc_context const *cx)
+void const * whgc_get_context_client(whgc_context const *cx)
 {
     return cx ? cx->client : 0;
 }
@@ -359,6 +394,11 @@ void whgc_destroy_context( whgc_context * cx )
 	L = l;
     }
     whgc_free(cx);
+}
+
+void whgc_context_dtor( void * p )
+{
+    whgc_destroy_context( (whgc_context*)p );
 }
 
 whgc_stats whgc_get_stats( whgc_context const * cx )

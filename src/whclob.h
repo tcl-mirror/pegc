@@ -1,15 +1,14 @@
-#ifndef WANDERINGHORSE_NET_CLOB_H_INCLUDED_
-#define WANDERINGHORSE_NET_CLOB_H_INCLUDED_ 1
+#ifndef WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_
+#define WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_ 1
 #include <stdarg.h>
-#include <stdio.h> /* FILE */
+#include <stdio.h> /**FILE */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/************************************************************************
-@indexpage
+/*! @page whclob_page_main whclob: WanderingHorse.net dynamic char array utilities
 
-The clob API encapsulates behaviours related to creating, appending,
+The whclob API encapsulates behaviours related to creating, appending,
 reading, writing, and freeing C-style blobs (stored in memory as char
 arrays).
 
@@ -18,7 +17,7 @@ string data. It provides, for example, printf-like functionality which
 makes use of the dynamic resize features blobs to simplify the
 creation of dynamic C-style strings.
 
-Clob is heavily inspired and influenced by code in the Fossil source
+whclob is heavily inspired and influenced by code in the Fossil source
 tree (http://www.fossil-scm.org) written by D. Richard Hipp. In that
 tree, blobs are used to store files in memory and to provide output
 buffering support for the built-in web/cgi servers.
@@ -34,21 +33,21 @@ Author: Stephan Beal (http://wanderinghorse.net/home/stephan/)
 
 USAGE:
 
-A Clob object must be initialized via clob_init() and finalized via
-clob_finalize(). Between those two calls, any number of other clob-API
+A whclob object must be initialized via whclob_init() and finalized via
+whclob_finalize(). Between those two calls, any number of other clob-API
 functions may be used (unless documented otherwise). As an example:
 
 \code
-Clob * c;
-clob_init( &c, 0, 0 );
-clob_appendf( c, "Hello, %s!", "world");
+whclob * c;
+whclob_init( &c, 0, 0 );
+whclob_appendf( c, "Hello, %s!", "world");
 ...
-clob_finalize( c );
+whclob_finalize( c );
 \endcode
 
-You can dump a Clob to stdout with the clob_export() API:
+You can dump a whclob to stdout with the whclob_export() API:
 
-clob_export( c, stdout, clob_exporter_FILE );
+whclob_export( c, stdout, whclob_exporter_FILE );
 
 But doing so with binary data is not recommended.
 
@@ -56,82 +55,82 @@ TODO:
 
 - The read/write API is not complete.
 
-
-
 ************************************************************************/
 
-#if !defined(CLOB_USE_ZLIB)
-#define CLOB_USE_ZLIB 0
+#if !defined(WHCLOB_USE_ZLIB)
+#define WHCLOB_USE_ZLIB 0
 #endif
 
 /**
-   ClobRC_t holds status codes for the clob API.
+   whclobrc_t holds status codes for the clob API.
    Their values must be unique negative integers, with
    the exception of OK, which must be 0.
 
    Many functions in the clob API return 0 or a positive
    number on success and one of these codes on error.
 
-   The are accessed like: ClobRC.AllocError. This is unconventional,
+   The are accessed like: whclobrc.AllocError. This is unconventional,
    but the intention is so that debuggers can get an actual symbol
    name.
 */
-struct ClobRC_t
+struct whclobrc_t
 {
-	/* The success status code. */
+	/** The success status code. */
 	const long OK;
-	/* Generic error code. */
+	/** Generic error code. */
 	const long Err;
-	/* Signals that an allocation or reallocation failed. */
+	/** Signals that an allocation or reallocation failed. */
 	const long AllocError;
-	/* Signals that a null was passed or received where
+	/** Signals that a null was passed or received where
 	   one was not expected. */
 	const long UnexpectedNull;
-	/* Signals that some value was out of range. */
+	/** Signals that some value was out of range. */
 	const long RangeError;
 	/** Signals an I/O error of some sort. */
 	const long IOError;
 	/** Signals some sort of argument-type error (e.g. (void *) args). */
 	const long ArgError;
 };
-typedef struct ClobRC_t ClobRC_t;
+typedef struct whclobrc_t whclobrc_t;
 
 /**
    The official way to get the clob status code values
-   is via the ClobRC object.
+   is via the whclobrc object.
 */
-extern const ClobRC_t ClobRC;
+extern const whclobrc_t whclobrc;
 
 /**
-   The Clob type (an opaque struct) holds data relating to in-memory
-   blobs allocated by malloc(). A Clob holds (and owns) a
+   @typedef whclob
+
+   The whclob type (an opaque struct) holds data relating to in-memory
+   blobs allocated by malloc(). A whclob holds (and owns) a
    varying-length character array for storing arbitrary binary data.
 
-   Note that because client code cannot see the Clob implementation,
-   they cannot create Clob objects on the stack. The proper way
-   to create, initialize, and free Clob objects is:
+   Note that because client code cannot see the whclob implementation,
+   they cannot create whclob objects on the stack. The proper way
+   to create, initialize, and free whclob objects is:
 
 \code
-   Clob * c;
-   if( ClobRC.OK != clob_init(c,0,0) ) { ... error ... }
-   clob_finalize( c );
+   whclob * c;
+   if( whclobrc.OK != whclob_init(c,0,0) ) { ... error ... }
+   whclob_finalize( c );
 \endcode
 */
-typedef struct Clob Clob;
+typedef struct whclob whclob;
 
 /**
-   Allocates a new Clob object and assigns (*cb) to it. It initializes
+   Allocates a new whclob object and assigns (*cb) to it. It initializes
    the object as described below. On error it assigns (*cb) to 0.
 
-   It is only legal to call this on fresh, uninitialized Clob
+   It is only legal to call this on fresh, uninitialized whclob
    pointer. A clob is considered to be "uninitialized" just after
-   declaration (before it is assigned to) and after clob_finalize() has
+   declaration (before it is assigned to) and after whclob_finalize() has
    been called on it.
 
-   To avoid memory leaks, for each successful call to clob_init() you
-   must have a matching call to clob_finalize(). If this function
+   To avoid memory leaks, for each successful call to whclob_init() you
+   must have a matching call to whclob_finalize(). If this function
    fails then (*cb) is set to 0, so there is no need to call
-   clob_finalize() (but it is still safe (but a no-op) to do so, for
+   whclob_finalize() (but it is still safe (but a no-op) to do so, for
    the cases where doing so may simplify error handling).
 
    Interpretation of the 'data' and 'n' arguments:
@@ -152,36 +151,36 @@ typedef struct Clob Clob;
 
    RETURNS:
 
-   If this function returns ClobRC.OK then (*cb) points to a new Clob
+   If this function returns whclobrc.OK then (*cb) points to a new whclob
    object. On error it returns one of the negative integers defined in
-   ClobRC:
+   whclobrc:
 
-   - ClobRC.UnexpectedNull if (!cb).
+   - whclobrc.UnexpectedNull if (!cb).
 
-   - ClobRC.AllocError if allocation of the new Clob fails.
+   - whclobrc.AllocError if allocation of the new whclob fails.
 
    USAGE NOTES:
 
-   Calling clob_finalize(0) has no ill effects (other than an
+   Calling whclob_finalize(0) has no ill effects (other than an
    ignorable error code), so algorithms may be organized a call
-   clob_finalize(myClob) regardless of whether clob_init(&myClob)
+   whclob_finalize(myClob) regardless of whether whclob_init(&myClob)
    succeeds or fails. It is anticipated that this may simplify some
    error-handling cases.
 */
-long clob_init( Clob ** cb, char const * data, long n );
+long whclob_init( whclob ** cb, char const * data, long n );
 
 /**
-   A simplified form of clob_init() which allocates a new, empty Clob
+   A simplified form of whclob_init() which allocates a new, empty whclob
    object and returns it. The caller owns it and must finalize it with
-   clob_finalize().
+   whclob_finalize().
 */
-Clob * clob_new();
+whclob * whclob_new();
 
 
 /**
-  See clob_set_alloc_policy().
+  See whclob_set_alloc_policy().
 */
-typedef long (*clob_alloc_policy_t)( long );
+typedef long (*whclob_alloc_policy_t)( long );
 
 /**
    Sets the current allocation size determination policy and returns
@@ -213,44 +212,44 @@ typedef long (*clob_alloc_policy_t)( long );
    by passing 0 to this function, then passing that return value
    back to this function.
 */
-clob_alloc_policy_t clob_set_alloc_policy( clob_alloc_policy_t );
+whclob_alloc_policy_t whclob_set_alloc_policy( whclob_alloc_policy_t );
 
 
 /**
    Free the resources, if any, associated with cb and zeroes out the
-   freed memory. After calling this, clob_buffer(cb) will be an empty
-   string and both clob_size(cb) and clob_capacity(cb) will be 0.
+   freed memory. After calling this, whclob_buffer(cb) will be an empty
+   string and both whclob_size(cb) and whclob_capacity(cb) will be 0.
 
-   It is illegal to pass a Clob which was not initialized by
-   clob_init(). Doing so results in undefined behaviour.
+   It is illegal to pass a whclob which was not initialized by
+   whclob_init(). Doing so results in undefined behaviour.
 
    After this function returns, cb can be re-used by any clob API
-   which is append-friendly (e.g. not clob_char_filln()).
+   which is append-friendly (e.g. not whclob_char_filln()).
 
    Note that this function does not actually free the cb pointer
    itself.
 
-   On success it returns ClobRC.OK. On error it returns:
+   On success it returns whclobrc.OK. On error it returns:
 
-   - ClobRC.UnexpectedNull if (!cb).
+   - whclobrc.UnexpectedNull if (!cb).
 */
-long clob_reset( Clob * cb );
+long whclob_reset( whclob * cb );
 
 /**
-   clob_finalize() works just like clob_reset(), plus it deallocates cb by
+   whclob_finalize() works just like whclob_reset(), plus it deallocates cb by
    calling free(). After calling this, cb is invalid until/unless it
-   is passed to clob_init() again.
+   is passed to whclob_init() again.
 
-   Returns ClobRC.OK on success and ClobRC.UnexpectedNull if (!cb).
+   Returns whclobrc.OK on success and whclobrc.UnexpectedNull if (!cb).
 */
-long clob_finalize( Clob * cb );
+long whclob_finalize( whclob * cb );
 
 /**
    Force's cb's cursor and used counter to be in bounds of the
    actual allocated memory. They are moved forwards or backwards,
    as necessary, to bring them into bounds.
 */
-void clob_force_in_bounds( Clob * cb );
+void whclob_force_in_bounds( whclob * cb );
 
 /**
    Tries to (re)allocate at least sz bytes of memory for
@@ -263,24 +262,24 @@ void clob_force_in_bounds( Clob * cb );
    On success it returns the number of bytes allocated to cb. The
    number may be larger than sz, due to internal details of this API
    and the implementation of the current allocation policy (see
-   clob_set_alloc_policy()).
+   whclob_set_alloc_policy()).
 
    On error it returns one of the negative numbers specified
-   by ClobRC:
+   by whclobrc:
 
-   - ClobRC.AllocError = (re)allocation failed.
+   - whclobrc.AllocError = (re)allocation failed.
 
 */
-long clob_realloc( Clob * cb, unsigned long sz );
+long whclob_realloc( whclob * cb, unsigned long sz );
 
 /**
-   Works like clob_realloc(), but marks all memory
+   Works like whclob_realloc(), but marks all memory
    in the clob as used. This means that appending
    will start from sz, rather than from whatever
    the end previously was. It returns the same values
-   as clob_realloc().
+   as whclob_realloc().
 */
-long clob_resize( Clob * cb, unsigned long sz );
+long whclob_resize( whclob * cb, unsigned long sz );
 
 /**
    Returns the number of "used" bytes in cb.  Appending to a clob will
@@ -288,17 +287,17 @@ long clob_resize( Clob * cb, unsigned long sz );
    have more memory allocated to them than is "used".
 
    Returns 0 or greater (the size of cb) on success and
-   ClobRC.UnexpectedNull if (!cb).
+   whclobrc.UnexpectedNull if (!cb).
 */
-long clob_size( Clob const * cb );
+long whclob_size( whclob const * cb );
 
 /**
    Returns the current allocated capacity of cb, or
-   ClobRC.UnexpectedNull if (!cb).
+   whclobrc.UnexpectedNull if (!cb).
 
-   The capacity will always be equal to or greater than clob_size(cb).
+   The capacity will always be equal to or greater than whclob_size(cb).
 */
-long clob_capacity( Clob const * cb );
+long whclob_capacity( whclob const * cb );
 
 /**
    Returns a pointer to cb's buffer (may be 0). The buffer is owned by
@@ -310,14 +309,14 @@ long clob_capacity( Clob const * cb );
 
    Do not generically depend on the returned array being a
    null-terminated string, as cb can hold arbitrary data. Use
-   clob_size(sb) to get the length of the data.
+   whclob_size(sb) to get the length of the data.
 */
-char * clob_buffer( Clob * cb );
+char * whclob_buffer( whclob * cb );
 
 /**
-   A variant of clob_buffer() for places where a const is needed.
+   A variant of whclob_buffer() for places where a const is needed.
 */
-char const * clob_bufferc( Clob const * cb );
+char const * whclob_bufferc( whclob const * cb );
 
 /**
    Gives up cb's control of any allocated memory and returns it to the
@@ -325,61 +324,61 @@ char const * clob_bufferc( Clob const * cb );
 
    If a blob is storing binary data then there is no way to know the
    size of the returned buffer. Thus if you need its length, be sure
-   to call clob_size(cb) before calling this.
+   to call whclob_size(cb) before calling this.
 
-   This function effectively does clob_reset(cb) but does not finalize
+   This function effectively does whclob_reset(cb) but does not finalize
    cb. Thus after calling this function cb is still a valid object for
-   purposes of the other clob_xxx() functions.
+   purposes of the other whclob_xxx() functions.
  */
-char * clob_take_buffer( Clob * cb );
+char * whclob_take_buffer( whclob * cb );
 
 
 
 /**
-   Flags for clob_seek(), they are identical in nature to SEEK_SET,
+   Flags for whclob_seek(), they are identical in nature to SEEK_SET,
    SEEK_CUR, and SEEK_END used by the conventional fseek() C function.
 
-   CLOB_SEEK_SET: moves the cursor to absolute position (offset).
+   WHCLOB_SEEK_SET: moves the cursor to absolute position (offset).
 
-   CLOB_SEEK_CUR: moves the cursor to (cursor + offset).
+   WHCLOB_SEEK_CUR: moves the cursor to (cursor + offset).
 
-   CLOB_SEEK_END: moves the cursor to relative postition (end -
+   WHCLOB_SEEK_END: moves the cursor to relative postition (end -
    offset), where 'end' is the index 1 after the last character of the
    USED portion of the blob. e.g. the end of "abcd" is at position 4.
 */
-enum ClobSeekWhence { CLOB_SEEK_SET = 0,
-		      CLOB_SEEK_CUR = 1,
-		      CLOB_SEEK_END = -1
+enum ClobSeekWhence { WHCLOB_SEEK_SET = 0,
+		      WHCLOB_SEEK_CUR = 1,
+		      WHCLOB_SEEK_END = -1
 };
 
 /**
-   Similar to the standard fseek(), clob_seek() moves the blob's
+   Similar to the standard fseek(), whclob_seek() moves the blob's
    cursor to its (current pos + offset), relative to whence, which
    must be one of of the ClobSeekFlags values.  Once the seek is
    complete, the cursor is bumped back into bounds (or at EOF). The
    return value is the new cursor position within the blob.
 
-   Note that when using CLOB_SEEK_END, only a negative offset makes
+   Note that when using WHCLOB_SEEK_END, only a negative offset makes
    sense, as a positive offset is out of bounds.
 
    The return value is a positive integer on success, indicting the
    new position within the blob. On error a negative number is
    returned:
 
-   - ClobRC.RangeError = the 'whence' value is unknown.
+   - whclobrc.RangeError = the 'whence' value is unknown.
 
 */
-long clob_seek( Clob * cb, long offset, int whence );
+long whclob_seek( whclob * cb, long offset, int whence );
 
 /**
   Moves cb's cursor back to the begining of the blob.
 */
-void clob_rewind( Clob * cb );
+void whclob_rewind( whclob * cb );
 
-/** Returns ClobRC.OK if pos is within the used bounds of cb,
-    else returns ClobRC.RangeError.
+/** Returns whclobrc.OK if pos is within the used bounds of cb,
+    else returns whclobrc.RangeError.
 */
-long clob_pos_in_bounds( Clob * cb, long pos );
+long whclob_pos_in_bounds( whclob * cb, long pos );
 
 
 /**
@@ -393,19 +392,19 @@ long clob_pos_in_bounds( Clob * cb, long pos );
    in. Normally this is n, but if (startPos + n) would overflow, the
    blob is filled to the end and that (smaller) length is returned.
 
-   On failure it returns one of the values defined in ClobRC:
+   On failure it returns one of the values defined in whclobrc:
 
-   - ClobRC.Err if cb does not contain a blob, or points
+   - whclobrc.Err if cb does not contain a blob, or points
    to a blob but does not own it.
 
-   - ClobRC.RangeError if startPos is out of bounds or n <= 0.
+   - whclobrc.RangeError if startPos is out of bounds or n <= 0.
 */
-long clob_char_filln( Clob * cb, char c, long startPos, long n );
+long whclob_char_filln( whclob * cb, char c, long startPos, long n );
 
 /**
-   Same as clob_char_filln( cb, '\0', 0, clob_size( cb ) );
+   Same as whclob_char_filln( cb, '\\0', 0, whclob_size( cb ) );
 */
-long clob_zero_fill( Clob * cb );
+long whclob_zero_fill( whclob * cb );
 
 
 /**
@@ -419,25 +418,25 @@ long clob_zero_fill( Clob * cb );
    to that copy. This may or may not be expensive, depending on the
    size of the copy.
 
-   Unlike clob_appendf(), this function is safe for use with binary
+   Unlike whclob_appendf(), this function is safe for use with binary
    data, but only if dsize is explicitly set. Otherwise it will only
    append up to the first null character in data.
 
    On success a positive integer is returned, the number of bytes by
    which the blob extended. On failure, one of the negative values
-   defined in ClobRC is returned:
+   defined in whclobrc is returned:
 
-   - ClobRC.AllocError if a memory (re)allocation fails.
+   - whclobrc.AllocError if a memory (re)allocation fails.
 
-   - ClobRC.RangeError if dsize is 0.
+   - whclobrc.RangeError if dsize is 0.
 */
-long clob_append( Clob * cb, char const * data, long dsize );
+long whclob_append( whclob * cb, char const * data, long dsize );
 
 /**
    Appends n copies of ch to cb and returns the number added.  If n is less
-   than 1 then ClobRC.RangeError is returned and cb is not modified.
+   than 1 then whclobrc.RangeError is returned and cb is not modified.
 */
-long clob_append_char_n( Clob * cb, char ch, const long n );
+long whclob_append_char_n( whclob * cb, char ch, const long n );
 
 /*
   Makes a deep copy of src, placing it into dest.
@@ -445,15 +444,15 @@ long clob_append_char_n( Clob * cb, char ch, const long n );
   Neither src nor dest may be 0. dest is deallocated before the copy
   happens.
 
-  Returns one of the values defined in ClobRC:
+  Returns one of the values defined in whclobrc:
 
-  - ClobRC.RangeError if (src==dest).
+  - whclobrc.RangeError if (src==dest).
 
-  - ClobRC.AllocError if a memory (re)allocation fails.
+  - whclobrc.AllocError if a memory (re)allocation fails.
 
-  - ClobRC.OK on success.
+  - whclobrc.OK on success.
 */
-long clob_copy( Clob * src, Clob * dest );
+long whclob_copy( whclob * src, whclob * dest );
 
 
 
@@ -465,7 +464,7 @@ long clob_copy( Clob * src, Clob * dest );
    Return value: if the number is >= 0 then it is the size by which
    the target blob grew as a result of the printf (i.e. the number of
    bytes printf added to it). If the return value is negative then it
-   is an error code from ClobRC.
+   is an error code from whclobrc.
 
    This function is not safe for binary data - if fmt contains
    any null characters the processing will stop.
@@ -473,13 +472,13 @@ long clob_copy( Clob * src, Clob * dest );
    For the list of non-standard format specifiers, see
    the documentation for vappendf().
 */
-long clob_vappendf( Clob * cb, char const * fmt, va_list vargs );
+long whclob_vappendf( whclob * cb, char const * fmt, va_list vargs );
 
 
 /**
-   See clob_vappendf(Clob*,char const *,va_list).
+   See whclob_vappendf(whclob*,char const *,va_list).
 */
-long clob_appendf( Clob * cb, const char * fmt, ... );
+long whclob_appendf( whclob * cb, const char * fmt, ... );
 
 
 
@@ -491,48 +490,48 @@ long clob_appendf( Clob * cb, const char * fmt, ... );
    be less than n (or 0 on EOF).
 
    On error it returns one of the negative values defined
-   in ClobRC:
+   in whclobrc:
 
-   - ClobRC.UnexpectedNull if src or dest are null
+   - whclobrc.UnexpectedNull if src or dest are null
 
-   - ClobRC.RangeError if n is less than 1 or if startPos is out of
+   - whclobrc.RangeError if n is less than 1 or if startPos is out of
    src's bounds.
 */
-long clob_copy_slice( Clob * src, Clob * dest, long startPos, long n );
+long whclob_copy_slice( whclob * src, whclob * dest, long startPos, long n );
 
 /**
    Reads up to n bytes from src, starting at the current
-   cursor position (clob_tell()). Reading advances
+   cursor position (whclob_tell()). Reading advances
    the cursor.
 
    The return value is the number of bytes read, which
    may be less than n (or 0 on EOF).
 */
-long clob_read( Clob * src, Clob * dest, long n );
+long whclob_read( whclob * src, whclob * dest, long n );
 
 /**
    Returns the current position of cb's internal cursor, analogous to
    the standard ftell() function.
 */
-long clob_tell( Clob * cb );
+long whclob_tell( whclob * cb );
 
 /**
-   This function is just like clob_append() but it starts writing
-   at the position returned by clob_tell(cb). Writing advances
+   This function is just like whclob_append() but it starts writing
+   at the position returned by whclob_tell(cb). Writing advances
    the internal cursor. It returns the number of bytes written.
 
    If dsize is -1 then strlen(data) is used for dsize.
 
    On success it returns the number of bytes written. On failure it
-   returns a negative integer error code defined in ClobRC:
+   returns a negative integer error code defined in whclobrc:
 
-   - ClobRC.AllocationError if memory could not be allocated.
+   - whclobrc.AllocationError if memory could not be allocated.
 
-   - ClobRC.RangeError if dsize is 0.
+   - whclobrc.RangeError if dsize is 0.
 
-   - ClobRC.UnexpectedNull if data is 0.
+   - whclobrc.UnexpectedNull if data is 0.
 */
-long clob_write( Clob * cb, char const * data, long dsize );
+long whclob_write( whclob * cb, char const * data, long dsize );
 
 
 
@@ -540,36 +539,36 @@ long clob_write( Clob * cb, char const * data, long dsize );
    This function ensures that the one-past-the-last item in the blob
    to 0.  The "used" size of cb does not change.
 
-   On success it returns ClobRC.OK. On failure it returns one of the
-   negitive integer values defined in ClobRC:
+   On success it returns whclobrc.OK. On failure it returns one of the
+   negitive integer values defined in whclobrc:
 
-   - ClobRC.Err if cb does not own a pointer to an underlying blob.
+   - whclobrc.Err if cb does not own a pointer to an underlying blob.
 
-   - ClobRC.AllocError if a memory (re)allocation fails.
+   - whclobrc.AllocError if a memory (re)allocation fails.
 */
-long clob_null_terminate( Clob * cb );
+long whclob_null_terminate( whclob * cb );
 
 /**
-   If clob_size(cb) "used space" is currently less than pos then this
+   If whclob_size(cb) "used space" is currently less than pos then this
    function does nothing, otherwise cb is truncated to that length.
 
    If allocPolicy is 0 then the amount of memory allocated by cb is
-   not adjusted. If it is >0, clob_realloc() will be called to try to
+   not adjusted. If it is >0, whclob_realloc() will be called to try to
    shrink the allocated buffer (but this does not guaranty that the
    allocated memory will actually be reduced). If (allocPolicy<0) then
    a simple heuristic is used to determine if a reallocation might
    release a useful amount of memory.
 
-   Returns ClobRC.OK on success or another value from ClobRC
+   Returns whclobrc.OK on success or another value from whclobrc
    on error.
 */
-long clob_truncate( Clob * cb, long pos, int allocPolicy );
+long whclob_truncate( whclob * cb, long pos, int allocPolicy );
 
-// TODO???: clob_trim()
+// TODO???: whclob_trim()
 
 
 /**
-   clob_exporter is a generic interface to exporting Clob objects
+   whclob_exporter is a generic interface to exporting whclob objects
    (e.g. to arbitrary streams).
 
    Policy for implementations:
@@ -586,110 +585,110 @@ long clob_truncate( Clob * cb, long pos, int allocPolicy );
    some implementations. In those cases, returning n is the best approach.
 
    - On failure it must return a negative number, prefferably one of those
-   defined by ClobRC.
+   defined by whclobrc.
 */
-typedef long (*clob_exporter)( void * arg, char const * data, long n );
+typedef long (*whclob_exporter)( void * arg, char const * data, long n );
 
 /**
-   clob_export() is a generic interface for exporting blobs to
+   whclob_export() is a generic interface for exporting blobs to
    "external representations".
 
    It calls pf( arg, ... ) one time to export cb's data using whatever
    approach pf implements. The return value is that of calling pf.
 */
-long clob_export( Clob const * cb, void * arg, clob_exporter pf );
+long whclob_export( whclob const * cb, void * arg, whclob_exporter pf );
 
 /**
-   This is a sample clob_exporter for use with clob_export.
+   This is a sample whclob_exporter for use with whclob_export.
    It is used like this:
 
-   clob_export( clob, an_open_FILE_handle, clob_exporter_FILE );
+   whclob_export( clob, an_open_FILE_handle, whclob_exporter_FILE );
 
-   The second argument to clob_export must be an open (FILE*).
+   The second argument to whclob_export must be an open (FILE*).
 
    Returns n on success and a negative number on error.
 
    The file handle is not closed by this routine.
 */
-long clob_exporter_FILE( void * fh, char const * data, long n );
+long whclob_exporter_FILE( void * fh, char const * data, long n );
 
 /**
-   Like clob_exporter_FILE(), but expects arg to be a (char const *)
-   filename. Returns the same as the equivalent clob_exporter_FILE()
+   Like whclob_exporter_FILE(), but expects arg to be a (char const *)
+   filename. Returns the same as the equivalent whclob_exporter_FILE()
    unless arg cannot be opened as a file, in which case
-   ClobRC.IOError is returned.
+   whclobrc.IOError is returned.
 */
-long clob_exporter_filename( void * arg, char const * data, long n );
+long whclob_exporter_filename( void * arg, char const * data, long n );
 
 /**
-   clob_importer is the import counterpart of clog_exporter.  It
+   whclob_importer is the import counterpart of clog_exporter.  It
    defines an interface for callbacks which can provide a blob with
    data.
 
    Note that for input it is not generically possible to
    get the length of the data before starting. Thus this
-   API takes a Clob object, which it can append to, whereas
-   the clob_exporter functions take raw data pointers as
+   API takes a whclob object, which it can append to, whereas
+   the whclob_exporter functions take raw data pointers as
    sources.
 
-   target must be an initialized Clob. It is appended to,
+   target must be an initialized whclob. It is appended to,
    not overwritten. It is expanded as necessary.
 
    Return value is the number of bytes appended to the target, or a
-   negative number on error (preferably one of the ClobRC error
+   negative number on error (preferably one of the whclobrc error
    codes).
 */
-typedef long (*clob_importer)( Clob * target, void * arg );
+typedef long (*whclob_importer)( whclob * target, void * arg );
 
 /**
    Returns the same as pf( arg, dest ).
 */
-long clob_import( Clob * dest, void * arg, clob_importer pf );
+long whclob_import( whclob * dest, void * arg, whclob_importer pf );
 
 /**
-   A clob_importer implementation for clob_import. It expects
+   A whclob_importer implementation for whclob_import. It expects
    arg to be an open (FILE*). The target is appended with the
    contents of the file. On error, a negative number is returned.
    On success, the number of bytes added to the target.
 
-   If arg is not a (FILE*) then ClobRC.ArgError is returned.
+   If arg is not a (FILE*) then whclobrc.ArgError is returned.
 
    The file handle is not closed by this routine.
 */
-long clob_importer_FILE( Clob * target, void * arg );
+long whclob_importer_FILE( whclob * target, void * arg );
 
 /**
-   A clob_importer implementation similar to clob_importer_FILE(), but
+   A whclob_importer implementation similar to whclob_importer_FILE(), but
    expects arg to be a (char const *) filename. Returns the same as
-   the equivalent clob_importer_FILE() call unless arg cannot be
-   opened as a file, in which case ClobRC.IOError is returned.
+   the equivalent whclob_importer_FILE() call unless arg cannot be
+   opened as a file, in which case whclobrc.IOError is returned.
 */
-long clob_importer_filename( Clob * target, void * arg );
+long whclob_importer_filename( whclob * target, void * arg );
 
 /*
   A debugging-only function. Do not use it in client code.
 */
-void clob_dump( Clob * cb, int doString );
+void whclob_dump( whclob * cb, int doString );
 
 /**
    Sends cb's blob to the given file. Returns the number
    of bytes written on success or a negative number
-   (probably ClobRC.IOError) on error.
+   (probably whclobrc.IOError) on error.
 
    The file handle is not closed by this routine.
  */
-long clob_export_to_FILE( Clob const * cb, FILE * dest );
+long whclob_export_to_FILE( whclob const * cb, FILE * dest );
 
 /**
-   Identical to clob_export_to_FILE() but takes a file
+   Identical to whclob_export_to_FILE() but takes a file
    name.
 */
-long clob_export_to_file( Clob const * cb, char const * dest );
+long whclob_export_to_file( whclob const * cb, char const * dest );
 
 /**
    Moves a block of memory within cb, starting at start1, moving n
    bytes to the position starting at start2.  All points and ranges
-   must be in the clob_size() range.  start2 may be less than start1
+   must be in the whclob_size() range.  start2 may be less than start1
    but they may not be equal.  A value of less than 1 for n is not
    currently supported, though it should be to support backwards
    movement of memory.
@@ -702,16 +701,16 @@ long clob_export_to_file( Clob const * cb, char const * dest );
    On success it returns the number of bytes moved (n)
    and on failure it returns:
 
-   - ClobRC.RangeError if any values or ranges are out of bounds
+   - whclobrc.RangeError if any values or ranges are out of bounds
 
-   - ClobRC.UnexpectedNull if cb is null.
+   - whclobrc.UnexpectedNull if cb is null.
 */
-long clob_memmove_fill( Clob * cb, char const filler, int start1, int n, int start2 );
+long whclob_memmove_fill( whclob * cb, char const filler, int start1, int n, int start2 );
 
 /**
-   A convenience form of clob_memmove_fill(cb,0,start1,n,start2).
+   A convenience form of whclob_memmove_fill(cb,0,start1,n,start2).
 */
-long clob_memmove( Clob * cb, int start1, int n, int start2 );
+long whclob_memmove( whclob * cb, int start1, int n, int start2 );
 
 /**
    Swaps the contents of n bytes between two blobs. start1 is relative
@@ -720,68 +719,68 @@ long clob_memmove( Clob * cb, int start1, int n, int start2 );
    On success it returns the number of bytes swapped. On error it returns
    one of:
 
-   - ClobRC.UnexpectedNull if (!cb1) or (!cb2).
+   - whclobrc.UnexpectedNull if (!cb1) or (!cb2).
 
-   - ClobRC.RangeError if start1 and n are not within cb1's bounds
+   - whclobrc.RangeError if start1 and n are not within cb1's bounds
    or start2 and n are not within cb2's bounds.
 
    This is a linear operation (based on the value of n). If you want
    to swap the entire contents of two clobs, you can do so in constant
-   time by using clob_swap() instead of this routine.
+   time by using whclob_swap() instead of this routine.
 */
-long clob_memswap( Clob * cb1, int start1, int n, Clob * cb2, int start2 );
+long whclob_memswap( whclob * cb1, int start1, int n, whclob * cb2, int start2 );
 
 
 /**
    Efficiently swaps the contents of blobs c1 and c2, which must
    both be initialized clobs.
 
-   Returns ClobRC.OK on success or ClobRC.UnexpectedNull
+   Returns whclobrc.OK on success or whclobrc.UnexpectedNull
    if either c1 or c2 are null.
 */
-long clob_swap( Clob * c1, Clob * c2 );
+long whclob_swap( whclob * c1, whclob * c2 );
 
 /**
    Copies the contents of src to the dest, which
-   must be an UNINITIALIZED Clob object.
+   must be an UNINITIALIZED whclob object.
 
-   Returns ClobRC.OK on success or, on error:
+   Returns whclobrc.OK on success or, on error:
 
-   - ClobRC.AllocError
+   - whclobrc.AllocError
 
-   - ClobRC.UnexpectedNull if src is null.
+   - whclobrc.UnexpectedNull if src is null.
 
 Example usage:
 
 \code
 
-Clob * orig;
-clob_init( &orig );
-clob_appendf( orig, "Hi, world." );
-Clob * clone;
-clob_clone( orig, &clone );
+whclob * orig;
+whclob_init( &orig );
+whclob_appendf( orig, "Hi, world." );
+whclob * clone;
+whclob_clone( orig, &clone );
 
 \endcode
 
-Note the pointer-to-pointer parameter for clob_init()
-and the second parameter to clob_clone().
+Note the pointer-to-pointer parameter for whclob_init()
+and the second parameter to whclob_clone().
 
 */
-long clob_clone( Clob * src, Clob ** dest );
+long whclob_clone( whclob * src, whclob ** dest );
 
 /**
    Works more or less like sprintf(), but supports the printf
-   specifiers accepted by clob_appendf().  The caller owns the
+   specifiers accepted by whclob_appendf().  The caller owns the
    returned null-terminated string.
 */
-char * clob_vmprintf( char const * fmt, va_list vargs );
+char * whclob_vmprintf( char const * fmt, va_list vargs );
 
 /**
-   Functionally identical to clob_vmprintf().
+   Functionally identical to whclob_vmprintf().
 */
-char * clob_mprintf( char const * fmt, ... );
+char * whclob_mprintf( char const * fmt, ... );
 
-#if CLOB_USE_ZLIB
+#if WHCLOB_USE_ZLIB
 /**
    Compresses the contents of src to dest using the zlib compress()
    function. dest may be either the same as src or an initialized
@@ -789,56 +788,56 @@ char * clob_mprintf( char const * fmt, ... );
    contents whether or not this routine succeeds. If (dest==src)
    then src is only modified if this routine succeeds.
 
-   Returns ClobRC.OK on success, some other value on error:
+   Returns whclobrc.OK on success, some other value on error:
 
-   - ClobRC.IOError: compression failed
+   - whclobrc.IOError: compression failed
 
-   - ClobRC.AllocError = a (re)allocation failed.
+   - whclobrc.AllocError = a (re)allocation failed.
 
    Note that the compressed data is compressed using zlib but contains
    its own header, so it will not be usable by tools like gunzip.
 */
-int clob_compress( Clob * src, Clob * dest );
+int whclob_compress( whclob * src, whclob * dest );
 
 /**
-   The converse of clob_compress(), src is expected to be clob containing
-   data compressed with clob_compress(). dest must be an initialized clob.
+   The converse of whclob_compress(), src is expected to be clob containing
+   data compressed with whclob_compress(). dest must be an initialized clob.
    If dest is not the same as src then dest will be reset whether not
    this routine succeeds. If (dest==src) then it is only modified
    if this routine succeeds.
 
-   Returns ClobRC.OK on success, some other value on error:
+   Returns whclobrc.OK on success, some other value on error:
 
-   - ClobRC.RangeError: source does not appear to contain any
+   - whclobrc.RangeError: source does not appear to contain any
    compressed data or data was written by a different version of this
    API.
 
-   - ClobRC.ArgError: input is too small to contain the compression
+   - whclobrc.ArgError: input is too small to contain the compression
    header.
 
-   - ClobRC.IOError: decompression failed
+   - whclobrc.IOError: decompression failed
 
-   - ClobRC.AllocError = a (re)allocation failed. 
+   - whclobrc.AllocError = a (re)allocation failed. 
 
 */
-int clob_uncompress( Clob * src, Clob * dest );
+int whclob_uncompress( whclob * src, whclob * dest );
 
 
 /**
-   Works equivalently to clob_compress(), but uses the zlib deflate()
+   Works equivalently to whclob_compress(), but uses the zlib deflate()
    algorithm instead of the compress() algorithm.
 */
-int clob_deflate( Clob *cIn, Clob *cOut );
+int whclob_deflate( whclob *cIn, whclob *cOut );
 
 /**
-   The converse of clob_deflate(), this works equivalently to
-   clob_uncompress(), but uses the zlib inflate() algorithm instead of
+   The converse of whclob_deflate(), this works equivalently to
+   whclob_uncompress(), but uses the zlib inflate() algorithm instead of
    the uncompress() algorithm.
 */
-int clob_inflate( Clob *cIn, Clob *cOut );
-#endif /* CLOB_USE_ZLIB */
+int whclob_inflate( whclob *cIn, whclob *cOut );
+#endif /* WHCLOB_USE_ZLIB */
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* WANDERINGHORSE_NET_CLOB_H_INCLUDED_ */
+#endif /* WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_ */

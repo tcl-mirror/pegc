@@ -3,9 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 #include "pegc.h"
-#include "pegc_strings.h"
 #include "whgc.h"
-#include "clob.h"
+#include "whclob.h"
 #if 1
 #define MARKER printf("******** MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
 #else
@@ -170,21 +169,19 @@ int main( int argc, char ** argv )
     int rc = 0;
     if(!rc) rc = a_test();
     //if(!rc) rc = test_actions();
-    printf("Done rc=%d=[%s].\n",rc,
-	   (0==rc)
-	   ? "You win :)"
-	   : "You lose :(");
-
     if( 1 )
     {
 	whgc_stats const st = whgc_get_stats( ThisApp.gc );
-	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
+	MARKER;printf("Approx memory allocated by ThisApp.gc context: %u\n", st.alloced);
 	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
 	pegc_stats const pst = pegc_get_stats( ThisApp.P );
 	printf("APPROXIMATE allocated parser memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
     }
-
     whgc_destroy_context( ThisApp.gc );
     pegc_destroy_parser( ThisApp.P );
+    printf("Done rc=%d=[%s].\n",rc,
+	   (0==rc)
+	   ? "You win :)"
+	   : "You lose :(");
     return rc;
 }

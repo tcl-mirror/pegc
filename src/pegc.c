@@ -20,8 +20,7 @@ extern "C" {
 
 #define DUMPPOS(P) MARKER; printf("pos = [%s]\n", pegc_eof(P) ? "<EOF>" : pegc_latin1(*pegc_pos(P)) );
 #include "pegc.h"
-#include "pegc_strings.h"
-#include "clob.h"
+#include "whclob.h"
 #include "whgc.h"
 
 
@@ -152,7 +151,7 @@ struct pegc_parser
     /**
        Holds error reporting info.
 
-       To consider: use a Clob here and append
+       To consider: use a whclob here and append
        all errors added via pegc_set_error_e()
        into one report string.
     */
@@ -423,11 +422,11 @@ bool pegc_set_error_v( pegc_parser * st, char const * fmt, va_list vargs )
     else
     {
 	pegc_line_col( st, &(st->errinfo.line), &(st->errinfo.col) );
-	Clob * cb = clob_new();
-	clob_appendf(cb,"pegc_set_error_v(): near line %u, col %u\n",st->errinfo.line,st->errinfo.col);
-	clob_vappendf(cb,fmt,vargs);
-	st->errinfo.message = clob_take_buffer(cb);
-	clob_finalize(cb);
+	whclob * cb = whclob_new();
+	whclob_appendf(cb,"pegc_set_error_v(): near line %u, col %u\n",st->errinfo.line,st->errinfo.col);
+	whclob_vappendf(cb,fmt,vargs);
+	st->errinfo.message = whclob_take_buffer(cb);
+	whclob_finalize(cb);
 	if( ! st->errinfo.message ) return false;
     }
     return true;
@@ -849,7 +848,7 @@ PegcRule * pegc_copy_r_v( pegc_parser * st, PegcRule const src )
 char * pegc_vmprintf( pegc_parser * st, char const * fmt, va_list args )
 {
     char * ret = (fmt && *fmt) ?
-	clob_vmprintf( fmt, args )
+	whclob_vmprintf( fmt, args )
 	: 0;
     if( st && ret )
     {
@@ -1160,26 +1159,26 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
 static char * pegc_list_to_string( bool orOp, PegcRule const ** li )
 {
     if( !li || !*li) return 0;
-    Clob * cb = clob_new();
-    clob_append( cb, "(", 1 );
+    whclob * cb = whclob_new();
+    whclob_append( cb, "(", 1 );
     int i = 0;
     char const * sep = orOp ? " / " : " ";
     const int sepLen = pegc_strlen(sep);
     PegcRule const * r = *li;
     for( ; r && r->rule; ++i, ++r )
     {
-	clob_appendf(cb,"%s",r->name ? r->name : "UnnamedRule");
+	whclob_appendf(cb,"%s",r->name ? r->name : "UnnamedRule");
 #if 1
 	PegcRule const * n = r+1;
 	if( n && n->rule )
 	{
-	    clob_append(cb,sep,sepLen);
+	    whclob_append(cb,sep,sepLen);
 	}
 #endif
     }
-    clob_append( cb, ")", 1 );
-    char * ret = clob_take_buffer(cb);
-    clob_finalize(cb);
+    whclob_append( cb, ")", 1 );
+    char * ret = whclob_take_buffer(cb);
+    whclob_finalize(cb);
     return ret;
 }
 
@@ -2186,7 +2185,7 @@ char * pegc_unescape_quoted_string( pegc_const_iterator inp,
     if( !inp || !inlen || (quoteChar != *inp) ) return 0;
     if( inlen < 0 ) inlen = pegc_strlen(inp);
     ++inp;
-    Clob * cb = clob_new();
+    whclob * cb = whclob_new();
     char const * at = inp;
     long i = 1;
     bool ok = true;
@@ -2216,7 +2215,7 @@ char * pegc_unescape_quoted_string( pegc_const_iterator inp,
 	{
 	    break;
 	}
-	clob_append_char_n( cb, ch, 1 );
+	whclob_append_char_n( cb, ch, 1 );
     }
     ++i;
     ok = ok && (quoteChar == *at) && (i==inlen);
@@ -2224,9 +2223,9 @@ char * pegc_unescape_quoted_string( pegc_const_iterator inp,
     char * ret = 0;
     if( ok )
     {
-	ret = clob_take_buffer(cb);
+	ret = whclob_take_buffer(cb);
     }
-    clob_finalize(cb);
+    whclob_finalize(cb);
     return ret;
 }
 
