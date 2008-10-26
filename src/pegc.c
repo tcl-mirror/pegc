@@ -871,12 +871,12 @@ bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st )
 {
     return false;
 }
-const PegcRule PegcRule_failure = PEGCRULE_INIT2(PegcRule_mf_failure,0);
+const PegcRule PegcRule_failure = PEGCRULE_INIT3(PegcRule_mf_failure,0,"false");
 static bool PegcRule_mf_success( PegcRule const * self, pegc_parser * st )
 {
     return true;
 }
-const PegcRule PegcRule_success = PEGCRULE_INIT2(PegcRule_mf_success,0);
+const PegcRule PegcRule_success = PEGCRULE_INIT3(PegcRule_mf_success,0,"true");
 
 
 /**
@@ -1158,10 +1158,47 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
     return true;
 }
 
+static char * pegc_list_to_string( bool orOp, PegcRule const ** li )
+{
+    if( !li || !*li) return 0;
+    Clob * cb = clob_new();
+    clob_append( cb, "(", 1 );
+    int i = 0;
+    char const * sep = orOp ? " / " : " ";
+    const int sepLen = pegc_strlen(sep);
+    PegcRule const * r = *li;
+    for( ; r && r->rule; ++i, ++r )
+    {
+	clob_appendf(cb,"%s",r->name ? r->name : "UnnamedRule");
+#if 1
+	PegcRule const * n = r+1;
+	if( n && n->rule )
+	{
+	    clob_append(cb,sep,sepLen);
+	}
+#endif
+    }
+    clob_append( cb, ")", 1 );
+    char * ret = clob_take_buffer(cb);
+    clob_finalize(cb);
+    return ret;
+}
+
+
 PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 {
     if( ! st || !li ) return PegcRule_invalid;
-    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, 0 );
+    PegcRule r = PEGCRULE_INIT;
+    if( orOp )
+    {
+	r.rule = PegcRule_mf_or;
+	r.name = "(OR'd list)";
+    }
+    else
+    {
+	r.rule = PegcRule_mf_and;
+	r.name = "(AND'd list)";
+    }
     int count = 0;
     if(st && li)
     {
@@ -1192,29 +1229,33 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 	list[i] = li[i];
     }
     list[i] = PegcRule_invalid;
-    MARKER;printf("Added %d items to rule list. count=%d\n",i,count);
+    char * name = pegc_list_to_string( orOp, (PegcRule const **)&list );
+    r.name = name;
+    pegc_gc_add(st, name, pegc_free );
+    //MARKER;printf("Added %d items to rule list. count=%d\n",i,count);
     return r;
 }
 
 PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 {
     if( !st ) return PegcRule_invalid;
-    const size_t blockSize = 5; /* number of rules to allocate at a time. */
+    const size_t blockSize = 4; /* number of rules to allocate at a time. */
     int count = 1;
-    PegcRule const ** li = 0;
+    PegcRule * li = 0;
     int pos = 0;
     bool ok = true;
     while( true )
     {
 	PegcRule const * vr = va_arg(ap,PegcRule const *);
 	if( ! pegc_is_rule_valid(vr) ) break;
+	MARKER;printf("checking va_arg() rule @%p\n",vr);
 	if( (!pos) || (pos >=(count-1)) )
 	{ /* (re)allocate list */
 	    count += blockSize;
 	    if( ! li )
 	    {
-		//MARKER;printf("allocating list for %u items.\n",count);
-		li = (PegcRule const **)calloc( count, sizeof(PegcRule*) );
+		MARKER;printf("allocating list for %u items.\n",count);
+		li = (PegcRule *)calloc( count, sizeof(PegcRule) );
 		if( ! li )
 		{
 		    ok = false;
@@ -1223,8 +1264,8 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    }
 	    else
 	    {
-		//MARKER;printf("re-allocating list for %u items.\n",count);
-		PegcRule const ** re = (PegcRule const **)realloc( li, sizeof(PegcRule*) * count  );
+		MARKER;printf("re-allocating list for %u items.\n",count);
+		PegcRule * re = (PegcRule *)realloc( li, sizeof(PegcRule) * count  );
 		if( ! re )
 		{
 		    ok = false;
@@ -1234,16 +1275,19 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    }
 	}
 	if( ! li ) break;
-	li[pos++] = vr;
+	li[pos++] = *vr;
     }
+    //MARKER;printf("pos=%u count=%u\n",pos,count);
     if( !ok || !pos || !li )
     {
 	if(li) pegc_free(li);
 	return PegcRule_invalid;
     }
-    li[pos] = 0; //&PegcRule_invalid;
-    PegcRule r = pegc_r_list_a( st, orOp, *li );
-    free(li);
+    st->stats.alloced += (sizeof(PegcRule)*count);
+    MARKER;printf("pos=%u count=%u\n",pos,count);
+    li[pos] = PegcRule_invalid;
+    pegc_gc_add( st, li, pegc_free );
+    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, li );
     return r;
 }
 
@@ -1354,9 +1398,12 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
     }
     st->stats.alloced += (sizeof(PegcRule) * pos);
     li[pos] = PegcRule_invalid;
-    //MARKER;printf("Added %d item(s) to rule list.\n",pos);
     pegc_gc_add( st, li, pegc_free );
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or_v : PegcRule_mf_and_v, li );
+    char * name = pegc_list_to_string( orOp, (PegcRule const **)&li );
+    r.name = name;
+    MARKER;printf("Added %d item(s) to rule list %s.\n",pos,name);
+    pegc_gc_add( st, name, pegc_free );
     return r;
 }
 

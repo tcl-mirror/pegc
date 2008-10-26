@@ -815,6 +815,12 @@ extern "C" {
 	    */
 	    void * data;
 	} client;
+	/**
+	   Only for debugging/informational purposes. Ownership of
+	   the pointer is up to whoever assigns it, but the
+	   pointer must of course outlive all objects using it.
+	*/
+	char const * name;
     };
     typedef struct PegcRule PegcRule;
 
@@ -839,13 +845,16 @@ extern "C" {
 
        RF = a PegcRule_mf
        D = static rule data
+       N = name of the rule (a static or shared string)
     */
-#define PEGCRULE_INIT2(RF,D) { \
+#define PEGCRULE_INIT3(RF,D,N) {	\
      RF /* rule */,\
      D /* data */,\
      0 /* proxy */,\
-     /* client */ { 0/* flags */,0 /* data */}\
+     /* client */ { 0/* flags */,0 /* data */},	\
+     N					\
 }
+#define PEGCRULE_INIT2(RF,D) PEGCRULE_INIT3(RF,D,# RF)
     /**
        A rule using RF as its rule function.
      */
@@ -853,7 +862,7 @@ extern "C" {
     /**
        An invalid rule.
      */
-#define PEGCRULE_INIT PEGCRULE_INIT1(0)
+#define PEGCRULE_INIT PEGCRULE_INIT3(0,0,"invalid")
 
 
     /**

@@ -12,6 +12,7 @@ ifeq (1,$(TCC))
 	-Wall
 else
   # Assume gcc-compatible flags:
+  CXXFLAGS += -g
   CPPFLAGS += \
 	-Wimplicit-function-declaration \
 	-Wall \
@@ -58,16 +59,17 @@ test.BIN.LDFLAGS := $(libpegc.LIB)
 test.BIN.OBJECTS := test.o
 $(call ShakeNMake.CALL.RULES.BINS,test)
 $(test.BIN): $(libpegc.LIB)
-bins: test.BIN
 
 pegcgen.BIN.LDFLAGS := $(libpegc.LIB)
 pegcgen.BIN.OBJECTS := pegcgen.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,pegcgen)
 $(pegcgen.BIN): $(libpegc.LIB)
-bins: pegcgen.BIN
 
+bins: $(test.BIN)
+bins: $(pegcgen.BIN)
+libs: $(libpegc.LIB)
 CLEAN_FILES += *~
 
 PACKAGE.DIST_FILES += $(wildcard *.c *.h)
 
-all: bins
+all: libs bins

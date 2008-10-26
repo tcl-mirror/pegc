@@ -44,7 +44,7 @@ const PegcRule PG_r_identifier = PEGCRULE_INIT1(PG_mf_identifier);
 PegcRule pg_r_identifier();
 
 bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p );
-const PegcRule PG_r_comment_cpp = PEGCRULE_INIT1(PG_mf_comment_cpp);
+const PegcRule PG_r_comment_cpp = PEGCRULE_INIT3(PG_mf_comment_cpp,0,"CommentCPP");
 
 
 static struct PGApp
@@ -172,7 +172,7 @@ static bool PG_ws( PegcRule const * self, pegc_parser * p )
 	return false;
     }
     pegc_const_iterator p2 = pegc_pos(p);
-#if 0
+#if 1
     spaces.rule(&spaces,p);
 #endif
     pegc_set_match( p, p1, p2, false );
@@ -184,7 +184,7 @@ PegcRule pg_r_skipws( pegc_parser * p, PegcRule const R )
 {
     //return pegc_r_pad_v(p, PG_spacing, R, PegcRule_success, true );
     PegcRule r = pegc_r(PG_ws,0);
-    r.proxy = pegc_copy_r_v(p,R);
+    r.proxy = pegc_copy_r_p(p,&R);
     return r;
 }
 PegcRule pg_r_skipws_p( pegc_parser * p, PegcRule const * R )
@@ -386,7 +386,9 @@ bool PG_mf_primary( PegcRule const * self, pegc_parser * p )
 	    pg_r_skipws(p,
 	    pegc_r_and_ev(p,
 			  PG_op_popen,
+			  PG_spacing,
 			  PG_r_expr,
+			  PG_spacing,
 			  PG_op_pclose,
 			  PG_end
 			  ) );
@@ -431,6 +433,7 @@ static bool PG_mf_suffix( PegcRule const * self, pegc_parser * p )
 	PegcRule const R =
 	    pegc_r_and_ev(p,
 			  PG_r_primary,
+			  PG_spacing,
 			  opt,
 			  PG_end );
 	PegcRule const pad = pg_r_skipws(p, R);
@@ -485,6 +488,7 @@ static bool PG_mf_prefix( PegcRule const * self, pegc_parser * p )
 	PegcRule const atact =
 	    pegc_r_and_ev( p,
 			   at,
+			   PG_spacing,
 			   PG_r_semantic_action,
 			   PG_end
 			   );
@@ -498,18 +502,19 @@ static bool PG_mf_prefix( PegcRule const * self, pegc_parser * p )
 	PegcRule const tail =
 	    pegc_r_and_ev(p,
 			  andornot,
-			  PG_mf_suffix,
+			  PG_spacing,
+			  PG_r_suffix,
 			  PG_end
 			  );
 	PegcRule const Prefix =
 	    pg_r_skipws(p,
 	    pegc_r_or_ev(p,
 			 atact,
+			 PG_spacing,
 			 tail,
 			 PG_end
 			 ));
-	PegcRule const pad = Prefix;
-	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_prefix()");
+	PegcRule const act = pegc_r_action_i_v( p, Prefix, pg_test_action, "pg_r_prefix()");
 	*r = act;
     }
     if( r && r->rule ) return r->rule( r, p );
@@ -593,17 +598,6 @@ bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p )
 				 PegcRule_success);
        PegcRule const content =
 	   pegc_r_plus_v(p,
-#if 0
-	   pegc_r_if_then_else_v(p,
-				 opencheck,
-				 pegc_r_if_then_else_v(p,
-						       atclose,
-						       PegcRule_success,
-						       pegc_r_and_ev(p,eofcheck,PegcRule_noteof,PG_end)
-						       ),
-				 PegcRule_failure
-				 )
-#else
            pegc_r_and_ev(p,
 			opencheck,
 			pegc_r_or_ev(p,
@@ -612,7 +606,6 @@ bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p )
 				     PG_end ),
 			PG_end
 			)
-#endif
 			 );
        PegcRule const R =
 	   pg_r_skipws(p,
@@ -647,15 +640,28 @@ int a_test()
     }
     pegc_parser * P = PGApp.P;//pegc_create_parser( src, -1 );
     pegc_set_input( P, src, -1 );
+    
+    PegcRule const Comment = pegc_r_action_i_p(P,
+					       &PG_r_comment_cpp, pg_test_action,
+					       "CPP-style comment");
+
+#if 0
+    PegcRule const R = pegc_r_or_ep(P,
+				    &PegcRule_eof,
+				    &PG_spacing,
+				    &Comment,
+				    &PG_r_primary,
+				    0);
+#else
     PegcRule const R = pegc_r_or_ev(P,
 				    PegcRule_eof,
-				    PG_r_primary,
 				    PG_spacing,
-				    pegc_r_action_i_v( P, PG_r_comment_cpp, pg_test_action, "PG_r_comment_cpp"),
+				    Comment,
+				    PG_r_primary,
 				    PG_end);
-    MARKER;
+#endif
     int rc = 0;
-    MARKER;printf("src=[%s]\n",src);
+    MARKER;printf("src=[%s]\nRule name=[%s]\n",src,R.name);
     while( pegc_parse( P, &R ) )
     {
 	char * m = pegc_get_match_string(P);
