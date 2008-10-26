@@ -65,8 +65,14 @@ pegcgen.BIN.OBJECTS := pegcgen.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,pegcgen)
 $(pegcgen.BIN): $(libpegc.LIB)
 
+unittests.BIN.LDFLAGS := $(libpegc.LIB)
+unittests.BIN.OBJECTS := unittests.o # $(libpegc.LIB.OBJECTS)
+$(call ShakeNMake.CALL.RULES.BINS,unittests)
+$(unittests.BIN): $(libpegc.LIB)
+
 bins: $(test.BIN)
-bins: $(pegcgen.BIN)
+#bins: $(pegcgen.BIN)
+bins: $(unittests.BIN)
 libs: $(libpegc.LIB)
 CLEAN_FILES += *~
 

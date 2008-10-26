@@ -125,8 +125,8 @@ bool pg_test_action( pegc_parser * st,
 static bool PG_mf_spacing( PegcRule const * self, pegc_parser * p )
 {
     if( !p || pegc_has_error(p) ) return false;
-    if( pegc_eof(p) ) return true;
-    PegcRule const space = pegc_r_star_p( &PegcRule_space );
+    //if( pegc_eof(p) ) return true;
+    PegcRule const space = pegc_r_plus_p( &PegcRule_space );
     return space.rule( &space, p );
 }
 static const PegcRule PG_spacing = PEGCRULE_INIT1(PG_mf_spacing);
@@ -357,6 +357,16 @@ PegcRule pg_r_literal( pegc_parser * p )
 }
 bool PG_mf_primary( PegcRule const * self, pegc_parser * p )
 {
+    /**
+           Primary         <- Identifier !LEFTARROW
+                            / OPEN Expression CLOSE
+                            / Literal
+                            / Class
+                            / DOT
+                            / Action
+                            / BEGIN
+                            / END
+    */
     //MARKER;
     PegcRule * r = 0;
     void * v = pegc_gc_search( p, (void const *)PG_mf_primary );
@@ -369,7 +379,7 @@ bool PG_mf_primary( PegcRule const * self, pegc_parser * p )
     {
 	/**
 	   Because of the recursiveness of this rule, we have to
-	   allocate and register the new object before any of the rule
+	   allocate and register the new object before any of the sub rule
 	   are created. If we don't get get in an endless loop.
 	*/
 	r = pegc_alloc_r(p,0,0);
@@ -410,6 +420,9 @@ bool PG_mf_primary( PegcRule const * self, pegc_parser * p )
 
 static bool PG_mf_suffix( PegcRule const * self, pegc_parser * p )
 {
+    /**
+       Suffix          <- Primary ( QUERY / STAR / PLUS )?
+    */
     //MARKER;
     PegcRule * r = 0;
     void * v = pegc_gc_search( p, (void const *)PG_mf_suffix );
@@ -647,23 +660,30 @@ int a_test()
 
 #if 0
     PegcRule const R = pegc_r_or_ep(P,
-				    &PegcRule_eof,
 				    &PG_spacing,
 				    &Comment,
 				    &PG_r_primary,
 				    0);
 #else
     PegcRule const R = pegc_r_or_ev(P,
-				    PegcRule_eof,
-				    PG_spacing,
 				    Comment,
+				    PG_spacing,
 				    PG_r_primary,
 				    PG_end);
 #endif
     int rc = 0;
     MARKER;printf("src=[%s]\nRule name=[%s]\n",src,R.name);
-    while( pegc_parse( P, &R ) )
+    pegc_const_iterator p1 = pegc_pos(P);
+    while( pegc_parse( P, &R ) && !pegc_eof(P) )
     {
+	pegc_const_iterator p2= pegc_pos(P);
+	if( p1 == p2 )
+	{
+	    printf("Rule did not consume! Breaking!\n");
+	    rc = 3;
+	    break;
+	}
+	p1 = p2;
 	char * m = pegc_get_match_string(P);
 	MARKER;printf("matched: [%s]\n", m ? m : "<EMPTY>");
 	if( 1 ) free(m);

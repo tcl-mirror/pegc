@@ -1187,6 +1187,8 @@ extern "C" {
     PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
 
     /**
+       Causes crashes downstream for reasons i don't yet understand.
+
        Works like pegc_r_list_a() but requires a NULL-terminated list of
        (PegcRule const *).
 

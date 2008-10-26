@@ -705,7 +705,7 @@ static bool PegcRule_mf_has_error( PegcRule const * ARG_UNUSED(self), pegc_parse
 {
     return pegc_has_error(st);
 }
-const PegcRule PegcRule_has_error = PEGCRULE_INIT2(PegcRule_mf_has_error,0);
+const PegcRule PegcRule_has_error = PEGCRULE_INIT1(PegcRule_mf_has_error);
 
 static bool PegcRule_mf_char_range( PegcRule const * self, pegc_parser * st )
 {
@@ -1110,7 +1110,7 @@ static bool PegcRule_mf_notat( PegcRule const * self, pegc_parser * st )
 PegcRule pegc_r_notat_p( PegcRule const * proxy )
 {
     if( ! pegc_is_rule_valid(proxy) ) return PegcRule_invalid;
-    PegcRule r = pegc_r( PegcRule_mf_notat, 0 );
+    PegcRule r = PEGCRULE_INIT1(PegcRule_mf_notat);
     r.proxy = proxy; // pegc_copy_r_v( st, proxy );
     return r;
 }
@@ -1188,17 +1188,6 @@ static char * pegc_list_to_string( bool orOp, PegcRule const ** li )
 PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 {
     if( ! st || !li ) return PegcRule_invalid;
-    PegcRule r = PEGCRULE_INIT;
-    if( orOp )
-    {
-	r.rule = PegcRule_mf_or;
-	r.name = "(OR'd list)";
-    }
-    else
-    {
-	r.rule = PegcRule_mf_and;
-	r.name = "(AND'd list)";
-    }
     int count = 0;
     if(st && li)
     {
@@ -1208,7 +1197,10 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 	    ++count;
 	}
     }
-    if( ! count ) return r;
+    if( ! count )
+    {
+	return PegcRule_invalid;
+    }
     PegcRule * list = (PegcRule *)calloc(count+1,sizeof(PegcRule));
     if( ! list )
     {
@@ -1222,7 +1214,7 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 	return PegcRule_invalid;
     }
     pegc_gc_add( st, list, pegc_free_value );
-    r.data = list;
+    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, list );
     int i = 0;
     for( ; i < count; ++i )
     {
@@ -1248,13 +1240,13 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
     {
 	PegcRule const * vr = va_arg(ap,PegcRule const *);
 	if( ! pegc_is_rule_valid(vr) ) break;
-	MARKER;printf("checking va_arg() rule @%p\n",vr);
+	//MARKER;printf("checking va_arg() rule @%p\n",vr);
 	if( (!pos) || (pos >=(count-1)) )
 	{ /* (re)allocate list */
 	    count += blockSize;
 	    if( ! li )
 	    {
-		MARKER;printf("allocating list for %u items.\n",count);
+		//MARKER;printf("allocating list for %u items.\n",count);
 		li = (PegcRule *)calloc( count, sizeof(PegcRule) );
 		if( ! li )
 		{
@@ -1264,7 +1256,7 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	    }
 	    else
 	    {
-		MARKER;printf("re-allocating list for %u items.\n",count);
+		//MARKER;printf("re-allocating list for %u items.\n",count);
 		PegcRule * re = (PegcRule *)realloc( li, sizeof(PegcRule) * count  );
 		if( ! re )
 		{
@@ -1284,7 +1276,7 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 	return PegcRule_invalid;
     }
     st->stats.alloced += (sizeof(PegcRule)*count);
-    MARKER;printf("pos=%u count=%u\n",pos,count);
+    //MARKER;printf("pos=%u count=%u\n",pos,count);
     li[pos] = PegcRule_invalid;
     pegc_gc_add( st, li, pegc_free );
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, li );
@@ -1402,7 +1394,7 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
     PegcRule r = pegc_r( orOp ? PegcRule_mf_or_v : PegcRule_mf_and_v, li );
     char * name = pegc_list_to_string( orOp, (PegcRule const **)&li );
     r.name = name;
-    MARKER;printf("Added %d item(s) to rule list %s.\n",pos,name);
+    //MARKER;printf("Added %d item(s) to rule list %s.\n",pos,name);
     pegc_gc_add( st, name, pegc_free );
     return r;
 }
@@ -1578,6 +1570,7 @@ PegcRule pegc_r_action_i_p( pegc_parser * st,
     PegcRule r = pegc_r( PegcRule_mf_action, info );
     r.proxy = rule;
     //MARKER; printf("action key = %p\n", l);
+    r.name = pegc_mprintf( st, "(IF(%s) THEN (ACTION))",rule->name?rule->name:"???");
     return r;
 }
 
@@ -1610,9 +1603,10 @@ static PegcRule pegc_r_plusstar( PegcRule const * proxy, bool isPlus )
 {
     if( ! proxy ) return PegcRule_invalid;
     PegcRule r = pegc_r( isPlus
-			 ? PegcRule_mf_star
-			 : PegcRule_mf_plus,
+			 ? PegcRule_mf_plus
+			 : PegcRule_mf_star,
 			 0 );
+    r.name = isPlus ? "(Rule)+" : "(Rule)*";
     r.proxy = proxy;
     return r;
 }
