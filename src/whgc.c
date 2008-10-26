@@ -127,6 +127,10 @@ void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor )
     return ret;
 }
 
+void const * whgc_get_client_context(whgc_context const *cx)
+{
+    return cx ? cx->client : 0;
+}
 /**
    Calls all registered listeners with the given
    parameters.

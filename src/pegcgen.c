@@ -5,6 +5,7 @@
 #include "pegc.h"
 #include "pegc_strings.h"
 #include "whgc.h"
+#include "clob.h"
 #if 1
 #define MARKER printf("******** MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
 #else
@@ -45,6 +46,7 @@ static struct PGApp
     char const * argv0;
     pegc_parser * P;
     whgc_context * gc;
+    char ** argv;
 } PGApp;
 
 /*
@@ -103,12 +105,14 @@ bool pg_test_action( pegc_parser * st,
 		     pegc_cursor const *match,
 		     void * msg )
 {
+#if 0
     char * c = pegc_cursor_tostring(*match);
     MARKER; printf( "%s() got a match: %s [%s]\n",
 		    __func__,
 		    msg ? (char const *)msg : "",
 		    c ? c : "<EMPTY>");
     free(c);
+#endif
     return true;
 }
 
@@ -466,7 +470,21 @@ PegcRule pg_r_expr()
 
 int a_test()
 {
-    char const * src = "_abcd _1212 t930_9 'hi world' {{{.....}}} (abc / def)";
+    char const * src = 0;
+    Clob * cb = 0;
+    if( PGApp.argv && *PGApp.argv )
+    {
+	cb = clob_new();
+	if( ClobRC.IOError != clob_importer_filename( cb, *PGApp.argv ) )
+	{
+	    src = clob_bufferc(cb);
+	    MARKER;printf("Read in file [%s]\n",*PGApp.argv);
+	}
+    }
+    if( ! cb )
+    {
+	src = "_abcd _1212 t930_9 'hi world' {{{.....}}} (abc / def) (abc) ";
+    }
     pegc_parser * P = PGApp.P;//pegc_create_parser( src, -1 );
     pegc_set_input( P, src, -1 );
     PegcRule const R = PG_r_primary;
@@ -485,6 +503,11 @@ int a_test()
 	MARKER;printf("Didn't parse to EOF. Current pos=[%c]\n", *pegc_pos(P) );
 	rc = 1;
     }
+    if( pegc_has_error(P) )
+    {
+	rc = 2;
+	MARKER;printf("Parser error: [%s]\n",pegc_get_error(P,0,0));
+    }
     if( 0 == rc )
     {
 	pegc_trigger_actions( PGApp.P );
@@ -498,12 +521,13 @@ int a_test()
 int main( int argc, char ** argv )
 {
     MARKER; printf("This is an unfinished app! Don't use it!\n");
+    PGApp.argv = argv+1;
     PGApp.gc = whgc_create_context( &PGApp );
     int i = 0;
     PGApp.argv0 = argv[0];
-    for( i = 0; i < argc; ++i )
+    if(0) for( i = 0; i < argc; ++i )
     {
-	MARKER;printf("argv[%d]=[%s]\n",i,argv[i]);
+	printf("argv[%d]=[%s]\n",i,argv[i]);
     }
     PGApp.P = pegc_create_parser( 0, 0 );
     int rc = 0;

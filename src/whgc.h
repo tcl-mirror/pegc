@@ -157,6 +157,13 @@ extern "C" {
     */
     whgc_context * whgc_create_context( void const * clientContext );
 
+    /**
+       Returns the client-supplied pointer which was passed to
+       whgc_create_context() for the given context. It is sometimes
+       useful as a lookup key.
+    */
+    void const * whgc_get_client_context(whgc_context const *);
+
 
     /**
        Registers an arbitrary key and value with the given garbage
@@ -247,6 +254,10 @@ extern "C" {
 	   including the size of the underlying hashtable(s). A
 	   context has no way of knowing how much memory is used by
 	   registered items.
+
+	   Don't take this number too seriously. i try to keep the
+	   telemetry up to date for allocs, but keeping track of
+	   deallocs is more difficult due to timing and scope issues.
 	*/
 	size_t alloced;
     };

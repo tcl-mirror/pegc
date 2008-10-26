@@ -306,6 +306,11 @@ extern "C" {
     bool pegc_init_cursor( pegc_cursor * curs, pegc_const_iterator begin, pegc_const_iterator end );
 
     /**
+       Returns a "trimmed" copy of cur, with the begin/end ranges
+       adjusted so that they exclude any leading or trailing spaces.
+    */
+    pegc_cursor pegc_cursor_trimmed( pegc_cursor const cur );
+    /**
        pegc_parser is the parser class used by the pegc API. It is an
        opaque type used by almost all functions in the API. This type
        holds information about the current state of a given parse,
@@ -1335,6 +1340,10 @@ extern "C" {
        pegc_set_error_e() is called and false is returned.
     */
     bool pegc_trigger_actions( pegc_parser * st );
+
+    /**
+       Deallocates all queued actions.
+    */
     void pegc_clear_actions( pegc_parser * st );
 
     /**
@@ -1677,6 +1686,38 @@ extern "C" {
        or other telemetry collection.
     */
     void pegc_free(void*);
+
+    /**
+       A type for storing some telemetry for a pegc_parser.
+       Use pegc_get_stats() to collect the current stats of
+       a parser.
+    */
+    struct pegc_stats
+    {
+	/**
+	   Number of GC entries in the context.
+	*/
+	size_t gc_count;
+	/**
+	   A rough *approximatation* of amount of memory allocated for
+	   pegc-specific internal structures used by the context, not
+	   including the size of the underlying GC hashtable(s).
+	*/
+	size_t alloced;
+	/**
+	   Reports the *approximate* storage allocated by the
+	   GC hashtable(s). See alloced for caveats.
+	*/
+	size_t gc_internals_alloced;
+    };
+    typedef struct pegc_stats pegc_stats;
+
+    /**
+       Returns the current stats for the given context.
+    */
+    pegc_stats pegc_get_stats( pegc_parser const * );
+
+
 #ifdef __cplusplus
 } // extern "C"
 #endif

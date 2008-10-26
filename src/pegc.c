@@ -115,6 +115,14 @@ typedef struct pegc_action pegc_action;
 static const pegc_action pegc_action_init = PEGC_ACTION_INIT;
 
 
+
+#define PEGC_STATS_INIT {\
+    0, /* gc_count */	\
+    0, /* alloced */			\
+    0 /* gc_internals_alloced */	\
+}
+static const pegc_stats pegc_stats_init = PEGC_STATS_INIT;
+
 /**
    The main parser state type. It is 100% opaque - never rely on any
    internals of this type.
@@ -153,9 +161,9 @@ struct pegc_parser
 	size_t line;
 	size_t col;
     } errinfo;
+    pegc_stats stats;
 };
 
-static size_t pegc_parser_instanceCount = 0;
 static const pegc_parser
 pegc_parser_init = { 0, /* name */
 		    {0,0,0}, /* cursor */
@@ -167,7 +175,8 @@ pegc_parser_init = { 0, /* name */
 		     0, /* message */
 		     0, /* line */
 		     0 /* col */
-		     }
+		     },
+		     PEGC_STATS_INIT
 };
 
 void pegc_add_match_listener( pegc_parser * st,
@@ -177,6 +186,7 @@ void pegc_add_match_listener( pegc_parser * st,
     if( ! st || !f ) return;
     pegc_match_listener_data * d = (pegc_match_listener_data*) malloc(sizeof(pegc_match_listener_data));
     if( ! d ) return;
+    st->stats.alloced += sizeof(pegc_match_listener_data);
     d->func = f;
     d->data = cdata;
     pegc_match_listener_data * x = st->listeners;
@@ -230,6 +240,8 @@ void pegc_gc_test_listener( whgc_event const event )
 	whgc_stats const st = whgc_get_stats( event.cx );
 	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
 	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
+	pegc_stats const pst = pegc_get_stats( (pegc_parser const*)whgc_get_client_context(event.cx) );
+	printf("APPROXIMATE allocated memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
     }
 }
 
@@ -302,8 +314,8 @@ pegc_parser * pegc_create_parser( char const * inp, long len )
 {
     pegc_parser * p = (pegc_parser*)malloc( sizeof(pegc_parser) );
     if( ! p ) return 0;
-    ++pegc_parser_instanceCount;
     *p = pegc_parser_init;
+    p->stats.alloced = sizeof(pegc_parser);
     pegc_set_input( p, inp, len );
     return p;
 }
@@ -321,6 +333,7 @@ void pegc_clear_actions( pegc_parser * st )
 	pegc_action * p = st->actions->left;
 	//MARKER;printf("Freeing queued action entry @%p\n",st->actions);
 	pegc_free(st->actions);
+	st->stats.alloced -= sizeof(pegc_action);
 	st->actions = p;
     }
 }
@@ -340,6 +353,7 @@ bool pegc_destroy_parser( pegc_parser * st )
     {
 	pegc_match_listener_data * X = x->next;
 	pegc_free(x);
+	st->stats.alloced -= sizeof(pegc_match_listener_data);
 	x = X;
     }
     pegc_free( st );
@@ -349,7 +363,7 @@ bool pegc_destroy_parser( pegc_parser * st )
 
 bool pegc_parse( pegc_parser * st, PegcRule const * r )
 {
-    return ( ! st || !r || !r->rule )
+    return ( !st || !r || !r->rule )
 	? false
 	: r->rule( r, st );
 }
@@ -409,7 +423,11 @@ bool pegc_set_error_v( pegc_parser * st, char const * fmt, va_list vargs )
     else
     {
 	pegc_line_col( st, &(st->errinfo.line), &(st->errinfo.col) );
-	st->errinfo.message = clob_vmprintf( fmt, vargs );
+	Clob * cb = clob_new();
+	clob_vappendf(cb,fmt,vargs);
+	clob_appendf(cb,"\npegc_set_error_v() says: near line %u, col %u",st->errinfo.line,st->errinfo.col);
+	st->errinfo.message = clob_take_buffer(cb);
+	clob_finalize(cb);
 	if( ! st->errinfo.message ) return false;
     }
     return true;
@@ -543,6 +561,21 @@ pegc_cursor pegc_get_match_cursor( pegc_parser const * st )
 	cur.end = st->match.end;
     }
     return cur;
+}
+
+pegc_cursor pegc_cursor_trimmed( pegc_cursor const cur )
+{
+    pegc_cursor r = cur;
+    pegc_const_iterator c = r.begin;
+    while( c && (c<r.end) && *c && isspace(*c) ) ++c;
+    pegc_const_iterator mark = c;
+    if( c == r.end ) return r;
+    c = r.end-1;
+    if( c <= r.begin ) return r;
+    while( c && (c>mark) && *c && isspace(*c) ) --c;
+    r.begin = r.pos = mark;
+    r.end = c;
+    return r;
 }
 
 char * pegc_cursor_tostring( pegc_cursor const cur )
@@ -794,6 +827,7 @@ PegcRule * pegc_alloc_r( pegc_parser * st, PegcRule_mf const func, void const * 
     *r = pegc_r(func,data);
     if( st )
     {
+	st->stats.alloced += sizeof(PegcRule);
 	pegc_gc_add( st, r, pegc_free_key );
     }
     return r;
@@ -1317,6 +1351,7 @@ PegcRule pegc_r_list_vv( pegc_parser * st, bool orOp, va_list ap )
 	if(li) pegc_free(li);
 	return PegcRule_invalid;
     }
+    st->stats.alloced += (sizeof(PegcRule) * pos);
     li[pos] = PegcRule_invalid;
     //MARKER;printf("Added %d item(s) to rule list.\n",pos);
     pegc_gc_add( st, li, pegc_free );
@@ -1364,7 +1399,8 @@ static bool PegcRule_mf_action_d( PegcRule const * self, pegc_parser * st )
     { /* we should report an error, but we don't want to malloc now! */
 	return false;
     }
-    //pegc_gc_add( st, info, pegc_free );
+    st->stats.alloced += sizeof(pegc_action);
+    //pegc_gc_add( st, info, 0 );
     *info = pegc_action_init;
     info->action = *theact;
     info->action.match.begin = orig;
@@ -1391,6 +1427,7 @@ PegcRule pegc_r_action_d_p( pegc_parser * st,
     //MARKER;
     PegcAction * act = (PegcAction*)malloc(sizeof(PegcAction));
     if( ! act ) return PegcRule_invalid;
+    st->stats.alloced += sizeof(PegcAction);
     pegc_gc_add( st, act, pegc_free );
     act->action = onMatch;
     act->data = clientData;
@@ -1410,21 +1447,20 @@ PegcRule pegc_r_action_d_v( pegc_parser * st,
 bool pegc_trigger_actions( pegc_parser * st )
 {
     if( pegc_has_error(st) ) return false;
-    pegc_action const * a = st->actions;
+    pegc_action * a = st->actions;
     if( ! a ) return false;
     while( a && a->left ) a = a->left;
     while( a )
     {
-	pegc_action * nc = pegc_gc_search( st, a );
-	if( ! nc )
-	{
-	    pegc_set_error_e( st, "pegc_trigger_actions(): action for @%p not found!",a);
-	    return false;
-	}
 	if( a->action.action
 	    &&
-	    !a->action.action( st, &a->action.match, nc->action.data ) )
+	    !a->action.action( st, &a->action.match, a->action.data ) )
 	{
+	    if( ! pegc_has_error(st) )
+	    {
+		pegc_set_error_e(st,"%s(): action @%p->%p(cursor=@%p,data=@%p) failed.",
+				 a, a->action,&a->action.match, a->action.data );
+	    }
 	    return false;
 	}
 	a = a->right;
@@ -1472,6 +1508,7 @@ PegcRule pegc_r_action_i_p( pegc_parser * st,
 	{
 	    return PegcRule_invalid;
 	}
+	st->stats.alloced += sizeof(pegc_action_info);
 	pegc_gc_add( st, info, pegc_free_value );
 	info->action = onMatch;
 	info->data = clientData;
@@ -1856,6 +1893,8 @@ PegcRule pegc_r_repeat( pegc_parser * st,
        avoid an allocation here.
     */
     pegc_range_info * info = (pegc_range_info *)malloc(sizeof(pegc_range_info));
+    if( ! info ) return PegcRule_invalid;
+    st->stats.alloced += sizeof(pegc_range_info);
     pegc_gc_add( st, info, pegc_free_key );
     info->min = min;
     info->max = max;
@@ -1910,6 +1949,7 @@ PegcRule pegc_r_pad_p( pegc_parser * st,
     if( ! left && !right ) return *rule;
     pegc_pad_info * d = (pegc_pad_info *) malloc(sizeof(pegc_pad_info));
     if( ! d ) return PegcRule_invalid;
+    st->stats.alloced += sizeof(pegc_pad_info);
     d->discard = discardLeftRight;
     PegcRule r = pegc_r( PegcRule_mf_pad, d );
     r.proxy = rule;
@@ -1985,6 +2025,7 @@ PegcRule pegc_r_if_then_else_p( pegc_parser * st,
     if( !st || ! If || ! Then ) return PegcRule_invalid;
     pegc_if_then_else * ite = (pegc_if_then_else*)malloc(sizeof(pegc_if_then_else));
     if( ! ite ) return PegcRule_invalid;
+    st->stats.alloced += sizeof(pegc_if_then_else);
     pegc_gc_add( st, ite, pegc_free_value );
     ite->If = If;
     ite->Then = Then;
@@ -2068,7 +2109,10 @@ static void pegc_free_string_quoted_data(void *x)
     if( p )
     {
 	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", p, p->dest, *p->dest, *p->dest);
-	if( p->freeme ) pegc_free(p->freeme);
+	if( p->freeme )
+	{
+	    pegc_free(p->freeme);
+	}
 	pegc_free(p);
     }
 }
@@ -2160,6 +2204,34 @@ static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
 	|| (!pegc_isgood(st))
 	|| (*pegc_pos(st) != sd->quote) )
     {
+	if( ! pegc_has_error(st) )
+	{
+	    pegc_const_iterator pos = pegc_pos(st);
+	    size_t line1 = 0, line2 = 0;
+	    size_t col1 = 0, col2 = 0;
+	    pegc_line_col( st, &line1, &col1 );
+	    pegc_set_pos( st, orig );
+	    pegc_line_col( st, &line2, &col2 );
+	    pegc_set_pos(st,pos);
+	    char const * detail = 0;
+	    if( *pegc_pos(st) != sd->quote )
+	    {
+		detail = "unexpected end of quoted string.";
+	    }
+	    else if( pegc_eof(st) )
+	    {
+		detail = "hit EOF while inside a quoted string.";
+	    }
+	    else
+	    {
+		detail = "unknown error parsing quoted string.";
+	    }
+	    pegc_set_error_e(st,
+			     "%s() parse error near line %u, col %u: %s"
+			     "\nPossibly started near line %u, col %u.",
+			     __func__, line1, col1, detail,
+			     line2, col2);
+	}
 	pegc_set_pos( st, orig );
 	return false;
     }
@@ -2167,6 +2239,7 @@ static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
     if( sd->freeme )
     {
 	//MARKER; printf("freeing old match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
+	st->stats.alloced -= pegc_strlen(sd->freeme);
 	pegc_free(sd->freeme);
 	if( sd->dest ) *sd->dest = 0;
 	sd->freeme = 0;
@@ -2174,6 +2247,7 @@ static bool PegcRule_mf_string_quoted( PegcRule const * self, pegc_parser * st )
     if( 0 != sd->dest )
     {
 	sd->freeme = pegc_unescape_quoted_string( orig, pegc_pos(st)-orig, sd->quote, sd->esc );
+	if( sd->freeme ) st->stats.alloced += pegc_strlen( sd->freeme );
 	*sd->dest = sd->freeme;
     }
     //MARKER; printf("setting match string @%p / %p / %p: [%s]\n", sd, sd->dest, *sd->dest, *sd->dest);
@@ -2198,6 +2272,20 @@ PegcRule pegc_r_string_quoted( pegc_parser * st,
     //MARKER; printf("Register dest %c-style string @%p / %p / %p\n", sd->quote,sd, sd->dest, *sd->dest);
     return pegc_r( PegcRule_mf_string_quoted, sd );
 }
+
+pegc_stats pegc_get_stats( pegc_parser const * cx )
+{
+    whgc_stats const wh = whgc_get_stats( cx ? cx->gc : 0 );
+    pegc_stats st = cx ? cx->stats : pegc_stats_init;
+    if( cx )
+    {
+	st.gc_count = wh.entry_count;
+	//st.alloced += wh.alloced;
+	st.gc_internals_alloced = wh.alloced;
+    }
+    return st;
+}
+
 
 #undef MARKER
 #undef DUMPPOS

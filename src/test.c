@@ -265,7 +265,7 @@ int test_actions()
     PegcRule const ABC = pegc_r_string("abc",false);
     PegcRule const ActI = pegc_r_action_i_p( st, &ABC, my_pegc_action, 0 );
     PegcRule const ActD = pegc_r_action_d_p( st, &ActI, my_delayed_action, 0 );
-    int rc = 1;
+    int rc = 0;
     if( pegc_parse( st, &ActD ) )
     {
 	MARKER;printf("rc=%d\n",rc);
@@ -278,6 +278,12 @@ int test_actions()
     else
     {
 	MARKER; printf("Action Match failed :(\n");
+	rc = 1;
+    }
+    if( pegc_has_error(st) )
+    {
+	rc = 2;
+	MARKER;printf("Parser error: [%s]\n",pegc_get_error(st,0,0));
     }
     pegc_destroy_parser(st);
     return rc;
