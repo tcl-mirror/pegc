@@ -13,7 +13,6 @@
 #endif
 
 PegcRule pg_r_literal( pegc_parser * p );
-PegcRule pg_r_char_class( pegc_parser * p );
 PegcRule pg_r_larrow( pegc_parser * p );
 PegcRule pg_r_skipws( pegc_parser * p, PegcRule const R );
 
@@ -30,6 +29,10 @@ static bool PG_mf_semantic_action( PegcRule const * self, pegc_parser * p );
 static const PegcRule PG_r_semantic_action = PEGCRULE_INIT1(PG_mf_semantic_action);
 PegcRule pg_r_semantic_action( pegc_parser * p );
 
+bool PG_mf_char_class( PegcRule const * self, pegc_parser * p );
+static const PegcRule PG_r_char_class = PEGCRULE_INIT1(PG_mf_char_class);
+PegcRule pg_r_char_class();
+
 PegcRule pg_r_prefix();
 PegcRule pg_r_sequence();
 PegcRule pg_r_expr();
@@ -39,6 +42,9 @@ const PegcRule PG_r_expr = PEGCRULE_INIT1(PG_mf_expr);
 bool PG_mf_identifier( PegcRule const * self, pegc_parser * p );
 const PegcRule PG_r_identifier = PEGCRULE_INIT1(PG_mf_identifier);
 PegcRule pg_r_identifier();
+
+bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p );
+const PegcRule PG_r_comment_cpp = PEGCRULE_INIT1(PG_mf_comment_cpp);
 
 
 static struct PGApp
@@ -176,7 +182,7 @@ bool PG_mf_identifier( PegcRule const * self, pegc_parser * p )
 	PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_end);
 	PegcRule const pad = pg_r_skipws( p, id );
 	//PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_spacing, PG_end);
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "PG_mf_identifier()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "PG_mf_identifier()");
 	r = pegc_copy_r_v( p, act );
 	pegc_gc_register( p, (void *)PG_mf_identifier, 0, r, 0 );
     }
@@ -205,34 +211,71 @@ PegcRule pg_r_larrow( pegc_parser * p )
     else return PegcRule_invalid;
 }
 
-PegcRule pg_r_char_class( pegc_parser * p )
+/**
+   A rule for parsing character classes. The following special cases
+   are handled:
+
+   If you want to use a ']' character in a list it must be
+   the first item after the opening brace, e.g. []abc].
+
+   If you want to use a ']' character in a negated list it must be
+   the first item after the caret, e.g. [^]abc].
+
+   An empty set (e.g. []) is not supported.
+
+   Either way, it's likely to really play hacking with syntax
+   highlighters.
+*/
+bool PG_mf_char_class( PegcRule const * self, pegc_parser * p )
 {
     PegcRule * r = 0;
-    void * v = pegc_gc_search( p, (void const *)pg_r_char_class );
+    void * v = pegc_gc_search( p, (void const *)PG_mf_char_class );
     if( v )
     {
 	r = (PegcRule*)v;
     }
     else
     {
-	const PegcRule open = pegc_r_char( '[', true );
+	//const PegcRule empty = pegc_r_string("[]",true);
+	const PegcRule open1 = pegc_r_char( '[', true );
 	const PegcRule close = pegc_r_char( ']', true );
-	//const PegcRule special = pegc_r_string( "^]", true );
-	const PegcRule achar =
-	    pegc_r_plus_v( p, pegc_r_notchar(']',true) );
+	const PegcRule open2 = pegc_r_string( "^]", true );
+	const PegcRule notclose = pegc_r_notchar(']',true);
+	const PegcRule plus = pegc_r_plus_v( p, notclose );
+	const PegcRule star = pegc_r_star_v( p, notclose );
 	const PegcRule R =
-	    pegc_r_and_ev( p,
-			   open,
-			   achar,
-			   close,
-			   PG_end );
+		 pegc_r_and_ev( p,
+			//pegc_r_notat_v(p,empty),
+			open1,
+			pegc_r_if_then_else_v(p,
+			      /* special cases: []...] and [^]...] */
+			      pegc_r_or_ev(p,
+					   open2,
+					   close,
+					   PG_end),
+			      pegc_r_opt_v(p,star),
+			      plus),
+			close,
+			PG_end );
 	PegcRule const pad = pg_r_skipws( p, R );
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_r_char_class()");
+#if 0
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "PG_mf_char_class()");
 	r = pegc_copy_r_v(p, act);
-	pegc_gc_register(p, (void*)pg_r_char_class, 0, r, 0 );
+#else
+	r = pegc_copy_r_v(p, pad);
+#endif
+	pegc_gc_register(p, (void*)PG_mf_char_class, 0, r, 0 );
     }
-    if( r ) return *r;
-    else return PegcRule_invalid;
+    if( r && r->rule ) return r->rule(r,p);
+    else return false;
+
+}
+/**
+   Returns PG_r_char_class.
+*/
+PegcRule pg_r_char_class()
+{
+    return PG_r_char_class;
 }
 /**
    Parses single- and double-quoted strings.
@@ -255,7 +298,7 @@ PegcRule pg_r_literal( pegc_parser * p )
 		       PG_end
 		   )
 	     );
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_r_literal()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_literal()");
 	r = pegc_copy_r_v(p, act);
 	pegc_gc_register(p, (void*)pg_r_literal, 0, r, 0 );
     }
@@ -306,7 +349,7 @@ bool PG_mf_primary( PegcRule const * self, pegc_parser * p )
 					 PG_r_semantic_action,
 					 PG_end );
 	PegcRule const pad = pg_r_skipws(p, R);
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_mf_primary()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "PG_mf_primary()");
 	*r = act;
     }
     if( r && r->rule ) return r->rule(r,p);
@@ -341,7 +384,7 @@ static bool PG_mf_suffix( PegcRule const * self, pegc_parser * p )
 			  opt,
 			  PG_end );
 	PegcRule const pad = pg_r_skipws(p, R);
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "PG_mf_suffix()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "PG_mf_suffix()");
 	*r = act;
     }
     if( r && r->rule ) return r->rule(r,p);
@@ -367,7 +410,7 @@ bool PG_mf_semantic_action( PegcRule const * self, pegc_parser * p )
 			  pegc_r_until_p(&PG_op_actclose),
 			  PG_end );
 	PegcRule const pad = pg_r_skipws( p, R );
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_r_semantic_action()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_semantic_action()");
 	*r = act;
     }
     if( r && r->rule ) return r->rule(r,p);
@@ -416,7 +459,7 @@ static bool PG_mf_prefix( PegcRule const * self, pegc_parser * p )
 			 PG_end
 			 ));
 	PegcRule const pad = Prefix;
-	PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_r_prefix()");
+	PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_prefix()");
 	*r = act;
     }
     if( r && r->rule ) return r->rule( r, p );
@@ -456,7 +499,7 @@ bool PG_mf_expr( PegcRule const * self, pegc_parser * p )
 			 tail,
 			 PG_end);
        PegcRule const pad = pg_r_skipws( p, Expr );
-       PegcRule const act = pegc_r_action_d_v( p, pad, pg_test_action, "pg_r_expr()");
+       PegcRule const act = pegc_r_action_i_v( p, pad, pg_test_action, "pg_r_expr()");
        *r = act;
    }
    if( r && r->rule ) return r->rule(r,p);
@@ -466,7 +509,74 @@ PegcRule pg_r_expr()
 {
     return PG_r_expr;
     //MARKER;
- }
+}
+
+bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p )
+{
+   PegcRule * r = 0;
+   void * v = pegc_gc_search( p, (void const *)PG_mf_comment_cpp );
+   if( v )
+   {
+       r = (PegcRule*)v;
+   }
+   else
+   {
+       r = pegc_alloc_r(p,0,0);
+       pegc_gc_register(p, (void*)PG_mf_comment_cpp, 0, r, 0 );
+       PegcRule const open = pegc_r_string("/*",true);
+       PegcRule const atopen = pegc_r_at_v(p,open);
+       PegcRule const close = pegc_r_string("*/",true);
+       PegcRule const atclose = pegc_r_at_v(p,close);
+       PegcRule const err_opener = pegc_r_error_e(p,"Comment opener '/*' found inside a comment.");
+       PegcRule const err_eof = pegc_r_error_e(p,"EOF reached inside a comment block.");
+       // ^^^ i can't get err_eof to trigger... my rule's broke, apparently.
+
+       PegcRule const opencheck= 
+	   pegc_r_if_then_else_v(p,
+				 atopen,
+				 err_opener,
+				 PegcRule_success);
+       PegcRule const eofcheck = 
+	   pegc_r_if_then_else_v(p,
+				 PegcRule_eof,
+				 err_eof,
+				 PegcRule_success);
+       PegcRule const content =
+	   pegc_r_plus_v(p,
+#if 0
+	   pegc_r_if_then_else_v(p,
+				 opencheck,
+				 pegc_r_if_then_else_v(p,
+						       atclose,
+						       PegcRule_success,
+						       pegc_r_and_ev(p,eofcheck,PegcRule_noteof,PG_end)
+						       ),
+				 PegcRule_failure
+				 )
+#else
+           pegc_r_and_ev(p,
+			opencheck,
+			pegc_r_or_ev(p,
+				     atclose,
+				     pegc_r_and_ev(p,eofcheck,PegcRule_noteof,PG_end),
+				     PG_end ),
+			PG_end
+			)
+#endif
+			 );
+       PegcRule const R =
+	   pg_r_skipws(p,
+	   pegc_r_and_ev(p,
+			 open,
+			 content,
+			 close,
+			 PG_end)
+		       );
+       *r = R;
+   }
+   if( r && r->rule ) return r->rule(r,p);
+   else return false;
+}
 
 int a_test()
 {
@@ -487,7 +597,11 @@ int a_test()
     }
     pegc_parser * P = PGApp.P;//pegc_create_parser( src, -1 );
     pegc_set_input( P, src, -1 );
-    PegcRule const R = PG_r_primary;
+    PegcRule const R = pegc_r_or_ev(P,
+				    PG_r_primary,
+				    PG_spacing,
+				    pegc_r_action_i_v( P, PG_r_comment_cpp, pg_test_action, "PG_r_comment_cpp"),
+				    PG_end);
     MARKER;
     int rc = 0;
     MARKER;printf("src=[%s]\n",src);
@@ -513,7 +627,8 @@ int a_test()
 	pegc_trigger_actions( PGApp.P );
 	pegc_clear_actions( PGApp.P );
     }
-
+    pegc_set_input(P,0,0);
+    clob_finalize(cb);
     //pegc_destroy_parser(P);
     return rc;
 }
