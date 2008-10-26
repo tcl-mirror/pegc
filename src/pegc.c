@@ -240,7 +240,7 @@ void pegc_gc_test_listener( whgc_event const event )
 	whgc_stats const st = whgc_get_stats( event.cx );
 	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
 	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
-	pegc_stats const pst = pegc_get_stats( (pegc_parser const*)whgc_get_client_context(event.cx) );
+	pegc_stats const pst = pegc_get_stats( (pegc_parser const*)whgc_get_context_client(event.cx) );
 	printf("APPROXIMATE allocated memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
     }
 }
@@ -254,7 +254,7 @@ bool pegc_gc_register( pegc_parser * st,
     {
         st->gc = whgc_create_context(st);
 	if( ! st->gc ) return false;
-	whgc_add_listener( st->gc, pegc_gc_test_listener );
+	//whgc_add_listener( st->gc, pegc_gc_test_listener );
     }
     if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {
@@ -768,9 +768,8 @@ static bool PegcRule_mf_char_spec( PegcRule const * self, pegc_parser * st )
 PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec )
 {
     if( ! st || !spec || (*spec != '[') ) return PegcRule_invalid;
-    char * fmt = clob_mprintf( "%%1%s", spec );
+    char * fmt = pegc_mprintf( st, "%%1%s", spec );
     if( ! fmt ) return PegcRule_invalid;
-    pegc_gc_add( st, fmt, pegc_free_value );
     return pegc_r(PegcRule_mf_char_spec, fmt);
 }
 
