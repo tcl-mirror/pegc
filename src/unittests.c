@@ -45,6 +45,7 @@ bool run_test( pegc_parser * P,
 {
     pegc_parser * p = P ? P : ThisApp.P;
     pegc_set_input( P, input, -1 );
+    pegc_const_iterator orig = pegc_pos(p);
     bool rc = pegc_parse( p, &r );
     bool realRC = rc;
     if( shouldFail && !rc ) rc = true;
@@ -64,8 +65,19 @@ bool run_test( pegc_parser * P,
 		   name, input, expect, err );
 	}
     }
-    if( expect && rc )
+    while( rc )
     {
+	if( pegc_pos(p) == orig )
+	{
+	    printf("Rule succeeded but did not consume.\n");
+	    if( expect && *expect )
+	    {
+		printf("EXPECT string [%s] was not empty for a non-consuming rule.\n",expect);
+		rc = false;
+	    }
+	    break;
+	}
+	if( ! expect ) break;
 	char * m = pegc_get_match_string(p);
 	int len = strlen(expect);
 	if( (0 != strncmp(m,expect,len)) )
@@ -79,6 +91,7 @@ bool run_test( pegc_parser * P,
 	    printf("Rule matched expectations: [%s]==[%s]\n",m,expect);
 	}
 	free(m);
+	break;
     }
     printf("Rule %s: [%s]\n",
 	   (rc && realRC) ?
@@ -100,7 +113,7 @@ int a_test()
 #define TEST0(R,IN) TEST(R,IN,0,true)
 
 #define RULE PegcRule const
-    pegc_parser * P = pegc_create_parser(0,0);
+    pegc_parser * P = ThisApp.P; //pegc_create_parser(0,0);
 
     RULE end = PegcRule_invalid;
     RULE alpha = PegcRule_alpha; 
@@ -108,6 +121,7 @@ int a_test()
     RULE a_plus = pegc_r_plus_p(&alpha);
     RULE d_plus = pegc_r_plus_p(&PegcRule_digit); 
     RULE a_then_d = pegc_r_and_ev(P,alpha,digit,end);
+    RULE space = pegc_r_star_p(&PegcRule_space);
 
     TEST1(alpha,"zyx","z");
     TEST1(a_plus,"zyx","zyx");
@@ -124,11 +138,20 @@ int a_test()
 			      true );
     TEST1(d_pad,"abc123def","123");
     RULE d_pad2 = pegc_r_pad_p(P,&alpha,
-			      &d_plus,
-			      &alpha,
-			      false );
+			       &d_plus,
+			       &alpha,
+			       false );
     TEST1(d_pad2,"abc123def","abc123def");
-			      
+    RULE at_a =
+	pegc_r_and_ev(P,
+		      space,
+		      pegc_r_at_p(&alpha));
+    RULE not_a = pegc_r_notat_p(&at_a);
+    TEST1(not_a," *789*","");
+    TEST1(at_a,"  a*789*","  ");
+
+    RULE until_a = pegc_r_until_p(&at_a);
+    TEST1(until_a," - a*789*"," - ");
 
     return 0;
 }
@@ -151,6 +174,15 @@ int main( int argc, char ** argv )
 	   (0==rc)
 	   ? "You win :)"
 	   : "You lose :(");
+
+    if( 1 )
+    {
+	whgc_stats const st = whgc_get_stats( ThisApp.gc );
+	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
+	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
+	pegc_stats const pst = pegc_get_stats( ThisApp.P );
+	printf("APPROXIMATE allocated parser memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
+    }
 
     whgc_destroy_context( ThisApp.gc );
     pegc_destroy_parser( ThisApp.P );
