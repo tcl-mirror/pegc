@@ -196,7 +196,6 @@ int test_three()
     return rc;
 }
 
-#include "pegc_strings.h"
 int test_strings()
 {
     MARKER; printf("test strings...\n");
