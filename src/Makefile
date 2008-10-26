@@ -24,8 +24,8 @@ endif
 
 PACKAGE.NAME = pegc
 PACKAGE.VERSION := $(shell date +%Y%m%d)
-# ShakeNMake.DOXYGEN.USE_DOT := 1
-ShakeNMake.DOXYGEN.GENERATE_LATEX = NO
+ShakeNMake.DOXYGEN.GENERATE_LATEX := NO
+ShakeNMake.DOXYGEN.USE_DOT := 0
 -include shake-n-make.make
 
 #CFLAGS += -std=c99

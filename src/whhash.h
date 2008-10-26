@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 /**
-   @page whhash_page_main whhash: WanderingHorse.net hashtable API.
+   @page whhash_page_main whhash: hashtable API
 
    The functions and types named whhash* are part of the
    WanderingHorse.net hashtable library. It is a hashtable

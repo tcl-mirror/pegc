@@ -1,12 +1,12 @@
 #ifndef WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_
 #define WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_ 1
 #include <stdarg.h>
-#include <stdio.h> /**FILE */
+#include <stdio.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*! @page whclob_page_main whclob: WanderingHorse.net dynamic char array utilities
+/*! @page whclob_page_main whclob: dynamic char array utilities
 
 The whclob API encapsulates behaviours related to creating, appending,
 reading, writing, and freeing C-style blobs (stored in memory as char
@@ -26,8 +26,8 @@ Rather than being a fork of Dr. Hipp's code, this is a
 reimplementation done solely for licensing reasons - his code is GPL
 and this is Public Domain.
 
-The underlying printf implementation was pulled from the sqlite3
-source tree and is in the public domain.
+Much of the heavy lifting of this API is done by the vappendf API
+(see: \ref vappendf_page_main).
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan/)
 

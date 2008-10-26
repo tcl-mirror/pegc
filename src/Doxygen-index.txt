@@ -1,0 +1,11 @@
+/** @mainpage WanderingHorse.net C libs
+
+This is the main doxygen index for a few different APIs. See the Pages links for the specific APIs.
+
+Related web pages:
+
+http://wanderinghorse.net/computing/
+
+http://fossil.wanderinghose.net - source code repositories.
+
+*/

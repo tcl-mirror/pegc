@@ -28,7 +28,7 @@ extern "C" {
 #endif /* __cplusplus */
 
     /*!
-      @page page_whgc whgc: the WanderingHorse.net Garbage Collector
+      @page page_whgc whgc: Simple garbage collection lib for C
 
       @section sec_about_whgc About whgc
 
@@ -124,7 +124,6 @@ extern "C" {
        require a exclusive (read/write) access. whgc_create_context()
        is reentrant and does not need to be locked.
     */
-
     struct whgc_context;
     /*!\typedef whgc_context
 
@@ -286,7 +285,8 @@ extern "C" {
     whgc_stats whgc_get_stats( whgc_context const * );
 
     /**
-       Enum for whgc event types.
+       Enum for whgc event types. Used in conjunction with the
+       whgc_event struct.
     */
     enum whgc_event_types {
     /**
@@ -299,7 +299,9 @@ extern "C" {
     whgc_event_unregistered = 2,
     /**
        Signal that a key/val pair is about to e passed through the
-       item's dtor functions.
+       item's dtor functions. This event is triggered even if the dtor
+       functions won't actually be called (e.g. they are 0). Thus this
+       signals a "virtual" destruction.
     */
     whgc_event_destructing_item = 3,
     /**

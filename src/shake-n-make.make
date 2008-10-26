@@ -636,8 +636,8 @@ $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML): Doxyfile
 	@echo "Building docs from headers"
 	$(ShakeNMake.BINS.DOXYGEN)
 	@echo "Output should be in the directory '$@'."
-ifneq (,$(ShakeNMake.BINS.LATEX))
-	@echo "Latex output is in '$(ShakeNMake.DOXYGEN.OUTPUT_DIR.LATEX)'."
+ifneq (NO,$(ShakeNMake.DOXYGEN.GENERATE_LATEX))
+	@echo "Latex output (if any) is in '$(ShakeNMake.DOXYGEN.OUTPUT_DIR.LATEX)'."
 endif
 
 doxygen: $(ShakeNMake.DOXYGEN.OUTPUT_DIR.HTML)
