@@ -6,16 +6,24 @@
 #include <stdio.h>
 #include <string.h>
 
-/*****************************************************************************/
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+  Internal type for holding hashtable entries.
+*/
 struct whhash_entry
 {
     void *k, *v;
     whhash_val_t h;
     struct whhash_entry *next;
 };
+typedef struct whhash_entry whhash_entry;
+
 
 struct whhash_table {
-    unsigned int tablelength;
+    size_t tablelength;
     struct whhash_entry **table;
     size_t entrycount;
     size_t loadlimit;
@@ -26,31 +34,6 @@ struct whhash_table {
     void (*freeVal)( void * );
     size_t alloced;
 };
-
-/*****************************************************************************/
-/**
-   Returns h->hashfn(k), or hashval_t_err if either h or k are 0.
-*/
-whhash_val_t
-whhash_hash(whhash_table *h, void const *k);
-
-/*****************************************************************************/
-/* Returns (hashvalue % tablelength) */
-#if 1
-size_t whhash_index(size_t tablelength, size_t hashvalue);
-#else
-#define whhash_index(LEN,HV) (HV % LEN)
-#endif
-
-/**
-   Cleans up key using h->freeKey(key).
-*/
-void whhash_free_key(whhash_table const * h, void * key );
-/**
-   Cleans up val using h->freeVal(val).
-*/
-void whhash_free_val(whhash_table const * h, void * val );
-
 static const whhash_table
 whhash_init = { 0, /*tablelength*/
 		   0, /* table */
@@ -59,11 +42,58 @@ whhash_init = { 0, /*tablelength*/
 		   0, /* primeindex */
 		   0, /* hashfn */
 		   0, /* eqfn */
-		   free, /* freeKey */
+		   0, /* freeKey */
 		   0, /* freeVal */
 		   0 /* alloced */
 };
 const whhash_val_t hashval_t_err = (whhash_val_t)-1;
+
+/**
+   Returns h->hashfn(k), or hashval_t_err if either h or k are 0.
+*/
+static whhash_val_t whhash_hash(whhash_table *h, void const *k)
+{
+    if( !h || !k ) return hashval_t_err;
+    /* Aim to protect against poor hash functions by adding logic here
+     * - logic taken from java 1.4 whhash_table source */
+    whhash_val_t i = h->hashfn(k);
+    i += ~(i << 9);
+    i ^=  ((i >> 14) | (i << 18)); /* >>> */
+    i +=  (i << 4);
+    i ^=  ((i >> 10) | (i << 22)); /* >>> */
+    return i;
+}
+
+/*****************************************************************************/
+/* Returns (hashvalue % tablelength) */
+#if 0
+static size_t whhash_index(size_t tablelength, size_t hashvalue)
+{
+    return (hashvalue % tablelength);
+}
+#else
+#define whhash_index(LEN,HV) (HV % LEN)
+#endif
+
+/**
+   For internal use only: this func frees the memory associated with
+   key, using h->freeKey (if set).  Results are undefined if key is
+   not a key in h and if key is used after this func is called.
+ */
+static void whhash_free_key(whhash_table const * h, void * key )
+{
+    if( h && key && h->freeKey ) h->freeKey( key );
+}
+
+/**
+   Like whhash_free_key() but applies to the value.
+*/
+static void whhash_free_val(whhash_table const * h, void * val )
+{
+    if( h  && val && h->freeVal ) h->freeVal( val );
+}
+
+
 /*
 Credit for primes table: Aaron Krowne
  http://br.endernet.org/~akrowne/
@@ -79,12 +109,11 @@ static const whhash_val_t primes[] = {
 805306457, 1610612741
 };
 const whhash_val_t prime_table_length = sizeof(primes)/sizeof(primes[0]);
-const float max_load_factor = 0.65;
+const float max_load_factor =
+    /* original developer's value was 0.65. */
+    0.75 /* See http://en.wikipedia.org/wiki/Hash_table */
+    ;
 
-size_t whhash_index(size_t tablelength, size_t hashvalue)
-{
-    return (hashvalue % tablelength);
-}
 
 /**
    Custom implementation of ceil() to avoid a dependency on
@@ -114,53 +143,29 @@ whhash_create(whhash_val_t minsize,
     }
     h = (whhash_table *)malloc(sizeof(whhash_table));
     if (NULL == h) return NULL; /*oom*/
+    h->alloced += sizeof(whhash_table);
     *h = whhash_init;
     h->freeKey = free;
     h->freeVal = 0;
+#if 0
     h->table = (whhash_entry **)malloc(sizeof(whhash_entry*) * size);
+    if(h->table) memset(h->table, 0, size * sizeof(whhash_entry *));
+#else
+    h->table = (whhash_entry **)calloc(size, sizeof(whhash_entry*));
+#endif
     if (NULL == h->table) { free(h); return NULL; } /*oom*/
-    memset(h->table, 0, size * sizeof(whhash_entry *));
+    h->alloced = (sizeof(whhash_entry*) * size);
     h->tablelength  = size;
     h->primeindex   = pindex;
     h->entrycount   = 0;
     h->hashfn       = hashf;
     h->eqfn         = eqf;
     h->loadlimit    = whhash_ceil(size * max_load_factor);
-    h->alloced = sizeof(whhash_table) + (sizeof(whhash_entry*) * size);
     return h;
 }
 /*****************************************************************************/
-/**
-   For internal use only: this func frees the memory associated
-   with key, using h->freeKey (if set) or free() (by default).
-   Results are undefined if key is not a key in h and if key
-   is used after this func is called.
- */
-void whhash_free_key(whhash_table const * h, void * key )
-{
-    if( h && h->freeKey ) h->freeKey( key );
-}
-
-void whhash_free_val(whhash_table const * h, void * val )
-{
-    if( h && h->freeVal ) h->freeVal( val );
-}
 
 
-/*****************************************************************************/
-whhash_val_t
-whhash_hash(whhash_table *h, void const *k)
-{
-    if( !h || !k ) return hashval_t_err;
-    /* Aim to protect against poor hash functions by adding logic here
-     * - logic taken from java 1.4 whhash_table source */
-    whhash_val_t i = h->hashfn(k);
-    i += ~(i << 9);
-    i ^=  ((i >> 14) | (i << 18)); /* >>> */
-    i +=  (i << 4);
-    i ^=  ((i >> 10) | (i << 22)); /* >>> */
-    return i;
-}
 
 size_t
 whhash_bytes_alloced(whhash_table const * h)
@@ -168,7 +173,6 @@ whhash_bytes_alloced(whhash_table const * h)
     return h ? h->alloced : 0;
 }
 
-/*****************************************************************************/
 static int
 whhash_expand(whhash_table *h)
 {
@@ -228,7 +232,6 @@ whhash_expand(whhash_table *h)
     return -1;
 }
 
-/*****************************************************************************/
 size_t
 whhash_count(whhash_table const * h)
 {
@@ -386,8 +389,6 @@ static whhash_entry * whhash_free_entry( whhash_table * h, whhash_entry * e )
     return next;
 }
 
-/*****************************************************************************/
-/* destroy */
 void
 whhash_destroy(whhash_table *h)
 {
@@ -433,20 +434,105 @@ whhash_hash_cstring_djb2( void const * vstr)
     return hash;
 }
 
+whhash_val_t whhash_hash_cstring_djb2m( void const * vstr )
+{
+    char const * str = (char const *)vstr;
+    if( ! str ) return hashval_t_err;
+    whhash_val_t h = 0;
+    int c = 0;
+    while( (c = *(str++)) )
+    {
+	h = 33 * h ^ c;
+    }
+    return h;
+}
+
+#if 0
+/**
+   Implements the Fowler/Noll/Vo (FNV) hash, as described at:
+
+   http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
+*/
+//whhash_val_t whhash_hash_cstring_fnv( void const * str );
+whhash_val_t whhash_hash_cstring_fnv( void const * vstr )
+{
+    char const * str = (char const *)vstr;
+    if( ! str ) return hashval_t_err;
+    whhash_val_t h = (unsigned long long) 2166136261L;
+    /**
+       ^^^^
+       gcc says: warning: this decimal constant is unsigned only in ISO C90
+    */
+    int c = 0;
+    while( (c = *(str++)) )
+    {
+	h = (h * 16777619L) ^ c;
+    }
+    return h;
+}
+#endif
+
+whhash_val_t whhash_hash_cstring_oaat( void const * vstr )
+{
+    char const * str = (char const *)vstr;
+    if( ! str ) return hashval_t_err;
+    whhash_val_t h = 0;
+    int c = 0;
+    while( (c = *(str++)) )
+    {
+	h += c;
+	h += (h << 10);
+	h ^= (h >> 6);
+    }
+    h += ( h << 3 );
+    h ^= ( h >> 11 );
+    h += ( h << 15 );
+    return h;
+}
+
+
 whhash_val_t
 whhash_hash_cstring_sdbm(void const *vstr)
 { /* "sdbm" algo code taken from: http://www.cse.yorku.ca/~oz/hash.html */
-    if( ! vstr ) return hashval_t_err;
-    whhash_val_t hash = 0;
-    int c = 0;
     char const * str = (char const *)vstr;
     if( ! str ) return hashval_t_err;
-    while( (c = *str++) )
+    whhash_val_t h = 0;
+    int c = 0;
+    while( str && (c = *str++) )
     {
-        hash = c + (hash << 6) + (hash << 16) - hash;
+        h = c + (h << 6) + (h << 16) - h;
     }
-    return hash;
+    return h;
 }
+
+whhash_val_t
+whhash_hash_cstring_rot( void const * vstr)
+{
+    char const * str = (char const *)vstr;
+    if( ! str ) return hashval_t_err;
+    whhash_val_t h = 0;
+    int c = 0;
+    while( (c = *(str++)) )
+    {
+	h = (h << 4) ^ (h >> 28 ) ^ c;
+    }
+    return h;
+}
+
+whhash_val_t
+whhash_hash_cstring_sax( void const * vstr)
+{
+    char const * str = (char const *)vstr;
+    if( ! str ) return hashval_t_err;
+    whhash_val_t h = 0;
+    int c = 0;
+    while( (c = *(str++)) )
+    {
+	h ^= (h << 5) + (h >> 2) + c;
+    }
+    return h;
+}
+
 
 whhash_val_t
 whhash_hash_long( void const * n )
@@ -456,20 +542,31 @@ whhash_hash_long( void const * n )
         : hashval_t_err;
 }
 
-whhash_itr *
-whhash_iter(whhash_table *h)
+struct whhash_iter
+{
+    whhash_table *h;
+    whhash_entry *e;
+    whhash_entry *parent;
+    unsigned int index;
+};
+static const whhash_iter whhash_itr_init = {0,0,0,0};
+
+whhash_iter *
+whhash_get_iter(whhash_table *h)
 {
     if( !whhash_count(h) ) return 0;
     unsigned int i, tablelength;
-    whhash_itr *itr = (whhash_itr *)
-        malloc(sizeof(whhash_itr));
+    whhash_iter *itr = (whhash_iter *)
+        malloc(sizeof(whhash_iter));
     if (NULL == itr) return NULL;
+    h->alloced = sizeof(whhash_iter);
+    *itr = whhash_itr_init;
     itr->h = h;
     itr->e = NULL;
     itr->parent = NULL;
     tablelength = h->tablelength;
     itr->index = tablelength;
-    if (0 == h->entrycount) return itr;
+    //if (0 == h->entrycount) return itr;
 
     for (i = 0; i < tablelength; i++)
     {
@@ -483,29 +580,21 @@ whhash_iter(whhash_table *h)
     return itr;
 }
 
-/*****************************************************************************/
-/* key      - return the key of the (key,value) pair at the current position */
-/* value    - return the value of the (key,value) pair at the current position */
-
 void *
-whhash_iter_key(whhash_itr *i)
+whhash_iter_key(whhash_iter *i)
 { return i ? i->e->k : 0; }
 
 void *
-whhash_iter_value(whhash_itr *i)
+whhash_iter_value(whhash_iter *i)
 { return i ? i->e->v : 0; }
 
-/*****************************************************************************/
-/* advance - advance the iterator to the next element
- *           returns zero if advanced to end of table */
-
 int
-whhash_iter_advance(whhash_itr *itr)
+whhash_iter_advance(whhash_iter *itr)
 {
     unsigned int j,tablelength;
     whhash_entry **table;
     whhash_entry *next;
-    if (NULL == itr->e) return 0; /* stupidity check */
+    if (!itr || (!itr->e)) return 0;
 
     next = itr->e->next;
     if (NULL != next)
@@ -547,7 +636,7 @@ whhash_iter_advance(whhash_itr *itr)
  */
 
 int
-whhash_iter_remove(whhash_itr *itr)
+whhash_iter_remove(whhash_iter *itr)
 {
     whhash_entry *remember_e, *remember_parent;
     int ret;
@@ -572,26 +661,29 @@ whhash_iter_remove(whhash_itr *itr)
     ret = whhash_iter_advance(itr);
     if (itr->parent == remember_e) { itr->parent = remember_parent; }
     free(remember_e);
+    itr->h->alloced -= sizeof(whhash_entry);
     return ret;
 }
 
-/*****************************************************************************/
-int /* returns zero if not found */
-whhash_iter_search(whhash_itr *itr,
-                          whhash_table *h, void *k)
+int
+whhash_iter_search(whhash_iter *itr,
+		   void *k)
 {
+    if( ! itr  || !itr->h || !k ) return 0;
     whhash_entry *e, *parent;
     unsigned int hashvalue, index;
-
+    whhash_table *h = itr->h;
     hashvalue = whhash_hash(h,k);
     index = whhash_index(h->tablelength,hashvalue);
-
     e = h->table[index];
     parent = NULL;
     while (NULL != e)
     {
         /* Check hash value to short circuit heavier comparison */
-        if ((hashvalue == e->h) && (h->eqfn(k, e->k)))
+        if ((e->k == k)
+	    ||
+	    ((hashvalue == e->h) && (h->eqfn(k, e->k)))
+	    )
         {
             itr->index = index;
             itr->e = e;
@@ -606,35 +698,40 @@ whhash_iter_search(whhash_itr *itr,
 }
 
 
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
 /*
- * Copyright (c) 2002, Christopher Clark
- * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 
- * * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- * 
- * * Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- * 
- * * Neither the name of the original author; nor the names of any contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
- * 
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER
- * OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
- * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ Copyright (c) 2002, Christopher Clark
+ Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/)
+ All rights reserved.
+ 
+ Redistribution and use in source and binary forms, with or without
+ modification, are permitted provided that the following conditions
+ are met:
+ 
+ * Redistributions of source code must retain the above copyright
+ notice, this list of conditions and the following disclaimer.
+ 
+ * Redistributions in binary form must reproduce the above copyright
+ notice, this list of conditions and the following disclaimer in the
+ documentation and/or other materials provided with the distribution.
+ 
+ * Neither the name of the original author; nor the names of any contributors
+ may be used to endorse or promote products derived from this software
+ without specific prior written permission.
+ 
+ 
+ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER
+ OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+ NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
