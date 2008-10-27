@@ -98,7 +98,7 @@ bool whrc_register( whrc_context * cx, void * item, whrc_dtor_f dtor )
     return 0 != e;
 }
 
-static whrc_entry * whrc_search( whrc_context * cx, void const * item )
+static whrc_entry * whrc_search_entry( whrc_context * cx, void const * item )
 {
     return (cx && item)
 	? (whrc_entry *) whhash_search(cx->ht, item)
@@ -107,7 +107,7 @@ static whrc_entry * whrc_search( whrc_context * cx, void const * item )
 
 size_t whrc_refcount( whrc_context * cx, void const * item )
 {
-    whrc_entry const * e = whrc_search(cx, item);
+    whrc_entry const * e = whrc_search_entry(cx, item);
     if( ! e ) return whrc_ref_err_val;
     return e->refcount;
 }
@@ -115,31 +115,31 @@ size_t whrc_refcount( whrc_context * cx, void const * item )
 
 bool whrc_is_registered( whrc_context * cx, void const * item )
 {
-    return 0 != whrc_search(cx,item);
+    return 0 != whrc_search_entry(cx,item);
 }
 
-static whrc_entry * whrc_take( whrc_context * cx, void * item )
+static whrc_entry * whrc_take_entry( whrc_context * cx, void * item )
 {
     return cx
 	? (whrc_entry *) whhash_take(cx->ht, item)
 	: 0;
 }
 
-size_t whrc_ref( whrc_context * cx, void * item )
+size_t whrc_addref( whrc_context * cx, void * item )
 {
-    whrc_entry * e = whrc_search(cx,item);
+    whrc_entry * e = whrc_search_entry(cx,item);
     if( ! e ) return whrc_ref_err_val;
     return ++e->refcount;
 }
 
-size_t whrc_unref( whrc_context * cx, void * item )
+size_t whrc_rmref( whrc_context * cx, void * item )
 {
-    whrc_entry * e = whrc_search(cx,item);
+    whrc_entry * e = whrc_search_entry(cx,item);
     MARKER; printf("e=@%p, rc=%u\n",e,e?e->refcount:whrc_ref_err_val);
     if( ! e ) return whrc_ref_err_val;
     if( 0 == --e->refcount )
     {
-        whrc_entry * check = whrc_take(cx, item);
+        whrc_entry * check = whrc_take_entry(cx, item);
 	assert( (check == e) && "Internal state error - it seems another thread has trashed our hashtable!");
 	/**
 	   We do this copy/free thing for the case that the dtor

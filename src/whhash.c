@@ -26,7 +26,9 @@ typedef struct whhash_entry whhash_entry;
 	0,/*insertions*/ \
 	0,/*removals*/ \
 	0,/*searches*/ \
-	0/*alloced*/ \
+        0,/*alloced*/ \
+        0,/*expansions*/ \
+        0,/*search_collisions*/ \
     }
 static const whhash_stats whhash_stats_init = WHHASH_STATS_INIT;
 
@@ -132,7 +134,7 @@ static const whhash_val_t primes[] = {
 const whhash_val_t prime_table_length = sizeof(primes)/sizeof(primes[0]);
 const float max_load_factor =
     /* original developer's value was 0.65. */
-    0.75 /* See http://en.wikipedia.org/wiki/Hash_table */
+    0.70 /* See http://en.wikipedia.org/wiki/Hash_table */
     ;
 
 
@@ -191,6 +193,7 @@ whhash_create(whhash_val_t minsize,
 static int
 whhash_expand(whhash_table *h)
 {
+    if( ! h ) return 0;
     /* Jump up to the next size in the primes table to accomodate more entries */
     whhash_entry **newtable;
     whhash_entry *e;
@@ -240,6 +243,7 @@ whhash_expand(whhash_table *h)
             }
         }
     }
+    ++h->stats.expansions;
     h->stats.alloced += (sizeof(whhash_entry*) * newsize)
 	- (sizeof(whhash_entry*) * h->tablelength);
     h->tablelength = newsize;
@@ -330,6 +334,7 @@ whhash_search(whhash_table *h, void const *k)
 	    return e->v;
 	}
         e = e->next;
+	++h->stats.search_collisions;
     }
     return NULL;
 }

@@ -28,9 +28,9 @@ extern "C" {
 #endif /* __cplusplus */
 
     /*!
-      @page page_whgc whgc: Simple garbage collection lib for C
+      @page whgc_page_main whgc: Garbage Collection lib for C
 
-      @section sec_about_whgc About whgc
+      @section whgc_sec_about_whgc About whgc
 
       whgc (the WanderingHorse.net Garbage Collector) is a simple garbage
       collector (GC) for C.
@@ -73,8 +73,7 @@ extern "C" {
        - Aside from GC, it's sometimes useful as a general-purposes lookup
        table (a hashtable of (key=void *,value=void *)).
 
-
-       @section sec_example Example
+       @section whgc_sec_example Example
 
        An exceedingly simple example of using it:
 
@@ -114,7 +113,7 @@ extern "C" {
        map arbitrary data to an arbitrary object and not have to worry
        about whether or not that memory will be deallocated later.
 
-       @section sec_threadsafety Thread safety
+       @section whgc_sec_threadsafety Thread safety
 
        By default it is never legal to use the same context from
        multiple threads at the same time. That said, the client may
@@ -125,7 +124,7 @@ extern "C" {
        is reentrant and does not need to be locked.
     */
     struct whgc_context;
-    /*!\typedef whgc_context
+    /** @typedef whgc_context
 
        whgc_context is an opaque handle for use with the whgc_xxx()
        routines. They are created using whgc_create_context() and
@@ -133,7 +132,7 @@ extern "C" {
     */
     typedef struct whgc_context whgc_context;
 
-    /*!\typedef void (*whgc_dtor_f)(void*)
+    /** @typedef void (*whgc_dtor_f)(void*)
 
        Typedef for deallocation functions symantically compatible with
        free().
@@ -268,11 +267,11 @@ extern "C" {
 	/**
 	   Number of registrations made in the context.
 	*/
-	size_t add_count;
+	size_t reg_count;
 	/**
-	   Number of whgc_take() calls made in the context.
+	   Number of items unregistered from the context.
 	*/
-	size_t take_count;
+	size_t unreg_count;
 	/**
 	   A rough *approximatation* of amount of memory allocated for
 	   whgc-specific internal structures used by the context,
@@ -424,13 +423,20 @@ extern "C" {
 
     /**
        Adds an event listener to the context. The listener is called
-       when certain events happen within the given context. The call order
-       of multiple listeners is undefined. There is no way to remove a listener.
+       when certain events happen within the given context. The call
+       order of multiple listeners is undefined. There is no way to
+       remove a listener.
+
+       Listeners are best reserved for debugging purposes only, as
+       they apply some overhead to all add/remove operations. The
+       exact amount of overhead is largely a function of what the
+       listeners do, as the context is effectively blocked until the
+       listeners return.
     */
     bool whgc_add_listener( whgc_context *, whgc_listener_f f );
 
 #ifdef __cplusplus
-} // extern "C"
+} /* extern "C" */
 #endif
 
 

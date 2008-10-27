@@ -77,8 +77,8 @@ static const whgc_gc_entry whgc_gc_entry_init = WHGC_GC_ENTRY_INIT;
 
 #define WHGC_STATS_INIT {\
 	0, /* entry_count */			\
-	0, /* add_count */		\
-	0, /* take_count */		\
+	0, /* reg_count */		\
+	0, /* unreg_count */		\
 	0 /* alloced */		\
     }
 static const whgc_stats whgc_stats_init = WHGC_STATS_INIT;
@@ -295,7 +295,7 @@ bool whgc_register( whgc_context * cx,
     e->valueDtor = valDtor;
     //MARKER;printf("Registering GC item e[@%p]: key[@%p]/%p() = val[@%p]/%p()\n",e,e->key,e->keyDtor,e->value,e->valueDtor);
     whhash_insert( cx->ht, key, e );
-    ++(cx->stats.add_count);
+    ++(cx->stats.reg_count);
     cx->stats.entry_count = whhash_count(cx->ht);
     if( cx->current )
     {
@@ -320,7 +320,7 @@ void * whgc_unregister( whgc_context * cx, void * key )
     if( e )
     {
 	cx->stats.entry_count = whhash_count(cx->ht);
-	++(cx->stats.take_count);
+	++(cx->stats.unreg_count);
 	if( e->left ) e->left->right = e->right;
 	if( e->right ) e->right->left = e->left;
 	if( cx->current == e ) cx->current = (e->right ? e->right : e->left);
@@ -372,6 +372,12 @@ void whgc_clear_context( whgc_context * cx )
 void whgc_destroy_context( whgc_context * cx )
 {
     if( ! cx ) return;
+#if 0
+    {
+	whhash_stats s = whhash_get_stats( cx->ht );
+	MARKER;printf("GC context search collisions: %u\n",s.search_collisions);
+    }
+#endif
     whgc_fire_event( cx, whgc_events.destructing_context, 0, 0 );
     whgc_clear_context( cx );
     if( cx->ht )

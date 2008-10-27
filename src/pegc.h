@@ -340,7 +340,6 @@ extern "C" {
        adjusted so that they exclude any leading or trailing spaces.
     */
     pegc_cursor pegc_cursor_trimmed( pegc_cursor const cur );
-    struct pegc_parser;
     /**
        @typedef struct pegc_parser
 
@@ -350,6 +349,7 @@ extern "C" {
        such as the input range, a pointer to the current position of
        the input, and memory dynamically allocated by various rules.
     */
+    struct pegc_parser;
     typedef struct pegc_parser pegc_parser;
 
     /**

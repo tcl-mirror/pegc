@@ -196,11 +196,11 @@ int rc_test()
     whrc_register( cx, whclob_mprintf("Another entry."), free_string );
     size_t rc = whrc_refcount(cx, str);
     assert( (rc == 1) && "Unexpected ref count!");
-    rc = whrc_ref(cx,str);
+    rc = whrc_addref(cx,str);
     assert( (rc == 2) && "Unexpected ref count!");
-    rc = whrc_unref(cx,str);
+    rc = whrc_rmref(cx,str);
     assert( (rc == 1) && "Unexpected ref count!");
-    rc = whrc_unref(cx,str);
+    rc = whrc_rmref(cx,str);
     assert( (rc == 0) && "Unexpected ref count!");
     MARKER;
     whrc_destroy_context(cx,true);
@@ -212,13 +212,18 @@ int main( int argc, char ** argv )
 {
     ThisApp.argv = argv+1;
     ThisApp.gc = whgc_create_context( &ThisApp );
+    ThisApp.P = pegc_create_parser( 0, 0 );
+    if( ! ThisApp.P || !ThisApp.gc )
+    {
+	MARKER;printf("%s: ERROR: could not allocate parser and/or GC context!\n",argv[0]);
+	return 1;
+    }
     int i = 0;
     ThisApp.argv0 = argv[0];
     if(0) for( i = 0; i < argc; ++i )
     {
 	printf("argv[%d]=[%s]\n",i,argv[i]);
     }
-    ThisApp.P = pegc_create_parser( 0, 0 );
     int rc = 0;
     if(!rc) rc = rc_test();
     //if(!rc) rc = a_test();

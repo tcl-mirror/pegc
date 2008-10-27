@@ -174,9 +174,9 @@ typedef struct whclob whclob;
 
    Calling whclob_finalize(0) has no ill effects (other than an
    ignorable error code), so algorithms may be organized a call
-   whclob_finalize(myClob) regardless of whether whclob_init(&myClob)
-   succeeds or fails. It is anticipated that this may simplify some
-   error-handling cases.
+   whclob_finalize() regardless of whether whclob_init() succeeds or
+   fails. It is anticipated that this may simplify some error-handling
+   cases.
 */
 long whclob_init( whclob ** cb, char const * data, long n );
 
@@ -293,7 +293,7 @@ long whclob_realloc( whclob * cb, unsigned long sz );
 long whclob_resize( whclob * cb, unsigned long sz );
 
 /**
-   Returns the number of "used" bytes in cb.  Appending to a clob will
+   Returns the number of "used" bytes in cb. Appending to a clob will
    start after the last "used" byte. Note that clobs may (and normally do)
    have more memory allocated to them than is "used".
 
@@ -365,7 +365,7 @@ enum ClobSeekWhence { WHCLOB_SEEK_SET = 0,
 /**
    Similar to the standard fseek(), whclob_seek() moves the blob's
    cursor to its (current pos + offset), relative to whence, which
-   must be one of of the ClobSeekFlags values.  Once the seek is
+   must be one of of the ClobSeekFlags values. Once the seek is
    complete, the cursor is bumped back into bounds (or at EOF). The
    return value is the new cursor position within the blob.
 
@@ -444,7 +444,7 @@ long whclob_zero_fill( whclob * cb );
 long whclob_append( whclob * cb, char const * data, long dsize );
 
 /**
-   Appends n copies of ch to cb and returns the number added.  If n is less
+   Appends n copies of ch to cb and returns the number added. If n is less
    than 1 then whclobrc.RangeError is returned and cb is not modified.
 */
 long whclob_append_char_n( whclob * cb, char ch, const long n );
@@ -549,7 +549,7 @@ long whclob_write( whclob * cb, char const * data, long dsize );
 
 /**
    This function ensures that the one-past-the-last item in the blob
-   to 0.  The "used" size of cb does not change.
+   to 0. The "used" size of cb does not change.
 
    On success it returns whclobrc.OK. On failure it returns one of the
    negitive integer values defined in whclobrc:
@@ -633,7 +633,7 @@ long whclob_exporter_FILE( void * fh, char const * data, long n );
 long whclob_exporter_filename( void * arg, char const * data, long n );
 
 /**
-   whclob_importer is the import counterpart of clog_exporter.  It
+   whclob_importer is the import counterpart of whclob_exporter. It
    defines an interface for callbacks which can provide a blob with
    data.
 
@@ -678,9 +678,9 @@ long whclob_importer_FILE( whclob * target, void * arg );
 long whclob_importer_filename( whclob * target, void * arg );
 
 /**
-   Sends cb's blob to the given file. Returns the number
-   of bytes written on success or a negative number
-   (probably whclobrc.IOError) on error.
+   Sends cb's blob to the given file handle, which must have been
+   previously opened. Returns the number of bytes written on success
+   or a negative number (probably whclobrc.IOError) on error.
 
    The file handle is not closed by this routine.
  */
@@ -694,9 +694,9 @@ long whclob_export_to_file( whclob const * cb, char const * dest );
 
 /**
    Moves a block of memory within cb, starting at start1, moving n
-   bytes to the position starting at start2.  All points and ranges
-   must be in the whclob_size() range.  start2 may be less than start1
-   but they may not be equal.  A value of less than 1 for n is not
+   bytes to the position starting at start2. All points and ranges
+   must be in the whclob_size() range. start2 may be less than start1
+   but they may not be equal. A value of less than 1 for n is not
    currently supported, though it should be to support backwards
    movement of memory.
 
@@ -777,8 +777,9 @@ long whclob_clone( whclob * src, whclob ** dest );
 
 /**
    Works more or less like sprintf(), but supports the printf
-   specifiers accepted by whclob_appendf().  The caller owns the
-   returned null-terminated string.
+   specifiers accepted by whclob_appendf(). The caller owns the
+   returned null-terminated string and must free it using
+   free().
 */
 char * whclob_vmprintf( char const * fmt, va_list vargs );
 

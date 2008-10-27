@@ -45,7 +45,6 @@ PegcRule pg_r_identifier();
 bool PG_mf_comment_cpp( PegcRule const * self, pegc_parser * p );
 const PegcRule PG_r_comment_cpp = PEGCRULE_INIT3(PG_mf_comment_cpp,0,"CommentCPP");
 
-
 static struct PGApp
 {
     char const * argv0;
@@ -53,6 +52,17 @@ static struct PGApp
     whgc_context * gc;
     char ** argv;
 } PGApp;
+
+bool PG_gc_reg( void * key, whgc_dtor_f kd, void * value, whgc_dtor_f vd )
+{
+    return whgc_register( PGApp.gc, key, kd, value, vd );
+}
+
+void * PG_gc_search( void const * key )
+{
+    return whgc_search( PGApp.gc, key );
+}
+
 
 /*
 Grammar taken from: http://piumarta.com/software/peg/peg.1.html
@@ -220,7 +230,7 @@ bool PG_mf_identifier( PegcRule const * self, pegc_parser * p )
 	//PegcRule const id = pegc_r_and_ev(p, idstart, idcont, PG_spacing, PG_end);
 	PegcRule * act = cp(p,pegc_r_action_i_p( p, pad, pg_test_action, "PG_mf_identifier()"));
 	r = act;
-	pegc_gc_register( p, (void *)PG_mf_identifier, 0, r, 0 );
+	pegc_gc_register(p , (void *)PG_mf_identifier, 0, r, 0 );
 #undef cp
 #else
 	PegcRule const idstart = PG_alpha_uscor;
@@ -714,13 +724,18 @@ int main( int argc, char ** argv )
     MARKER; printf("This is an unfinished app! Don't use it!\n");
     PGApp.argv = argv+1;
     PGApp.gc = whgc_create_context( &PGApp );
+    PGApp.P = pegc_create_parser( 0, 0 );
+    if( ! PGApp.P || ! PGApp.gc )
+    {
+	MARKER;printf("%s: ERROR: could not allocate parser and/or GC context!\n",argv[0]);
+	return 1;
+    }
     int i = 0;
     PGApp.argv0 = argv[0];
     if(0) for( i = 0; i < argc; ++i )
     {
 	printf("argv[%d]=[%s]\n",i,argv[i]);
     }
-    PGApp.P = pegc_create_parser( 0, 0 );
     int rc = 0;
     if(!rc) rc = a_test();
     //if(!rc) rc = test_actions();

@@ -19,11 +19,12 @@ extern "C" {
 
    Maintainer: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
-   The hashtables described here map (void*) to (void*)
-   by using a client-supplied hash algorithm on the key
-   pointers. The hashtable can optionally take over ownership
-   of its keys or values, via whhash_set_key_dtor() and
-   whhash_set_key_dtor().
+   The hashtables described here map (void*) to (void*) by using a
+   client-supplied hash algorithm on the key pointers. The hashtable
+   can optionally take over ownership of its keys or values, via
+   whhash_set_key_dtor() and whhash_set_key_dtor(). The ownership
+   management option makes this type useful as a simple garbage
+   collector.
 
    @section whhash_sec_example Example
 
@@ -53,7 +54,7 @@ extern "C" {
    if (NULL == (found = whhash_take(h,k) ))
    {    printf("Not found\n");                 }
 
-   whgc_destroy( h );
+   whhash_destroy( h );
    @endcode
 
    @section whhash_sec_ownership Memory ownership
@@ -82,7 +83,7 @@ extern "C" {
        str = mnprintf("...%d...",i);
        whhash_insert(h, key, str ); // transfers ownership of key/str to h
    }
-   whgc_destroy( h ); // Calls free() on each inserted copy of key and str.
+   whhash_destroy( h ); // Calls free() on each inserted copy of key and str.
    @endcode
 
 
@@ -120,9 +121,31 @@ extern "C" {
     back to the unsafe methods once your program has been debugged
     with the safe methods.  This just requires switching to some
     simple alternative defines - eg:
+
 @code
 #define insert_some whhash_insert
 @endcode
+
+@section whhash_sec_threadsafety Thread safety
+
+    By default it is never legal to use the same hashtable from
+    multiple threads at the same time. That said, the client may use
+    their own locking to serialize access. All API functions which
+    take a (whhash_table const *) argument require only a read lock,
+    whereas those taking a (whhash_table*) argument require a
+    exclusive (read/write) access. whhash_create() is reentrant and
+    does not need to be locked.
+
+    Special consideration is also needed considering locking of stored
+    keys/values. If a referenced item is used by multiple threads,
+    this code has no way of knowing about it. When in doubt, don't
+    store items which are shared across threads in a hashtable unless
+    you know that lifetime and ownership issues can be mitigated. If,
+    e.g., a hashtable does not own its entries, one needs to make sure
+    that if the entry is deleted from somewhere else, that it's
+    removed from the hashtable (or ensure that that entry cannot be
+    references again, otherwise you'll get a dangling pointer back).
+
 
    @section whhash_sec_links Other resources
 
@@ -136,48 +159,49 @@ extern "C" {
 
    - Brief analysis and implementations of of several well-known hash routines:
    http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
-
 */
 
-/*! @typedef whhash_val_t
+/** @typedef whhash_val_t
 
    The hash key value type by the whhash API.
  */
 typedef unsigned long whhash_val_t;
 
-/* @var const whhash_val_t whhash_hash_val_err
+/**
+ @var const whhash_val_t whhash_hash_val_err
 
    whhash_hash_val_err is ((whhash_val_t)-1). It is used to report
    hash value errors. Hash routines which want to report
    an error may do so by returning this value.
  */
 extern const whhash_val_t whhash_hash_val_err;
-struct whhash_table;
+/** @typedef whhash_table
+@typedef struct whhash_table
 
-/*! @typedef whhash_table
-  whhash_table is an opaque handle to hashtable data. They are created
-  using whhash_create() and destroyed using whhash_destroy().
+    whhash_table is an opaque handle to hashtable data. They are
+    created using whhash_create() and destroyed using
+    whhash_destroy().
 */
+struct whhash_table;
 typedef struct whhash_table whhash_table;
 
 
-/*
-  whhash_create() allocates a new hashtable with the given minimum starting
-  size (the actual size may, and probably will, be larger). The given hash function
-  and comparison function are used for all hashing and comparisons, respectively.
+/**
+   whhash_create() allocates a new hashtable with the given minimum
+   starting size (the actual size may, and probably will, be
+   larger). The given hash function and comparison function are used
+   for all hashing and comparisons, respectively.
 
-
+   The comparison function must return 0 if no match is made, else
+   non-zero. The hash function must create a hash value for the given
+   object, the more randomly distributed the better.
    
- @name                    whhash_create
- @param   minsize         minimum initial size of whhash_table
- @param   hashfunction    function for hashing keys
- @param   key_eq_fn       function for determining key equality
- @return                  newly created whhash_table or NULL on failure
- */
-whhash_table *
-whhash_create(whhash_val_t minsize,
-	      whhash_val_t (*hashfunction) (void const *),
-	      int (*key_eq_fn) (void const *,void const *));
+   minsize specifies the minimum initial size of the hashtable. It may
+   (and probably will) allocate more than this, however.
+*/
+whhash_table * whhash_create(whhash_val_t minsize,
+			     whhash_val_t (*hashfunction) (void const *),
+			     int (*key_eq_fn) (void const *,void const *));
 
 
 /**
@@ -206,12 +230,15 @@ void whhash_set_val_dtor( whhash_table * h, void (*dtor)( void * ) );
 void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDtor)( void * ) );
 
 
-/*****************************************************************************
+/**
  whhash_insert() adds new entries to a hashtable.
 
- None of the parameters may be 0. Theoretically a value of 0 is okay but
- in practice it means we cannot differentiate between "not found" and
- "found value of 0", so this function doesn't allow it.
+ None of the parameters may be 0. Theoretically a value of 0 is okay
+ but in practice it means we cannot differentiate between "not found"
+ and "found value of 0", so this function doesn't allow it. The
+ objects pointed to by the parameters must outlive this hashtable (or
+ be managed/owned by it by assigning destructor functions, e.g. via
+ whhash_set_dtors()).
 
  When a key is re-inserted (already mapped to something) then this
  function operates like whhash_replace() and non-zero is
@@ -229,21 +256,22 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
  whhash_table is destroyed.
    
  The key object must not change in a way which affects its hash value
- after it is inserted. To due so invokes undefined behaviour.
+ after it is inserted. To do so invokes undefined behaviour.
 
- That the key is not a const parameter is unfortunate, but it's the only way
- we can properly apply ownership management without violating constness.
+ That the key is not a const parameter is unfortunate, but it's the
+ only way we can properly apply ownership management without violating
+ constness. The original intention of this type was a hash which owned its
+ keys, which is why the parameter has historically not been const. Current
+ usage of this class ranges from general purpose lookup (without memory
+ management) to garbage collector, and some of those uses cannot be achieved
+ with a const key.
 
- @name        whhash_insert
- @param   h   the whhash_table to insert into
- @param   k   the key - whhash_table claims ownership and will free on removal (but see below)
- @param   v   the value - does not claim ownership. v must outlive this whhash_table. (See below)
- @return      non-zero for successful (re)insertion or update.
+
  */
 int 
 whhash_insert(whhash_table *h, void *k, void *v);
 
-/*****************************************************************************
+/**
  whhash_replace() changes the value associated with a key, where there
  already exists a value bound to the key in the whhash_table. If (v ==
  existingValue) then this routine has no side effects, otherwise this
@@ -260,11 +288,6 @@ whhash_insert(whhash_table *h, void *k, void *v);
  in practice it means we cannot differentiate between "not found" and
  "found value of 0", so this function doesn't allow it.
 
- @name    whhash_replace
- @param   h   the whhash_table
- @param   key
- @param   value
-
  */
 int
 whhash_replace(whhash_table *h, void *k, void *v);
@@ -275,15 +298,10 @@ int fnname (whhash_table *h, keytype *k, valuetype *v) \
     return whhash_insert(h,k,v); \
 }
 
-/*
+/**
   whhash_search() searches for the given key and returns the
   associated value (if found) or 0 (if not found). Ownership of the
   returned value is unchanged.
-
- @name        whhash_search
- @param   h   the whhash_table to search
- @param   k   the key to search for  - does not claim ownership
- @return      the value associated with the key, or NULL if none found
  */
 
 void *
@@ -295,7 +313,7 @@ valuetype * fnname (whhash_table *h, keytype const *k) \
     return (valuetype *) (whhash_search(h,k)); \
 }
 
-/*****************************************************************************
+/**
  whhash_take() removes the given key from the whhash_table and
  returns the value to the caller. The key/value destructors (if any)
  set via whhash_set_key_dtor() and whhash_set_val_dtor() WILL
@@ -308,22 +326,14 @@ valuetype * fnname (whhash_table *h, keytype const *k) \
  is unfortunately no way for a caller to differentiate between these
  two cases.
 
- @name        whhash_take
- @param   h   the whhash_table to remove the item from
- @param   k   the key to search for
- @return      the value associated with the key, or NULL if none found
  */
-
-void *
-whhash_take(whhash_table *h, void *k);
+void * whhash_take(whhash_table *h, void *k);
 
 /**
-   Works like whhash_take(h,k), but also calls the value dtor (set
-   via whhash_set_val_dtor()) if it finds a match, which may (or
-   may not) deallocate the object. Note that whhash_take() may also
-   deallocate the key (depends on the destructor assigned to
-   whhash_set_key_dtor()), so the k parameter may not be valid
-   after this function returns.
+   Works like whhash_take(h,k), but also calls the dtors registered
+   for the key and value, which may (or may not) deallocate the
+   objects. Since the destructor may (or may not) destroy the key, k
+   may not (or may) be valid after this function returns.
 
    Returns 0 if it finds no entry to remove, else non-zero.
 */
@@ -339,13 +349,9 @@ valuetype * fnname (whhash_table *h, keytype const *k) \
 short fnname (whhash_table *h, keytype const *k) { return whhash_remove(h,k);}
 
 
-/*
+/*!
   whhash_count() returns the number of items in the hashtable.
  This is a constant-time operation.
-   
- @name        whhash_count
- @param   h   the whhash_table
- @return      the number of items stored in the whhash_table
 */
 size_t
 whhash_count(whhash_table const * h);
@@ -355,9 +361,6 @@ whhash_count(whhash_table const * h);
  whhash_destroy() cleans up resources allocated by a whhash_table and calls
  the configured destructors for each key and value. After
  this call, h is invalid.
- 
- @name        whhash_destroy
- @param   h   the whhash_table
  */
 void whhash_destroy(whhash_table *h);
 
@@ -367,6 +370,9 @@ void whhash_destroy(whhash_table *h);
    can be used for further inserts. The next insert will force
    the hashtable to re-allocate internal storage. This routine
    is the only way to get a whhash_table to reduce its size.
+
+   This routine will force any registered dtors to be called on
+   each key/value in the hashtable.
 */
 void whhash_clear(whhash_table *h);
 
@@ -417,7 +423,7 @@ whhash_val_t whhash_hash_void_ptr( void const * k );
 */
 int whhash_cmp_void_ptr( void const * k1, void const * k2 );
 
-/*
+/**
   A C-string hashing function for use with whhash_create().  Uses the
   so-called "djb2" algorithm. Returns whhash_hash_val_err if (!str).
 
@@ -464,7 +470,7 @@ whhash_val_t whhash_hash_cstring_oaat( void const * str );
 */
 whhash_val_t whhash_hash_cstring_rot( void const * str );
 
-/*
+/**
   A C-string hashing function for use with whhash_create().  Uses the
   so-called "sdbm" algorithm. Returns whhash_hash_val_err if (!str).
 
@@ -483,38 +489,41 @@ struct whhash_iter;
 typedef struct whhash_iter whhash_iter;
 
 
-/* whhash_get_iter() creates a new iterator for the given hashtable
+/**
+   whhash_get_iter() creates a new iterator for the given hashtable
    and returns it. The caller must call free() on the object when he
    is done with it. If (!whhash_count(h)) then this function returns
    0.
 */
 whhash_iter * whhash_get_iter(whhash_table *h);
 
-/* Returns the key of the (key,value) pair at the current position,
-   or 0 if !i. */
+/**
+Returns the key of the (key,value) pair at the current position,
+or 0 if !i.
+*/
 void * whhash_iter_key(whhash_iter *i);
 
-/* Returns the value of the (key,value) pair at the current position,
-   or 0 if !i. */
+/**
+ Returns the value of the (key,value) pair at the current position,
+   or 0 if !i.
+*/
 void * whhash_iter_value(whhash_iter *i);
 
-/*
-  Advance the iterator to the next element returns zero if advanced to
+/**
+  Advance the iterator to the next element. Returns zero if advanced to
   end of table or if (!itr).
 */
-int
-whhash_iter_advance(whhash_iter *itr);
+int whhash_iter_advance(whhash_iter *itr);
 
-/*****************************************************************************/
-/* remove - remove current element and advance the iterator to the
+/**
+   Removes current element and advance the iterator to the
    next element the associated destructors to free (or not) the
    pointed-to key and value, so this call may (or may not) deallocate
    those objects.
 */
-int
-whhash_iter_remove(whhash_iter *itr);
+int whhash_iter_remove(whhash_iter *itr);
 
-/*
+ /**
   Searches for the given key in itr's associated hashtable.
   If found, itr is modified to point to the found item and
   a true value is returned. If no item is found or if (!itr||!k)
@@ -528,18 +537,25 @@ int fnname (whhash_iter *i, keytype *k) \
     return (whhash_iter_search(i,k)); \
 }
 
+/**
+   The whhash_stats struct is used for telemetry collection for
+   whhash_table objects.  These objects should be created by calling
+   whhash_get_stats().
+*/
 struct whhash_stats
 {
     /**
        Number of entries in the context.
     */
     size_t entries;
+
     /**
        Number of registrations made in the context.
     */
     size_t insertions;
+
     /**
-       Number of whgc_take() calls made in the context.
+       Number of whhash_take() calls made in the context.
     */
     size_t removals;
 
@@ -560,10 +576,26 @@ struct whhash_stats
        deallocs is more difficult due to timing and scope issues.
 	*/
     size_t alloced;
+    /**
+       The number of times the size of the hashtable has been
+       increased beyond the initial value.
+    */
+    size_t expansions;
+
+    /**
+       This is incremented each time a search operation fails
+       to find the proper entry on the first try. If this
+       number is large, the hash function may need to be
+       changed.
+    */
+    size_t search_collisions;
 };
 typedef struct whhash_stats whhash_stats;
-//#define WHHASH_STATS
 
+/**
+   Returns the current statistics for h, or an object
+   with all 0 values if (!h).
+*/
 whhash_stats whhash_get_stats( whhash_table const * h );
 
 /**

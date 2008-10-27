@@ -6,6 +6,6 @@ Related web pages:
 
 http://wanderinghorse.net/computing/
 
-http://fossil.wanderinghose.net - source code repositories.
+http://fossil.wanderinghorse.net - source code repositories.
 
 */
