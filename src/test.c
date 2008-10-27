@@ -122,7 +122,7 @@ int test_two()
     const PegcRule R = PegcRule_int_dec;
     //const PegcRule R = PegcRule_double;
 #else
-    const PegcRule R = pegc_r_int_dec_strict(P);
+    const PegcRule R = PegcRule_int_dec_strict;
     //const PegcRule R2 = pegc_r_int_dec_strict(P); // just checking the cache hit
 #endif
 #undef TRY_STRICT
