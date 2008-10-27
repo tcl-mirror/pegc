@@ -405,7 +405,8 @@ whgc_stats whgc_get_stats( whgc_context const * cx )
 {
     whgc_stats s = cx ? cx->stats : whgc_stats_init;
     if( ! cx ) return s;
-    s.alloced += whhash_bytes_alloced(cx->ht);
+    whhash_stats hs = whhash_get_stats( cx->ht );
+    s.alloced += hs.alloced;
     return s;
 }
 
