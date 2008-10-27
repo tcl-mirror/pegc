@@ -21,6 +21,15 @@ struct whhash_entry
 };
 typedef struct whhash_entry whhash_entry;
 
+#define WHHASH_STATS_INIT {\
+	0,/*entries*/ \
+	0,/*insertions*/ \
+	0,/*removals*/ \
+	0,/*searches*/ \
+	0/*alloced*/ \
+    }
+static const whhash_stats whhash_stats_init = WHHASH_STATS_INIT;
+
 
 struct whhash_table {
     size_t tablelength;
@@ -32,7 +41,7 @@ struct whhash_table {
     int (*eqfn) (void const *k1, void const *k2);
     void (*freeKey)( void * );
     void (*freeVal)( void * );
-    size_t alloced;
+    whhash_stats stats;
 };
 static const whhash_table
 whhash_init = { 0, /*tablelength*/
@@ -44,7 +53,7 @@ whhash_init = { 0, /*tablelength*/
 		   0, /* eqfn */
 		   0, /* freeKey */
 		   0, /* freeVal */
-		   0 /* alloced */
+		   WHHASH_STATS_INIT
 };
 const whhash_val_t hashval_t_err = (whhash_val_t)-1;
 
@@ -143,7 +152,7 @@ whhash_create(whhash_val_t minsize,
     }
     h = (whhash_table *)malloc(sizeof(whhash_table));
     if (NULL == h) return NULL; /*oom*/
-    h->alloced += sizeof(whhash_table);
+    h->stats.alloced += sizeof(whhash_table);
     *h = whhash_init;
     h->freeKey = free;
     h->freeVal = 0;
@@ -154,7 +163,7 @@ whhash_create(whhash_val_t minsize,
     h->table = (whhash_entry **)calloc(size, sizeof(whhash_entry*));
 #endif
     if (NULL == h->table) { free(h); return NULL; } /*oom*/
-    h->alloced = (sizeof(whhash_entry*) * size);
+    h->stats.alloced = (sizeof(whhash_entry*) * size);
     h->tablelength  = size;
     h->primeindex   = pindex;
     h->entrycount   = 0;
@@ -166,12 +175,6 @@ whhash_create(whhash_val_t minsize,
 /*****************************************************************************/
 
 
-
-size_t
-whhash_bytes_alloced(whhash_table const * h)
-{
-    return h ? h->alloced : 0;
-}
 
 static int
 whhash_expand(whhash_table *h)
@@ -225,7 +228,7 @@ whhash_expand(whhash_table *h)
             }
         }
     }
-    h->alloced += (sizeof(whhash_entry*) * newsize)
+    h->stats.alloced += (sizeof(whhash_entry*) * newsize)
 	- (sizeof(whhash_entry*) * h->tablelength);
     h->tablelength = newsize;
     h->loadlimit   = whhash_ceil(newsize * max_load_factor);
@@ -286,19 +289,22 @@ whhash_insert(whhash_table *h, void *k, void *v)
     }
     e = (whhash_entry *)malloc(sizeof(whhash_entry));
     if (NULL == e) { --(h->entrycount); return 0; } /*oom*/
-    h->alloced += sizeof(whhash_entry);
+    h->stats.alloced += sizeof(whhash_entry);
     e->h = whhash_hash(h,k);
     index = whhash_index(h->tablelength,e->h);
     e->k = k;
     e->v = v;
     e->next = h->table[index];
     h->table[index] = e;
+    ++h->stats.insertions;
     return 1;
 }
 
 void *
 whhash_search(whhash_table *h, void const *k)
 {
+    if( !h || !k ) return 0;
+    ++h->stats.searches;
     whhash_entry *e;
     whhash_val_t hashvalue, index;
     hashvalue = whhash_hash(h,k);
@@ -341,8 +347,9 @@ whhash_take(whhash_table *h, void *k)
             h->entrycount--;
             v = e->v;
             //whhash_free_key( h, e->k );
-	    h->alloced -= sizeof(whhash_entry);
+	    h->stats.alloced -= sizeof(whhash_entry);
             free(e);
+	    ++h->stats.removals;
             return v;
         }
         pE = &(e->next);
@@ -385,7 +392,7 @@ static whhash_entry * whhash_free_entry( whhash_table * h, whhash_entry * e )
     whhash_free_key( h, e->k );
     whhash_free_val( h, e->v );
     free(e);
-    h->alloced -= sizeof(whhash_entry);
+    h->stats.alloced -= sizeof(whhash_entry);
     return next;
 }
 
@@ -406,6 +413,11 @@ whhash_destroy(whhash_table *h)
     }
     free(h->table);
     free(h);
+}
+
+whhash_stats whhash_get_stats( whhash_table const * h )
+{
+    return h ? h->stats : whhash_stats_init;
 }
 
 int whhash_cmp_cstring( void const * k1, void const * k2 )
@@ -559,7 +571,7 @@ whhash_get_iter(whhash_table *h)
     whhash_iter *itr = (whhash_iter *)
         malloc(sizeof(whhash_iter));
     if (NULL == itr) return NULL;
-    h->alloced = sizeof(whhash_iter);
+    h->stats.alloced = sizeof(whhash_iter);
     *itr = whhash_itr_init;
     itr->h = h;
     itr->e = NULL;
@@ -661,7 +673,7 @@ whhash_iter_remove(whhash_iter *itr)
     ret = whhash_iter_advance(itr);
     if (itr->parent == remember_e) { itr->parent = remember_parent; }
     free(remember_e);
-    itr->h->alloced -= sizeof(whhash_entry);
+    itr->h->stats.alloced -= sizeof(whhash_entry);
     return ret;
 }
 

@@ -342,16 +342,6 @@ short fnname (whhash_table *h, keytype const *k) { return whhash_remove(h,k);}
 size_t
 whhash_count(whhash_table const * h);
 
-/**
-   Returns the approximate number of bytes allocated for
-   whhash_table-internal data associated with the given whhash_table,
-   or 0 if (!h). This only measures internal allocations - it has no
-   way of knowing the sizes of inserted items which are referenced by
-   the whhash_table.
-*/
-size_t
-whhash_bytes_alloced(whhash_table const * h);
-
 
 /*****************************************************************************
  whhash_destroy() cleans up resources allocated by a whhash_table and calls
@@ -502,7 +492,43 @@ int fnname (whhash_iter *i, keytype *k) \
     return (whhash_iter_search(i,k)); \
 }
 
+struct whhash_stats
+{
+    /**
+       Number of entries in the context.
+    */
+    size_t entries;
+    /**
+       Number of registrations made in the context.
+    */
+    size_t insertions;
+    /**
+       Number of whgc_take() calls made in the context.
+    */
+    size_t removals;
 
+    /**
+       The number of searches made on the hashtable.
+    */
+    size_t searches;
+
+    /**
+       A rough *approximatation* of amount of memory allocated for
+       whgc-specific internal structures used by the context,
+       including the size of the underlying hashtable(s). A
+       context has no way of knowing how much memory is used by
+       registered items.
+       
+       Don't take this number too seriously. i try to keep the
+       telemetry up to date for allocs, but keeping track of
+       deallocs is more difficult due to timing and scope issues.
+	*/
+    size_t alloced;
+};
+typedef struct whhash_stats whhash_stats;
+//#define WHHASH_STATS
+
+whhash_stats whhash_get_stats( whhash_table const * h );
 
 #ifdef __cplusplus
 } /* extern "C" */
