@@ -172,9 +172,11 @@ extern "C" {
        resources using the given destructor functions (which may be 0,
        meaning "do not destroy").
 
-       The key parameter is used as a literal hash key (that is, the
-       pointer's value is its hash value). Thus for two keys to be
-       equal they must have the same address.
+       A custom hash function is supplied which hashes the address of
+       the key (that is, a hash value of the numeric value of the
+       pointer address). Thus for two keys to be equal they must have
+       the same address (or must have found a collision in the hash
+       algorithm).
 
        If keyDtor is not 0 then during cleanup keyDtor(key) is
        called. Likewise, if valDtor is not 0 then valDtor(value) is

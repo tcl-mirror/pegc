@@ -116,25 +116,6 @@ struct whgc_context
 static const whgc_context whgc_context_init = WHGC_CONTEXT_INIT;
 
 /**
-   A hash routine for use with the hashtable API. Simply
-   casts k to the numeric value of its pointer address.
-*/
-static whhash_val_t whgc_hash_void_ptr( void const * k )
-{
-    typedef long kludge_t; /* must apparently be the same size as the platform's (void*) */
-    return (whhash_val_t) (kludge_t) k;
-}
-
-/**
-   A comparison function for use with the hashtable API. Matches
-   only if k1 and k2 are the same address.
-*/
-static int whgc_hash_cmp_void_ptr( void const * k1, void const * k2 )
-{
-    return (k1 == k2);
-}
-
-/**
    A destructor for use with the hashtable API. Calls
    whhash_destroy((whhash_table*)k).
 */
@@ -239,7 +220,7 @@ static whhash_table * whgc_hashtable( whgc_context * cx )
 {
     if( ! cx ) return 0;
     if( cx->ht ) return cx->ht;
-    if( (cx->ht = whhash_create( 10, whgc_hash_void_ptr, whgc_hash_cmp_void_ptr ) ) )
+    if( (cx->ht = whhash_create( 10, whhash_hash_void_ptr, whhash_cmp_void_ptr ) ) )
     {
 	whhash_set_dtors( cx->ht, whgc_free_noop, whgc_free_noop );
 	/**

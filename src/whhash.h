@@ -385,6 +385,25 @@ int whhash_cmp_long( void const * k1, void const * k2 );
  */
 whhash_val_t whhash_hash_long( void const * n );
 
+/**
+   This is a hash routine for generic void pointers. To avoid clustering
+   of hashvalues, it performs the following:
+
+   - Casts k to its numeric value (as a long, or some other platform-specific
+   numeric type).
+   - Performs a Berstein Hash on the first (sizeof(long)/sizeof(char)) bytes
+   of that numeric value, treating each byte as a separate input character.
+
+   That greatly improves the distribution range of the hash values over using
+   the address of k as the hash value.
+*/
+whhash_val_t whhash_hash_void_ptr( void const * k );
+
+/**
+   A hashtable comparison function which simply returns (k1 == k2).
+*/
+int whhash_cmp_void_ptr( void const * k1, void const * k2 );
+
 /*
   A C-string hashing function for use with whhash_create().  Uses the
   so-called "djb2" algorithm. Returns whhash_hash_val_err if (!str).

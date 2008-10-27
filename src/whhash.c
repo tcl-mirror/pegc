@@ -442,6 +442,40 @@ int whhash_cmp_long( void const * k1, void const * k2 )
     return *((long const*)k1) == *((long const*)k2);
 }
 
+int whhash_cmp_void_ptr( void const * k1, void const * k2 )
+{
+    return k1 == k2;
+}
+
+whhash_val_t whhash_hash_void_ptr( void const * k )
+{
+     /* This next typedef must *apparently* be the same size as the platform's (void*) */
+    typedef long kludge_t;
+    /**
+       Originally we used the void* address as a hashvalue, until it
+       came to me that those doesn't distribute well within the hash
+       range (they tend to clump together).
+
+       So below we do a variant of the "Modified Bernstein Hash"
+       on the bytes of the (void*)'s numeric value. For details:
+
+       http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
+
+       Initial (but minimal) tests show the distribution to be much improved
+       over using the (void*) as the hash value.
+    */
+    whhash_val_t h = 0;
+    kludge_t const x = (kludge_t const) k;
+    unsigned char const * c = (unsigned char const *)&x;
+    int i = 0;
+    for( i = 0; i < (sizeof(kludge_t) / sizeof(char)); ++i )
+    {
+	h = 33 * h ^ c[i];
+    }
+    //MARKER; printf("hash of %p: x=%ld h=%ld, i=%d, sizeof1=%u sizeof2=%u\n",k,x,h,i,sizeof(kludge_t),sizeof(char));
+    return h;
+}
+
 
 whhash_val_t
 whhash_hash_cstring_djb2( void const * vstr)
