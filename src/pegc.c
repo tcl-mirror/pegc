@@ -1123,6 +1123,7 @@ static bool PegcRule_mf_or( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_rule_check( self, st, true, false, true ) ) return false;
     pegc_const_iterator orig = pegc_pos(st);
+#if 0
     PegcRule const ** li = (PegcRule const **)self->data;
     for( ; li && *li && (*li)->rule; ++li )
     {
@@ -1133,6 +1134,18 @@ static bool PegcRule_mf_or( PegcRule const * self, pegc_parser * st )
 	    return true;
 	}
     }
+#else
+    PegcRule const * li = (PegcRule const *)self->data;
+    for( ; li && li->rule; ++li )
+    {
+	//MARKER;
+	if( li->rule( li, st ) )
+	{
+	    pegc_set_match( st, orig, pegc_pos(st), true );
+	    return true;
+	}
+    }
+#endif
     //MARKER;
     pegc_set_pos(st,orig);
     return false;
@@ -1142,6 +1155,7 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
 {
     if( ! pegc_rule_check( self, st, true, false, true ) ) return false;
     pegc_const_iterator orig = pegc_pos(st);
+#if 0
     PegcRule const ** li = (PegcRule const **)self->data;
     if(!li) return false;
     for( ; li && *li && (*li)->rule; ++li )
@@ -1152,6 +1166,17 @@ static bool PegcRule_mf_and( PegcRule const * self, pegc_parser * st )
 	    return false;
 	}
     }
+#else
+    PegcRule const * li = (PegcRule const *)self->data;
+    for( ; li && li->rule; ++li )
+    {
+	if( ! li->rule( li, st ) )
+	{
+	    pegc_set_pos(st,orig);
+	    return false;
+	}
+    }
+#endif
     pegc_set_match( st, orig, pegc_pos(st), true );
     return true;
 }
@@ -1182,10 +1207,22 @@ static char * pegc_list_to_string( bool orOp, PegcRule const ** li )
     return ret;
 }
 
-
-PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
+PegcRule pegc_r_list_a( bool orOp, PegcRule const * li )
+{
+    return li
+	? pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, li )
+	: PegcRule_invalid;
+}
+PegcRule pegc_nonono_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 {
     if( ! st || !li ) return PegcRule_invalid;
+    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, 0 );
+#if 1
+    r.data = li;
+    char * name = pegc_list_to_string( orOp, (PegcRule const **)&li );
+    r.name = name;
+    pegc_gc_add(st, name, pegc_free );
+#else
     int count = 0;
     if(st && li)
     {
@@ -1212,7 +1249,7 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
 	return PegcRule_invalid;
     }
     pegc_gc_add( st, list, pegc_free_value );
-    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, list );
+    r.data = list;
     int i = 0;
     for( ; i < count; ++i )
     {
@@ -1223,11 +1260,21 @@ PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li )
     r.name = name;
     pegc_gc_add(st, name, pegc_free );
     //MARKER;printf("Added %d items to rule list. count=%d\n",i,count);
+#endif
+    //MARKER;printf("Created list rule. Name=[%s]\n",r.name);
     return r;
 }
 
 PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
 {
+    /*
+      FIXME: This shouldn't copy each element. This point of this func
+      is that it refers back to the original. We need only copy the
+      pointers to a new array. That said, doing so would mean we need
+      to change the implementations of the list rules and
+      pegc_r_list_a().  Having all of the rules in a contiguous array
+      simplifies those implementations.
+    */
     if( !st ) return PegcRule_invalid;
     const size_t blockSize = 4; /* number of rules to allocate at a time. */
     int count = 1;
@@ -1277,8 +1324,9 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
     //MARKER;printf("pos=%u count=%u\n",pos,count);
     li[pos] = PegcRule_invalid;
     pegc_gc_add( st, li, pegc_free );
-    PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, li );
-    return r;
+    //PegcRule r = pegc_r( orOp ? PegcRule_mf_or : PegcRule_mf_and, li );
+    //return r;
+    return pegc_r_list_a( orOp, li );
 }
 
 
@@ -1678,7 +1726,7 @@ ACPRULE_ISA(xdigit);
 
 
 #undef ACPRULE_ISA
-#define ACPRULE_ISA(F, string) const PegcRule PegcRule_ ## F = {PegcRule_mf_oneof, string}
+#define ACPRULE_ISA(F, string) const PegcRule PegcRule_ ## F = PEGCRULE_INIT2(PegcRule_mf_oneof, string)
 ACPRULE_ISA(blank," \t");
 #undef ACPRULE_ISA
 
@@ -1688,7 +1736,7 @@ static bool PegcRule_mf_blanks( PegcRule const * self, pegc_parser * st )
     const PegcRule r = pegc_r_star_p( &PegcRule_blank );
     return r.rule( &r, st );
 }
-const PegcRule PegcRule_blanks = {PegcRule_mf_blanks,0};
+const PegcRule PegcRule_blanks = PEGCRULE_INIT1(PegcRule_mf_blanks);
 
 
 static bool PegcRule_mf_opt( PegcRule const * self, pegc_parser * st )
@@ -1742,7 +1790,7 @@ static bool PegcRule_mf_digits( PegcRule const * self, pegc_parser * st )
     const PegcRule digs = pegc_r_plus_p( &PegcRule_digit );
     return digs.rule( &digs, st );
 }
-const PegcRule PegcRule_digits = {PegcRule_mf_digits,0};
+const PegcRule PegcRule_digits = PEGCRULE_INIT1(PegcRule_mf_digits);
 
 static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
 {
@@ -1758,27 +1806,14 @@ static bool PegcRule_mf_int_dec( PegcRule const * self, pegc_parser * st )
     pegc_set_match( st, orig, orig + len, true );
     return true;
 }
-const PegcRule PegcRule_int_dec = {PegcRule_mf_int_dec,0};
+const PegcRule PegcRule_int_dec = PEGCRULE_INIT1(PegcRule_mf_int_dec);
 
-static bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
+
+bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
 {
-    if( ! pegc_rule_check( self, st, false, true, false ) ) return false;
+    //if( ! pegc_rule_check( self, st, false, false, false ) ) return false;
+    if( ! pegc_isgood(st) ) return false;
     pegc_const_iterator orig = pegc_pos(st);
-    if( self->proxy->rule && self->proxy->rule( self->proxy, st ) )
-    {
-	//DUMPPOS(st);
-	pegc_set_match( st, orig, pegc_pos(st), true );
-	return true;
-    }
-    //MARKER;
-    //pegc_set_pos(st,orig);
-    return false;
-}
-static const PegcRule PegcRule_int_dec_strict = {PegcRule_mf_int_dec_strict,0};
-
-PegcRule pegc_r_int_dec_strict( pegc_parser * st )
-{
-    if( ! st ) return PegcRule_invalid;
     PegcRule * r = 0;
     void * x = pegc_gc_search( st, (void const *)PegcRule_mf_int_dec_strict );
     if( x )
@@ -1819,44 +1854,24 @@ PegcRule pegc_r_int_dec_strict( pegc_parser * st )
 #undef CP
 #undef DECL
     }
-    /**
-       ^^^ instead of setting r.proxy we could just do
-       pegc_gc_search() in PegcRule_mf_int_dec_strict. That might
-       complicate debugging, thought, as our physical rule chain would
-       be effectively broken, so we couldn't effectively traverse the
-       rule chain in a debugger. Also, r.proxy is there, costs us
-       nothing extra, and is const-time access (unlike the hashtable
-       lookup).
-    */
-#if 0
-    /* This upsets some compilers. See below for details. */
-    return r ? *r : PegcRule_invalid;
-#elseif 0
-    return r ? *((PegcRule const *)r) : PegcRule_invalid;
-    /*
-      ^^^ This cast is to get around a completely stupid warning from
-      the SunStudio compiler:
 
-    "pegc.c", line xxxx: warning: operands have incompatible types:
-    struct PegcRule {pointer to function(pointer to const struct
-    PegcRule {..}, pointer to struct pegc_parser {..}) returning char
-    rule, pointer to const void data, pointer to const struct PegcRule
-    {..} proxy, struct client {..} client} ":" const struct PegcRule
-    {pointer to function(pointer to const struct PegcRule {..},
-    pointer to struct pegc_parser {..}) returning char rule, pointer
-    to const void data, pointer to const struct PegcRule {..} proxy,
-    struct client {..} client}
 
-	
-    The problem appears to be that PegcRule_invalid is explicitely
-    const, whereas *r is not. This confuses the compiler, though in my
-    opinion that's a compiler bug.
-    */
-#else
-    /** This variation seems to work in all the compilers. */
-    if( r ) return *r;
-    else return PegcRule_invalid;
-#endif
+    if( r->rule && r->rule( r, st ) )
+    {
+	//DUMPPOS(st);
+	pegc_set_match( st, orig, pegc_pos(st), true );
+	return true;
+    }
+    //MARKER;
+    //pegc_set_pos(st,orig);
+    return false;
+}
+const PegcRule PegcRule_int_dec_strict = PEGCRULE_INIT1(PegcRule_mf_int_dec_strict);
+
+
+PegcRule pegc_r_int_dec_strict()
+{
+    return PegcRule_int_dec_strict;
 }
 
 static bool PegcRule_mf_double( PegcRule const * self, pegc_parser * st )
@@ -1870,7 +1885,7 @@ static bool PegcRule_mf_double( PegcRule const * self, pegc_parser * st )
     return pegc_set_match( st, orig, orig + len, true );
 }
 
-const PegcRule PegcRule_double = {PegcRule_mf_double,0};
+const PegcRule PegcRule_double = PEGCRULE_INIT1(PegcRule_mf_double);
 
 
 static bool PegcRule_mf_ascii_impl( PegcRule const * ARG_UNUSED(self),
@@ -1896,8 +1911,8 @@ static bool PegcRule_mf_ascii( PegcRule const * self, pegc_parser * st )
 {
     return PegcRule_mf_ascii_impl(self,st,127);
 }
-const PegcRule PegcRule_latin1 = {PegcRule_mf_latin1,0};
-const PegcRule PegcRule_ascii = {PegcRule_mf_ascii,0};
+const PegcRule PegcRule_latin1 = PEGCRULE_INIT1(PegcRule_mf_latin1);
+const PegcRule PegcRule_ascii = PEGCRULE_INIT1(PegcRule_mf_ascii);
 
 
 struct pegc_range_info

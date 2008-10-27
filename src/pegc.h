@@ -858,19 +858,6 @@ extern "C" {
     typedef struct PegcRule PegcRule;
 
     /**
-       This object can (should) be used as an initializer to ensure a
-       clean slate for the internal members of PegcRule objects. Simply
-       copy this over the object. It is an invalid rule.
-    */
-    extern const PegcRule PegcRule_init;
-
-
-    /**
-       Always returns false and does nothing.
-    */
-    bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
-
-    /**
        The PEGCRULE_INIT family of macros are for use in places where a
        const expression is needed in place of PegcRule_init. The numeric
        suffix on the macro name is the number of arguments it takes, from
@@ -896,6 +883,19 @@ extern "C" {
        An invalid rule.
      */
 #define PEGCRULE_INIT PEGCRULE_INIT3(0,0,"invalid")
+
+    /**
+       This object can (should) be used as an initializer to ensure a
+       clean slate for the internal members of PegcRule objects. Simply
+       copy this over the object. It is an invalid rule.
+    */
+    extern const PegcRule PegcRule_init;
+
+
+    /**
+       Always returns false and does nothing.
+    */
+    bool PegcRule_mf_failure( PegcRule const * self, pegc_parser * st );
 
 
     /**
@@ -1193,11 +1193,12 @@ extern "C" {
        Creates a rule which performs either an OR operation (if orOp
        is true) or an AND operation (if orOp is false) on the given
        list of rules. The list MUST be terminated with either NULL, or
-       an entry where entry->rule is 0, or results are undefined
-       (almost certainly an overflow).
+       an entry where entry->rule is 0 (i.e. an invalid rule), or
+       results are undefined (almost certainly an overflow).
 
-       All rules in li are copied (shallowly), so they need not
-       outlive the returned object.
+       All rules in li must outlive the returned object.
+       (BUG: all rules in li are currently copied (shallowly) instead
+       of pointed to.)
 
        This routine allocates resources for the returned rule which
        belong to this API and are freed when st is destroyed.
@@ -1209,7 +1210,11 @@ extern "C" {
        editing rule lists (which happens a lot during development) it
        is more problematic to verify and change that number than it is
        to add a trailing 0 to the list (which only has to be done
-       once).
+       once). Alternately, you can use an invalid rule to mark the
+       end of the list.
+
+       The objects pointed to in the list must outlive the rule,
+       though the implementation currently copies them (that's a bug).
 
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
 
@@ -1217,13 +1222,13 @@ extern "C" {
        most efficient (the others synthesize an array, which causes
        extra allocations, and call this routine).
     */
-    PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
+    PegcRule pegc_r_list_a( bool orOp, PegcRule const * li );
+    //PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
 
     /**
-       Causes crashes downstream for reasons i don't yet understand.
-
        Works like pegc_r_list_a() but requires a NULL-terminated list of
-       (PegcRule const *).
+       (PegcRule const *). The objects pointed to must outlive the
+       returned rule.
 
        Pneumonic: the 'e' suffix refers to the 'e'lipse parameters.
     */
@@ -1597,7 +1602,7 @@ extern "C" {
     extern const PegcRule PegcRule_digits;
 
     /**
-       Creates a rule which matches a decimal integer (optionally
+       A rule which matches a decimal integer (optionally
        signed), but only if the integer part is not followed by an
        "illegal" character, namely:
 
@@ -1607,11 +1612,17 @@ extern "C" {
        legal.
 
        This rule requires a "relatively" large amount of dynamic
-       resources (for several sub-rules), but it caches the rules on a
+       resources (for several sub-rules), but they are not allocated
+       until the parsing starts, and it caches the rules on a
        per-parser basis. This subsequent calls with the same parser
-       argument will always return a handle to the same object.
+       argument re-use the same object.
     */
-    PegcRule pegc_r_int_dec_strict( pegc_parser * st );
+    bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st );
+
+    /**
+       A rule object wrapping PegcRule_mf_int_dec_strict.
+    */
+    const PegcRule PegcRule_int_dec_strict;
 
     /**
        Similar to pegc_r_int_dec_strict(), but does not
@@ -1819,7 +1830,6 @@ extern "C" {
        removed and the two-char sequence is replaced by an unescaped
        sequence (see below).
 
-
        All characters in the matched string which are preceeded by the
        esc character are replaced in the unescaped string with the
        second character (i.e. the esc is stripped). As a special case,
@@ -1827,10 +1837,6 @@ extern "C" {
        are supported (e.g. \\t becomes a tab character) and unknown
        escape sequences are simply unescaped (whereas in C they would
        be considered illegal).
-
-
-       (End of escaping-specific notes.)
-
     */
     char * pegc_unescape_quoted_string( pegc_const_iterator inp,
 					long inlen,
@@ -1874,11 +1880,15 @@ extern "C" {
        b) When pegc_destroy_parser() is called, all underlying
        metadata is freed (which includes the previous match string).
 
+       If you want to capture the string during the parse, you could
+       attach a custom action which also knows the target address,
+       and read the value there.
 
        Other Notes:
 
-       - This rule checks up until the next closing quote, spanning
-       newlines and other grammatical constructs.
+       - This rule blindly checks up until the next non-escaped
+       closing quote, spanning newlines and other grammatical
+       constructs.
 
        - (quoteChar==0) is not legal.
 
@@ -1898,7 +1908,7 @@ extern "C" {
 
        - Consider whether or not to allow unescaping of \\0.
 
-       - Consider how best to handle escapes of \\##-style
+       - Consider how best to handle escapes of \\nnn-style
        characters.
     */
     PegcRule pegc_r_string_quoted( pegc_parser * st,
