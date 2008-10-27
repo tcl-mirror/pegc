@@ -225,6 +225,13 @@ extern "C" {
     void whgc_destroy_context( whgc_context * );
 
     /**
+       Clears all gc entries, calling their associated destructors.
+
+       This does not destroy cx, only its entries.
+    */
+    void whgc_clear_context( whgc_context * cx );
+
+    /**
        A destructor for use with functions taking a whgc_dtor_f parameter.
        It requires that its argument be a whgc_context pointer, on which
        it calls whgc_destroy_context().
@@ -287,30 +294,70 @@ extern "C" {
     whgc_stats whgc_get_stats( whgc_context const * );
 
     /**
-       Enum for whgc event types. Used in conjunction with the
-       whgc_event struct.
+       The type is not intended to be instantiated directly by
+       clients, but instead used via the whgc_events shared object.
+
+       A helper type for simulating scoped named enums in C. The
+       values in this type correspond to those used by whgc_event,
+       which allows event listeners to distinguish between various
+       event types in one handler.
+
+       All members of this type must have unique values, but the
+       values used by the whgc_events object are unspecified (other
+       than that they are each unique).
     */
-    enum whgc_event_types {
-    /**
-       Signal that a GC item has been registered.
-    */
-    whgc_event_registered = 1,
-    /**
-       Signal that a GC item has been unregistered.
-    */
-    whgc_event_unregistered = 2,
-    /**
-       Signal that a key/val pair is about to e passed through the
-       item's dtor functions. This event is triggered even if the dtor
-       functions won't actually be called (e.g. they are 0). Thus this
-       signals a "virtual" destruction.
-    */
-    whgc_event_destructing_item = 3,
-    /**
-       Signal that a context is about to be destroyed.
-    */
-    whgc_event_destructing_context = 4
+    struct whgc_events_t {
+	/**
+	   Signal that a GC item has been registered.
+	*/
+	short registered;
+
+	/**
+	   Signal that a GC item has been unregistered.
+	*/
+	short unregistered;
+
+	/**
+	   Signal that a key/val pair is about to e passed through the
+	   item's dtor functions. This event is triggered even if the dtor
+	   functions won't actually be called (e.g. they are 0). Thus this
+	   signals a "virtual" destruction.
+	*/
+	short destructing_item;
+
+	/**
+	   Signal that a context is about to be destroyed.
+	*/
+	short destructing_context;
+
+	/**
+	   This marks the highest reserved event ID. In theory, values
+	   above that can be used by client code, but i can personally
+	   see no use for doing so. Note that the IDs in this class
+	   are not guaranteed to be sequential, so don't use this as
+	   an end condition for a loop.
+	*/
+	short last_event_id;
     };
+    typedef struct whgc_events_t whgc_events_t;
+    /**
+       This is a shared instance of whgc_events_t which holds event
+       type IDs. It is used instead of an enum because i find it
+       prettier. Sample usage, from a whgc_listener_f implementation:
+
+       @code
+       void my_gc_listener( whgc_event const * event )
+       {
+           if( whgc_events.destructing_context == event->type )
+           {
+               whgc_stats const st = whgc_get_stats( event->cx );
+	       printf("Approx memory allocated by gc context: %u\n", st.alloced);
+	   }
+       }
+       @endcode
+    */
+    extern const whgc_events_t whgc_events;
+
     /**
        whgc_event is a type for sending information regarding certain GC
        context state changes to registered listeners.
@@ -318,47 +365,67 @@ extern "C" {
     struct whgc_event
     {
 	/**
-	   The context from which this event originated.
+	   The context from which this event originated. This parameter
+	   is set for all event types.
 	 */
 	whgc_context const * cx;
+
 	/**
-	   An event type.
+	   Specifies the logical type of the event, which also determines
+	   the semantics of the event.
 
-	   The semantics of the various event types:
+	   The type IDs are defined in the whgc_events shared object
+	   and alert the user about which members of the event are set
+	   and. e.g. whgc_events.destructing_context does not set the
+	   key/value members because they are meaningless for that
+	   event. The semantics of the various event types are:
 
-	   (whgc_event_registered) signals that the key/value members have
+	   - whgc_events.registered signals that the key/value members have
 	   just been registered with the context.
 
-	   (whgc_event_unregistered) signals that the key/value members
+	   - whgc_events.unregistered signals that the key/value members
 	   have just been unregistered from the context.
 
-	   (whgc_event_destructing_item) signals that the key/value
+	   - whgc_events.destructing_item signals that the key/value
 	   members are about to be passed to their registered dtor
 	   functions (if any).
 
-	   (whgc_event_destructing_context) signals that the cx member
-	   is about to be destroyed (key/value will be 0).
+	   - whgc_events.destructing_context signals that the cx
+	   member is about to be destroyed (key/value will be 0).
+
+	   These semantics should be respected by whgc_listener_f
+	   implementations.
 	 */
-	enum whgc_event_types type;
+	short type;
+
 	/**
-	   The key associated with the event. Not used by all event types.
+	   The key associated with the event. Only set for events of type:
+
+	   whgc_events.registered, whgc_events.unregistered, whgc_events.destructing_item
+
 	 */
 	void const * key;
 	/**
-	   The value associated with the event. Not used by all event types.
+	   The value associated with the event. Only set for events of type:
+
+	   whgc_events.registered, whgc_events.unregistered, whgc_events.destructing_item
+
 	 */
 	void const * value;
     };
     typedef struct whgc_event whgc_event;
     /**
        A typedef for whgc context event listers. The primary use case
-       of a listener is to help debug the lifetimes of GC'd items.
+       of a listener is to help debug the lifetimes of GC'd items. The
+       listener is guaranteed to not get a null pointer, so long as it
+       is triggered from inside of this API.
     */
-    typedef void (*whgc_listener_f)( whgc_event const ev );
+    typedef void (*whgc_listener_f)( whgc_event const * ev );
 
     /**
        Adds an event listener to the context. The listener is called
-       when certain events happen within the given context.
+       when certain events happen within the given context. The call order
+       of multiple listeners is undefined. There is no way to remove a listener.
     */
     bool whgc_add_listener( whgc_context *, whgc_listener_f f );
 

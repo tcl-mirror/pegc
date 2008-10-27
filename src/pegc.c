@@ -231,17 +231,21 @@ static void pegc_free_value( void * k )
     free(k);
 }
 
-void pegc_gc_test_listener( whgc_event const event )
+void pegc_gc_test_listener( whgc_event const * ev )
 {
-    //MARKER; printf("GC event: cx=@%p event=%d key=%p value=@%p\n",event.cx,event.type,event.key,event.value);
-    if( whgc_event_destructing_context == event.type )
+#if 0
+    //MARKER; printf("GC event: cx=@%p event=%d key=%p value=@%p\n",ev->cx,ev->type,ev->key,ev->value);
+    //if( whgc_event_destructing_context == ev->type )
+    if( whgc_events.destructing_context == ev->type )
     {
-	whgc_stats const st = whgc_get_stats( event.cx );
+	whgc_stats const st = whgc_get_stats( ev->cx );
 	MARKER;printf("Approx memory allocated by gc context: %u\n", st.alloced);
 	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
-	pegc_stats const pst = pegc_get_stats( (pegc_parser const*)whgc_get_context_client(event.cx) );
-	printf("APPROXIMATE allocated memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
+	pegc_parser const * p= (pegc_parser const*)whgc_get_context_client(ev->cx);
+	pegc_stats const pst = pegc_get_stats( p );
+	printf("APPROXIMATE allocated memory: parser[@%p]=%u gc[@%p]=%u\n", p, pst.alloced, ev->cx, pst.gc_internals_alloced);
     }
+#endif
 }
 
 bool pegc_gc_register( pegc_parser * st,
@@ -253,7 +257,7 @@ bool pegc_gc_register( pegc_parser * st,
     {
         st->gc = whgc_create_context(st);
 	if( ! st->gc ) return false;
-	//whgc_add_listener( st->gc, pegc_gc_test_listener );
+	whgc_add_listener( st->gc, pegc_gc_test_listener );
     }
     if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {

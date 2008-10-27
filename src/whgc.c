@@ -48,8 +48,16 @@ extern "C" {
 #define MARKER printf("**** MARKER: %s:%d:\n",__FILE__,__LINE__);
 #endif
 
-typedef whhash_val_t (*whgc_hash_f)(void const *key);
-typedef int (*whgc_hash_cmp_f)(void const * lhs,void const *rhs);
+/**
+   Define the constants for the whgc_events object...
+*/
+const whgc_events_t whgc_events = {
+1, /* registered */
+2, /* unregistered */
+3, /* destructing_item */
+4, /* destructing_context */
+10 /* last_event_id */
+};
 
 /**
    Holder for generic gc data.
@@ -118,12 +126,12 @@ static const whgc_context whgc_context_init = WHGC_CONTEXT_INIT;
 /**
    A destructor for use with the hashtable API. Calls
    whhash_destroy((whhash_table*)k).
-*/
 static void whgc_free_hashtable( void * k )
 {
     //MARKER; printf("Freeing HASHTABLE @%p\n",k);
     whhash_destroy( (whhash_table*)k );
 }
+*/
 
 /**
    A logging version of free().
@@ -152,7 +160,7 @@ void const * whgc_get_context_client(whgc_context const *cx)
    parameters.
 */
 static void whgc_fire_event( whgc_context const *cx,
-			     enum whgc_event_types ev,
+			     short ev,
 			     void const * key,
 			     void const * val )
 {
@@ -170,8 +178,7 @@ static void whgc_fire_event( whgc_context const *cx,
 	    if( l->func )
 	    {
 		//MARKER;printf("Firing @%p(cx=@%p,event=%d,key=@%p,val=@%p)\n",l->func,cx,ev,key,val);
-		//l->func( cx, ev, key, val );
-		l->func( E );
+		l->func( &E );
 	    }
 	    l = l->next;
 	}
@@ -189,11 +196,11 @@ static void whgc_fire_event( whgc_context const *cx,
    The cx parameter is only used for firing a
    whgc_event_destructing_item event.
 */
-static void whgc_free_gc_entry( whgc_context const * cx,
+static void whgc_free_gc_entry( whgc_context * cx,
 				whgc_gc_entry * e )
 {
     if( ! e ) return;
-    whgc_fire_event( cx, whgc_event_destructing_item, e->key, e->value );
+    if( cx ) whgc_fire_event( cx, whgc_events.destructing_item, e->key, e->value );
     //MARKER;printf("Freeing GC item e[@%p]: key=[%p(@%p)] val[%p(@%p)]]\n",e,e->keyDtor,e->key,e->valueDtor,e->value);
     if( e->valueDtor )
     {
@@ -205,6 +212,7 @@ static void whgc_free_gc_entry( whgc_context const * cx,
 	//MARKER;printf("dtor'ing GC key %p( @%p )\n",e->keyDtor, e->key);
 	e->keyDtor(e->key);
     }
+    if( cx ) cx->stats.alloced -= sizeof(whgc_gc_entry);
     whgc_free(e);
 }
 
@@ -295,7 +303,7 @@ bool whgc_register( whgc_context * cx,
 	cx->current->right = e;
     }
     cx->current = e;
-    whgc_fire_event( cx, whgc_event_registered, e->key, e->value );
+    whgc_fire_event( cx, whgc_events.registered, e->key, e->value );
     return true;
 }
 
@@ -324,7 +332,7 @@ void * whgc_unregister( whgc_context * cx, void * key )
 	void * v = e->value;
 	whgc_free(e);
 	cx->stats.alloced -= sizeof(whgc_gc_entry);
-	whgc_fire_event( cx, whgc_event_unregistered, k, v );
+	whgc_fire_event( cx, whgc_events.unregistered, k, v );
     }
     return ret;
 }
@@ -336,17 +344,14 @@ void * whgc_search( whgc_context const * cx, void const * key )
     return e ? e->value : 0;
 }
 
-void whgc_destroy_context( whgc_context * cx )
+void whgc_clear_context( whgc_context * cx )
 {
     if( ! cx ) return;
-    whgc_fire_event( cx, whgc_event_destructing_context, 0, 0 );
-    cx->client = 0;
     //MARKER;printf("Cleaning up %u GC entries...\n",cx->stats.entry_count);
     if( cx->ht )
     {
 	//MARKER;printf("Cleaning up %u GC entries...\n",whhash_count(cx->ht));
-	whgc_free_hashtable( cx->ht );
-	cx->ht = 0;
+	whhash_clear( cx->ht );
     }
     /**
        Destroy registered entries in reverse order of
@@ -355,16 +360,27 @@ void whgc_destroy_context( whgc_context * cx )
     whgc_gc_entry * e = cx->current;
     while( e )
     {
-	whgc_fire_event( cx, whgc_event_unregistered, e->key, e->value ); /* a bit of a kludge, really. */
+	whgc_fire_event( cx, whgc_events.unregistered, e->key, e->value ); /* a bit of a kludge, really. */
 	//MARKER;printf("Want to clean up @%p\n",e);
 	whgc_gc_entry * left = e->left;
 	whgc_free_gc_entry(cx,e);
-	cx->stats.alloced -= sizeof(whgc_gc_entry);
 	e = left;
-	--(cx->stats.entry_count);
     }
+    cx->stats.entry_count = 0;
     cx->current = 0;
+}
+void whgc_destroy_context( whgc_context * cx )
+{
+    if( ! cx ) return;
+    whgc_fire_event( cx, whgc_events.destructing_context, 0, 0 );
+    whgc_clear_context( cx );
+    if( cx->ht )
+    {
+	whhash_destroy( cx->ht );
+	cx->ht = 0;
+    }
 
+    cx->client = 0; /* needs to stay valid until all events are fires, in case clients use it as a lookup key (i do) */
     whgc_listener * L = cx->listeners;
     cx->listeners = 0;
     while( L )
@@ -386,7 +402,7 @@ whgc_stats whgc_get_stats( whgc_context const * cx )
 {
     whgc_stats s = cx ? cx->stats : whgc_stats_init;
     if( ! cx ) return s;
-    whhash_stats hs = whhash_get_stats( cx->ht );
+    whhash_stats const hs = whhash_get_stats( cx->ht );
     s.alloced += hs.alloced;
     return s;
 }

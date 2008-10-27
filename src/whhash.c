@@ -164,7 +164,7 @@ whhash_create(whhash_val_t minsize,
     }
     h = (whhash_table *)malloc(sizeof(whhash_table));
     if (NULL == h) return NULL; /*oom*/
-    h->stats.alloced += sizeof(whhash_table);
+    h->stats.alloced = sizeof(whhash_table);
     *h = whhash_init;
     h->freeKey = free;
     h->freeVal = 0;
@@ -175,7 +175,7 @@ whhash_create(whhash_val_t minsize,
     h->table = (whhash_entry **)calloc(size, sizeof(whhash_entry*));
 #endif
     if (NULL == h->table) { free(h); return NULL; } /*oom*/
-    h->stats.alloced = (sizeof(whhash_entry*) * size);
+    h->stats.alloced += (sizeof(whhash_entry*) * size);
     h->tablelength  = size;
     h->primeindex   = pindex;
     h->entrycount   = 0;
@@ -250,7 +250,7 @@ whhash_expand(whhash_table *h)
 size_t
 whhash_count(whhash_table const * h)
 {
-    return h->entrycount;
+    return h ? h->entrycount : 0;
 }
 
 int
@@ -358,7 +358,6 @@ whhash_take(whhash_table *h, void *k)
             *pE = e->next;
             h->entrycount--;
             v = e->v;
-            //whhash_free_key( h, e->k );
 	    h->stats.alloced -= sizeof(whhash_entry);
             free(e);
 	    ++h->stats.removals;
@@ -408,10 +407,10 @@ static whhash_entry * whhash_free_entry( whhash_table * h, whhash_entry * e )
     return next;
 }
 
-void
-whhash_destroy(whhash_table *h)
+void whhash_clear(whhash_table *h)
 {
-    if( ! h ) return;
+    if( ! h || !h->table || !h->entrycount ) return;
+    //printf("whhash_clear(): alloced=%u\n",h->stats.alloced);
     whhash_val_t i;
     whhash_entry *e;
     whhash_entry **table = h->table;
@@ -423,8 +422,27 @@ whhash_destroy(whhash_table *h)
             e = whhash_free_entry( h, e );
         }
     }
+    //printf("whhash_clear(): alloced=%u\n",h->stats.alloced);
+    // Which of these is correct?
+    h->stats.alloced -= (sizeof(whhash_entry*) * h->tablelength);
+    //printf("tablelen=%u sizeof... = %u\n",h->tablelength,(sizeof(whhash_entry*) * h->tablelength));
     free(h->table);
-    free(h);
+    h->table = 0;
+    h->entrycount = 0;
+    h->tablelength = 0;
+    h->loadlimit = 0;
+    //printf("whhash_clear(): alloced=%u\n",h->stats.alloced); // why is this 0 instead of sizeof(whhash_table)?
+    h->stats.alloced = sizeof(whhash_table);
+    //printf("whhash_clear(): alloced=%u\n",h->stats.alloced);
+}
+void
+whhash_destroy(whhash_table *h)
+{
+    if( h )
+    {
+	whhash_clear(h);
+	free(h);
+    }
 }
 
 whhash_stats whhash_get_stats( whhash_table const * h )
@@ -434,7 +452,9 @@ whhash_stats whhash_get_stats( whhash_table const * h )
 
 int whhash_cmp_cstring( void const * k1, void const * k2 )
 {
-    return (k1==k2) || (0 == strcmp( (char const *) k1, (char const *) k2 ));
+    if( (k1 == k2) ) return 1;
+    else if( (!k1 && k2) || (k1 && !k2) ) return 0; /* protect against passing null to strcmp() */
+    return (0 == strcmp( (char const *) k1, (char const *) k2 ));
 }
 
 int whhash_cmp_long( void const * k1, void const * k2 )
@@ -617,7 +637,7 @@ whhash_get_iter(whhash_table *h)
     whhash_iter *itr = (whhash_iter *)
         malloc(sizeof(whhash_iter));
     if (NULL == itr) return NULL;
-    h->stats.alloced = sizeof(whhash_iter);
+    h->stats.alloced += sizeof(whhash_iter);
     *itr = whhash_itr_init;
     itr->h = h;
     itr->e = NULL;

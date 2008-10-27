@@ -128,12 +128,14 @@ extern "C" {
 
    Some other resources:
 
-   - http://en.wikipedia.org/wiki/Hash_table
-
-   - http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
-
    - The original implementation off of which whhash is based can be found
-   at http://www.cl.cam.ac.uk/~cwc22/hashtable/
+   at: http://www.cl.cam.ac.uk/~cwc22/hashtable/
+
+   - A good intro to hashtables:
+   http://en.wikipedia.org/wiki/Hash_table
+
+   - Brief analysis and implementations of of several well-known hash routines:
+   http://eternallyconfuzzled.com/tuts/algorithms/jsw_tut_hashing.aspx
 
 */
 
@@ -349,7 +351,7 @@ size_t
 whhash_count(whhash_table const * h);
 
 
-/*****************************************************************************
+/**
  whhash_destroy() cleans up resources allocated by a whhash_table and calls
  the configured destructors for each key and value. After
  this call, h is invalid.
@@ -357,14 +359,25 @@ whhash_count(whhash_table const * h);
  @name        whhash_destroy
  @param   h   the whhash_table
  */
+void whhash_destroy(whhash_table *h);
 
-void
-whhash_destroy(whhash_table *h);
+/**
+   Similar to whhash_destroy(), but only cleans up the internal
+   contents, and does not actualy delete the h pointer. Thus h
+   can be used for further inserts. The next insert will force
+   the hashtable to re-allocate internal storage. This routine
+   is the only way to get a whhash_table to reduce its size.
+*/
+void whhash_clear(whhash_table *h);
 
 /**
   A comparison function for use with whhash_create(). If (k1==k2) it
-  returns true, otherwise it performs strcmp(k1,k2) and returns true
-  if they match.
+  returns non-0 (true), otherwise it performs strcmp(k1,k2) and
+  returns true if they match.
+
+  This function accepts null pointers. Two null pointers will compare
+  equal, otherwise a single null pointer in the pair will evaluate
+  to false.
  */
 int whhash_cmp_cstring( void const * k1, void const * k2 );
 
