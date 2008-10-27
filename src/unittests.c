@@ -2,6 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+
+
 #include "pegc.h"
 #include "whgc.h"
 #include "whclob.h"
@@ -173,6 +179,35 @@ int a_test()
     return 0;
 }
 
+#include "whrc.h"
+#include "whclob.h"
+static void free_string(void*p)
+{
+    MARKER;printf("free_string(@%p[%s])\n",p,(char const *)p);
+}
+
+int rc_test()
+{
+    whrc_context * cx = whrc_create_context();
+
+    char * str = whclob_mprintf("Hi, world");
+    whrc_register( cx, str, free_string );
+    whrc_register( cx, whclob_mprintf("Bye, world."), free_string );
+    whrc_register( cx, whclob_mprintf("Another entry."), free_string );
+    size_t rc = whrc_refcount(cx, str);
+    assert( (rc == 1) && "Unexpected ref count!");
+    rc = whrc_ref(cx,str);
+    assert( (rc == 2) && "Unexpected ref count!");
+    rc = whrc_unref(cx,str);
+    assert( (rc == 1) && "Unexpected ref count!");
+    rc = whrc_unref(cx,str);
+    assert( (rc == 0) && "Unexpected ref count!");
+    MARKER;
+    whrc_destroy_context(cx,true);
+    MARKER;
+    return 0;
+}
+
 int main( int argc, char ** argv )
 {
     ThisApp.argv = argv+1;
@@ -185,13 +220,14 @@ int main( int argc, char ** argv )
     }
     ThisApp.P = pegc_create_parser( 0, 0 );
     int rc = 0;
-    if(!rc) rc = a_test();
+    if(!rc) rc = rc_test();
+    //if(!rc) rc = a_test();
     //if(!rc) rc = test_actions();
     if( 1 )
     {
 	whgc_stats const st = whgc_get_stats( ThisApp.gc );
 	MARKER;printf("Approx memory allocated by ThisApp.gc context: %u\n", st.alloced);
-	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.add_count, st.take_count);
+	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.reg_count, st.unreg_count);
 	pegc_stats const pst = pegc_get_stats( ThisApp.P );
 	printf("APPROXIMATE allocated parser memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);
     }

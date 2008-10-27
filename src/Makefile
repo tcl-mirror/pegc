@@ -54,6 +54,13 @@ libwhclob.LIB.OBJECTS = $(WHCLOB_OBJ)
 $(call ShakeNMake.CALL.RULES.LIBS,libwhclob)
 libs: $(libwhclob.LIB)
 
+########################################################################
+# Reference counting lib
+WHRC_OBJ := whrc.o
+libwhrc.LIB.OBJECTS = $(WHRC_OBJ) $(libwhhash.LIB)
+$(call ShakeNMake.CALL.RULES.LIBS,libwhrc)
+libs: $(libwhrc.LIB)
+
 
 ########################################################################
 # pegc lib:
@@ -77,10 +84,10 @@ pegcgen.BIN.OBJECTS := pegcgen.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,pegcgen)
 $(pegcgen.BIN): $(libpegc.LIB)
 
-unittests.BIN.LDFLAGS := $(libpegc.LIB)
+unittests.BIN.LDFLAGS := $(libpegc.LIB)  $(libwhrc.LIB)
 unittests.BIN.OBJECTS := unittests.o # $(libpegc.LIB.OBJECTS)
 $(call ShakeNMake.CALL.RULES.BINS,unittests)
-$(unittests.BIN): $(libpegc.LIB)
+$(unittests.BIN): $(libpegc.LIB) $(libwhrc.LIB)
 
 bins: $(test.BIN)
 bins: $(pegcgen.BIN)
