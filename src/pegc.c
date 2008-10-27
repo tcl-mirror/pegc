@@ -1849,14 +1849,12 @@ bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st )
 	DECL(next) = pegc_r_notat_v( st, illegaltail );
 	DECL(end) = pegc_r_or_ev( st, PegcRule_eof, next, aend );
 	DECL(R) = pegc_r_and_ev( st, PegcRule_int_dec, end, aend );
-	r->proxy = pegc_copy_r_v(st, R );
+	r = pegc_copy_r_v(st, R );
 #endif
 #undef CP
 #undef DECL
     }
-
-
-    if( r->rule && r->rule( r, st ) )
+    if( r && r->rule && r->rule( r, st ) )
     {
 	//DUMPPOS(st);
 	pegc_set_match( st, orig, pegc_pos(st), true );
