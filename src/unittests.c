@@ -42,6 +42,7 @@ bool run_test( pegc_parser * P,
 	       char const *expect,
 	       bool shouldFail )
 {
+    MARKER;printf("Testing rule [%s]\n",name);
     pegc_parser * p = P ? P : ThisApp.P;
     pegc_set_input( P, input, -1 );
     pegc_const_iterator orig = pegc_pos(p);
@@ -68,7 +69,7 @@ bool run_test( pegc_parser * P,
     {
 	if( pegc_pos(p) == orig )
 	{
-	    printf("Rule succeeded but did not consume.\n");
+	    if( realRC ) printf("Rule succeeded but did not consume.\n");
 	    if( expect && *expect )
 	    {
 		printf("EXPECT string [%s] was not empty for a non-consuming rule.\n",expect);
@@ -106,7 +107,6 @@ bool run_test( pegc_parser * P,
 int a_test()
 {
 #define TEST(R,IN,EXP,SHOULDFAIL) \
-    MARKER;printf("Testing rule [%s]\n",# R); \
     if( ! run_test(P,R,# R,IN,EXP,SHOULDFAIL) ) return 1;
 #define TEST1(R,IN,EXP) TEST(R,IN,EXP,false)
 #define TEST0(R,IN) TEST(R,IN,0,true)
@@ -151,6 +151,24 @@ int a_test()
 
     RULE until_a = pegc_r_until_p(&at_a);
     TEST1(until_a," - a*789*"," - ");
+
+#if 1
+    int i = 0;
+    PegcRule rlist[5];
+    memset(rlist,0,5*sizeof(PegcRule));
+    rlist[i++] = digit;
+    rlist[i++] = a_plus;
+    rlist[i++] = PegcRule_invalid;
+    RULE list_a = pegc_r_list_a( false, rlist );
+    RULE list_ep = pegc_r_list_ep( P, false, &digit, &a_plus, 0 );
+    RULE list_ep2 = pegc_r_list_ep( P, false, &a_plus,&digit, 0 );
+    char const * src = "3asd3_";
+    char const * exp = "3asd";
+    TEST1(list_a,src,exp);
+    TEST1(list_ep,src,exp);
+    TEST0(list_ep2,src);
+
+#endif
 
     return 0;
 }
