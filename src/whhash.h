@@ -143,13 +143,13 @@ extern "C" {
  */
 typedef unsigned long whhash_val_t;
 
-/* @var const whhash_val_t hashval_t_err
+/* @var const whhash_val_t whhash_hash_val_err
 
-   hashval_t_err is ((whhash_val_t)-1). It is used to report
+   whhash_hash_val_err is ((whhash_val_t)-1). It is used to report
    hash value errors. Hash routines which want to report
    an error may do so by returning this value.
  */
-extern const whhash_val_t hashval_t_err;
+extern const whhash_val_t whhash_hash_val_err;
 struct whhash_table;
 
 /*! @typedef whhash_table
@@ -226,6 +226,12 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
  called whenever items are removed from the whhash_table or the
  whhash_table is destroyed.
    
+ The key object must not change in a way which affects its hash value
+ after it is inserted. To due so invokes undefined behaviour.
+
+ That the key is not a const parameter is unfortunate, but it's the only way
+ we can properly apply ownership management without violating constness.
+
  @name        whhash_insert
  @param   h   the whhash_table to insert into
  @param   k   the key - whhash_table claims ownership and will free on removal (but see below)
@@ -317,7 +323,7 @@ whhash_take(whhash_table *h, void *k);
    whhash_set_key_dtor()), so the k parameter may not be valid
    after this function returns.
 
-   Returns 1 if it finds a value, else 0.
+   Returns 0 if it finds no entry to remove, else non-zero.
 */
 short whhash_remove(whhash_table *h, void *k);
 
@@ -375,13 +381,13 @@ int whhash_cmp_long( void const * k1, void const * k2 );
 /**
    An int/long hashing function for use with whhash_create().  It
    requires that n point to a long integer, and it simply returns the
-   value of n, or hashval_t_err on error (n is NULL).
+   value of n, or whhash_hash_val_err on error (n is NULL).
  */
 whhash_val_t whhash_hash_long( void const * n );
 
 /*
   A C-string hashing function for use with whhash_create().  Uses the
-  so-called "djb2" algorithm. Returns hashval_t_err if (!str).
+  so-called "djb2" algorithm. Returns whhash_hash_val_err if (!str).
 
   For notes on the hash algorithm see:
 
@@ -414,8 +420,6 @@ whhash_val_t whhash_hash_cstring_djb2m( void const * str );
 */
 whhash_val_t whhash_hash_cstring_oaat( void const * str );
 
-
-
 /**
    The "rotating hash", as described at:
 
@@ -430,7 +434,7 @@ whhash_val_t whhash_hash_cstring_rot( void const * str );
 
 /*
   A C-string hashing function for use with whhash_create().  Uses the
-  so-called "sdbm" algorithm. Returns hashval_t_err if (!str).
+  so-called "sdbm" algorithm. Returns whhash_hash_val_err if (!str).
 
   For notes on the hash algorithm see:
 
@@ -529,6 +533,45 @@ typedef struct whhash_stats whhash_stats;
 //#define WHHASH_STATS
 
 whhash_stats whhash_get_stats( whhash_table const * h );
+
+/**
+   Creates a new hashtable which is specialized for use with
+   (char const *) keys. It is not intended to own the keys,
+   and due to constness rules results are undefined if you
+   set a destructor for the keys.
+
+   The other functions in this API named whhash_sh_something()
+   are intended only to be used with hashes created by this function,
+   and in fact check their hashtable argument to see if it was created
+   by this function. If a hashtable created using whhash_create() is
+   passed to them, they will return an error result (e.g. a null pointer
+   or a false value).
+*/
+whhash_table * whhash_sh_create();
+
+/**
+   Functionally identical to whhash_insert(), but only works with hashtables
+   created by whhash_sh_create().
+ */
+int whhash_sh_insert(whhash_table *h, char const * key, void * val);
+
+/**
+   Functionally identical to whhash_search(), but only works with hashtables
+   created by whhash_sh_create().
+ */
+void * whhash_sh_search(whhash_table *h, char const * key);
+
+/**
+   Functionally identical to whhash_take(), but only works with hashtables
+   created by whhash_sh_create().
+ */
+void * whhash_sh_take(whhash_table *h, char const * key);
+
+/**
+   Functionally identical to whhash_remove(), but only works with hashtables
+   created by whhash_sh_create().
+ */
+int whhash_sh_remove(whhash_table *h, char const * key);
 
 #ifdef __cplusplus
 } /* extern "C" */

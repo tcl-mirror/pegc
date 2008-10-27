@@ -41,6 +41,7 @@ struct whhash_table {
     int (*eqfn) (void const *k1, void const *k2);
     void (*freeKey)( void * );
     void (*freeVal)( void * );
+    unsigned int flags;
     whhash_stats stats;
 };
 static const whhash_table
@@ -53,16 +54,27 @@ whhash_init = { 0, /*tablelength*/
 		   0, /* eqfn */
 		   0, /* freeKey */
 		   0, /* freeVal */
+		0, /* flags */
 		   WHHASH_STATS_INIT
 };
-const whhash_val_t hashval_t_err = (whhash_val_t)-1;
+const whhash_val_t whhash_hash_val_err = (whhash_val_t)-1;
+
+struct whhash_flags {
+    /**
+       Signals a hash for use with the whhash_st_xxx() functions.
+       Set only by whhash_sh_create().
+     */
+    const int SH_API;
+} whhash_flags = {
+    0x0001 /* SH_API */
+};
 
 /**
-   Returns h->hashfn(k), or hashval_t_err if either h or k are 0.
+   Returns h->hashfn(k), or whhash_hash_val_err if either h or k are 0.
 */
 static whhash_val_t whhash_hash(whhash_table *h, void const *k)
 {
-    if( !h || !k ) return hashval_t_err;
+    if( !h || !k ) return whhash_hash_val_err;
     /* Aim to protect against poor hash functions by adding logic here
      * - logic taken from java 1.4 whhash_table source */
     whhash_val_t i = h->hashfn(k);
@@ -88,7 +100,7 @@ static size_t whhash_index(size_t tablelength, size_t hashvalue)
    For internal use only: this func frees the memory associated with
    key, using h->freeKey (if set).  Results are undefined if key is
    not a key in h and if key is used after this func is called.
- */
+*/
 static void whhash_free_key(whhash_table const * h, void * key )
 {
     if( h && key && h->freeKey ) h->freeKey( key );
@@ -434,11 +446,11 @@ int whhash_cmp_long( void const * k1, void const * k2 )
 whhash_val_t
 whhash_hash_cstring_djb2( void const * vstr)
 { /* "djb2" algo code taken from: http://www.cse.yorku.ca/~oz/hash.html */
-    if( ! vstr ) return hashval_t_err;
+    if( ! vstr ) return whhash_hash_val_err;
     whhash_val_t hash = 5381;
     int c = 0;
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     while( (c = *str++) )
     {
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
@@ -449,7 +461,7 @@ whhash_hash_cstring_djb2( void const * vstr)
 whhash_val_t whhash_hash_cstring_djb2m( void const * vstr )
 {
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = 0;
     int c = 0;
     while( (c = *(str++)) )
@@ -469,7 +481,7 @@ whhash_val_t whhash_hash_cstring_djb2m( void const * vstr )
 whhash_val_t whhash_hash_cstring_fnv( void const * vstr )
 {
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = (unsigned long long) 2166136261L;
     /**
        ^^^^
@@ -487,7 +499,7 @@ whhash_val_t whhash_hash_cstring_fnv( void const * vstr )
 whhash_val_t whhash_hash_cstring_oaat( void const * vstr )
 {
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = 0;
     int c = 0;
     while( (c = *(str++)) )
@@ -507,7 +519,7 @@ whhash_val_t
 whhash_hash_cstring_sdbm(void const *vstr)
 { /* "sdbm" algo code taken from: http://www.cse.yorku.ca/~oz/hash.html */
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = 0;
     int c = 0;
     while( str && (c = *str++) )
@@ -521,7 +533,7 @@ whhash_val_t
 whhash_hash_cstring_rot( void const * vstr)
 {
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = 0;
     int c = 0;
     while( (c = *(str++)) )
@@ -535,7 +547,7 @@ whhash_val_t
 whhash_hash_cstring_sax( void const * vstr)
 {
     char const * str = (char const *)vstr;
-    if( ! str ) return hashval_t_err;
+    if( ! str ) return whhash_hash_val_err;
     whhash_val_t h = 0;
     int c = 0;
     while( (c = *(str++)) )
@@ -551,7 +563,7 @@ whhash_hash_long( void const * n )
 {
     return n
         ? *((whhash_val_t const *)n)
-        : hashval_t_err;
+        : whhash_hash_val_err;
 }
 
 struct whhash_iter
@@ -709,6 +721,46 @@ whhash_iter_search(whhash_iter *itr,
     return 0;
 }
 
+whhash_table * whhash_sh_create()
+{
+    whhash_table * h = whhash_create(16,
+				     whhash_hash_cstring_djb2m,
+				     whhash_cmp_cstring );
+    h->flags |= whhash_flags.SH_API;
+    return h;
+}
+/**
+   WHHASH_SH ensures that whhash_table H is compatible with
+   whhash_sh_create()'s table. If it's not then return RV is called.
+*/
+#define WHHASH_SH(H,RV) if( !h || !(h->flags & whhash_flags.SH_API) ) return RV;
+
+int whhash_sh_insert(whhash_table * h, char const * key, void * val)
+{
+    WHHASH_SH(h,0);
+    return whhash_insert(h,(char *) key, val);
+    /**
+       i don't like that (char*) cast at all :(
+     */
+}
+
+void * whhash_sh_search(whhash_table * h, char const * key)
+{
+    WHHASH_SH(h,0);
+    return whhash_search( h, key );
+}
+void * whhash_sh_take(whhash_table * h, char const * key)
+{
+    WHHASH_SH(h,0);
+    return whhash_take( h, (char *)key );
+}
+int whhash_sh_remove(whhash_table * h, char const * key)
+{
+    WHHASH_SH(h,0);
+    return whhash_remove( h, (char *)key );
+}
+
+#undef WHHASH_SH
 
 #ifdef __cplusplus
 } /* extern "C" */
