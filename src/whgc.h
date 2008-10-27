@@ -140,13 +140,18 @@ extern "C" {
     typedef void (*whgc_dtor_f)(void*);
     
     /**
-       If cx is null this function works just like malloc() and the dtor argument
-       is ignored, otherwise:
+       If cx is null this function works just like malloc() except:
 
-       It allocs using malloc() and transfers ownership of the
-       allocated memory (if not 0) by calling
-       whgc_add(cx,newObject,dtor). It also updates the memory
-       allocation statistics for cx.
+       - It calls memset() to zero out the memory.
+
+       - If cx is not null then ownership of the memory transfers is
+       transfered to cx calling whgc_add(cx,theMemory,dtor). cx's memory
+       memory allocation telemetry (see whgc_get_stats()) is also updated.
+
+       - If the cx is null then the caller owns the returned memory and must free
+       it by passing it to free().
+
+       It returns 0 on an alloc error or if size is 0.
     */
     void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor );
 
@@ -339,7 +344,8 @@ extern "C" {
 	short last_event_id;
     };
     typedef struct whgc_events_t whgc_events_t;
-    /**
+    /** @var const whgc_events_t whgc_events
+
        This is a shared instance of whgc_events_t which holds event
        type IDs. It is used instead of an enum because i find it
        prettier. Sample usage, from a whgc_listener_f implementation:
@@ -413,7 +419,8 @@ extern "C" {
 	void const * value;
     };
     typedef struct whgc_event whgc_event;
-    /**
+    /** @typedef void (*whgc_listener_f)( whgc_event const * ev )
+
        A typedef for whgc context event listers. The primary use case
        of a listener is to help debug the lifetimes of GC'd items. The
        listener is guaranteed to not get a null pointer, so long as it

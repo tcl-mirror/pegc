@@ -144,8 +144,10 @@ static void whgc_free( void * k )
 
 void * whgc_alloc( whgc_context * cx, size_t size, whgc_dtor_f dtor )
 {
-    void * ret = malloc( size );
-    if( ! ret || !cx ) return ret;
+    void * ret = size ? malloc( size ) : 0;
+    if( ! ret ) return 0;
+    memset( ret, 0, size );
+    if( !cx ) return ret;
     cx->stats.alloced += size;
     whgc_add( cx, ret, dtor );
     return ret;
