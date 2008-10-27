@@ -12,11 +12,12 @@ ifeq (1,$(TCC))
 	-Wall
 else
   # Assume gcc-compatible flags:
-#  CXXFLAGS += -g
-  CXXFLAGS += -Os
-  CPPFLAGS += \
+  CXXFLAGS += -g
+#  CXXFLAGS += -Os
+  CFLAGS += \
 	-Wimplicit-function-declaration \
-	-Wall
+	-Wall \
+	-g
 endif
 
 # CPPFLAGS ?= -g
