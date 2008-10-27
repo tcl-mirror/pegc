@@ -3,9 +3,8 @@
 #include <string.h>
 #include <ctype.h>
 #include "pegc.h"
-#include "pegc_strings.h"
 #include "whgc.h"
-#include "clob.h"
+#include "whclob.h"
 #if 1
 #define MARKER printf("******** MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
 #else
@@ -641,7 +640,7 @@ int a_test()
     if( PGApp.argv && *PGApp.argv )
     {
 	cb = whclob_new();
-	if( ClobRC.IOError != whclob_importer_filename( cb, *PGApp.argv ) )
+	if( whclobrc.IOError != whclob_importer_filename( cb, *PGApp.argv ) )
 	{
 	    src = whclob_bufferc(cb);
 	    MARKER;printf("Read in file [%s]\n",*PGApp.argv);
