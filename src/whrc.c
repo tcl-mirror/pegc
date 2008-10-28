@@ -105,13 +105,33 @@ static whrc_entry * whrc_search_entry( whrc_context * cx, void const * item )
 	: 0;
 }
 
-void * whrc_search( whrc_context * cx, void const * item )
+#if 0
+/**
+  This searches the context for the given item and returns it (or 0 if
+  no match is found (i.e. the item is not registered)).
+
+  Why use an item to look up itself? The first reason is, this routine
+  can be used in place to whrc_is_registered() (though that one is
+  slightly more efficient).
+
+  Secondly it can sometimes be used to legally get a non-const pointer
+  to an object which is otherwise const (that is, without casting away
+  the constness). For example, one routine may register the item, then
+  downstream the item is passed as a const pointer to another
+  routine. That routine can (assuming it has the whrc_context handle)
+  then use whrc_search() to get a non-const pointer to the item.
+  Admittedly only rarely useful, but this approach has come in handy a
+  time or two.
+*/
+//void * whrc_search( whrc_context * cx, void const * item );
+static void * whrc_search( whrc_context * cx, void const * item )
 {
     whrc_entry * e = whrc_search_entry(cx,item);
     return e
 	? e->item
 	: 0;
 }
+#endif
 
 
 size_t whrc_refcount( whrc_context * cx, void const * item )
