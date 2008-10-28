@@ -123,6 +123,15 @@ Credit for primes table: Aaron Krowne
  http://planetmath.org/encyclopedia/GoodHashTablePrimes.html
 */
 static const whhash_val_t primes[] = {
+#if 0
+2,3,5,7,11,13,
+#endif
+#if 0
+17,19,23,29,31,
+#endif
+#if 0
+37,41,43,47,
+#endif
 53, 97, 193, 389,
 769, 1543, 3079, 6151,
 12289, 24593, 49157, 98317,
