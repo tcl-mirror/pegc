@@ -105,6 +105,15 @@ static whrc_entry * whrc_search_entry( whrc_context * cx, void const * item )
 	: 0;
 }
 
+void * whrc_search( whrc_context * cx, void const * item )
+{
+    whrc_entry * e = whrc_search_entry(cx,item);
+    return e
+	? e->item
+	: 0;
+}
+
+
 size_t whrc_refcount( whrc_context * cx, void const * item )
 {
     whrc_entry const * e = whrc_search_entry(cx, item);

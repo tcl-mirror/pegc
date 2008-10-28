@@ -11,7 +11,7 @@ but is lighter-weight and does not manage key/value
 pairs as that library does.
 
 It internally uses a hashtable which uses a hash code based on the
-(void*) address of an item. In theory the hashtable can reach 0(1)
+(void*) address of an item. In theory the hashtable can average 0(1)
 speeds, so there is very little performance hit.
 
 Example:
@@ -21,21 +21,24 @@ char * str = (char *)malloc(...);
 whrc_register( cx, str, free );
 size_t rc = whrc_refcount(cx,str); // rc == 1
 rc = whrc_addref(cx,str); //rc == 2
-whrc_rmref(cx,str); // rc == 1
-whrc_rmref(cx,str); // rc == 0, free(str) is called
+rc = whrc_rmref(cx,str); // rc == 1
+rc = whrc_rmref(cx,str); // rc == 0, free(str) is called
 whrc_destroy_context(cx,true);
 @endcode
 
-The bool argument to whrc_destroy_context() says whether or not to
-free up any "dangling" items (stale references) in the context.
+(The bool argument to whrc_destroy_context() says whether or not to
+free up any "dangling" items (those with references) in the context.)
+
+That demonstrates the majority of the API. There are only a handful of
+functions to learn.
 
 @section whrc_sec_threadsafety Thread safety
 
-    By default it is never legal to use the same whrc_context from
+By default it is never legal to use the same @ref whrc_context from
     multiple threads at the same time. That said, the client may use
     their own locking to serialize access. All API functions which
-    take a (whrc_context const *) argument require only a read lock,
-    whereas those taking a (whrc_context*) argument require a
+    take a (@ref whrc_context const *) argument require only a read lock,
+    whereas those taking a (@ref whrc_context *) argument require a
     exclusive (read/write) access. whrc_create_context() is reentrant
     and does not need to be locked.
 
@@ -43,8 +46,7 @@ free up any "dangling" items (stale references) in the context.
     items. If a referenced item is used by multiple threads, this code
     has no way of knowing about it. When in doubt, don't store items
     which are shared across threads unless you know that lifetime and
-    ownership issues can be mitigated (e.g. by giving ownership to the
-    whrc_context and serializing access to the context).
+    ownership issues can be mitigated.
 */
 
 #include <stddef.h> /* size_t */
@@ -130,6 +132,25 @@ bool whrc_register( whrc_context * cx, void * item, whrc_dtor_f );
    Returns true only if item is registered in the given context.
 */
 bool whrc_is_registered( whrc_context * cx, void const * item );
+
+/**
+  This searches the context for the given item and returns it (or 0 if
+  no match is found (i.e. the item is not registered)).
+
+  Why use an item to look up itself? The first reason is, this routine
+  can be used in place to whrc_is_registered() (though that one is
+  slightly more efficient).
+
+  Secondly it can sometimes be used to legally get a non-const pointer
+  to an object which is otherwise const (that is, without casting away
+  the constness). For example, one routine may register the item, then
+  downstream the item is passed as a const pointer to another
+  routine. That routine can (assuming it has the whrc_context handle)
+  then use whrc_search() to get a non-const pointer to the item.
+  Admittedly only rarely useful, but this approach has come in handy a
+  time or two.
+*/
+void * whrc_search( whrc_context * cx, void const * item );
 
 /**
    Adds one to the reference count of item and returns the new
