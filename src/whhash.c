@@ -132,6 +132,9 @@ static const whhash_val_t primes[] = {
 #if 0
 37,41,43,47,
 #endif
+#if 1
+7,13,23,
+#endif
 53, 97, 193, 389,
 769, 1543, 3079, 6151,
 12289, 24593, 49157, 98317,
@@ -143,7 +146,7 @@ static const whhash_val_t primes[] = {
 const whhash_val_t prime_table_length = sizeof(primes)/sizeof(primes[0]);
 const float max_load_factor =
     /* original developer's value was 0.65. */
-    0.70 /* See http://en.wikipedia.org/wiki/Hash_table */
+    0.70
     ;
 
 
@@ -298,7 +301,7 @@ whhash_replace(whhash_table *h, void *k, void *v)
 int
 whhash_insert(whhash_table *h, void *k, void *v)
 {
-    if( ! h || !k || !v ) return 0;
+    if( ! h || !k ) return 0;
     /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries. */
     int rc = whhash_replace(h, k, v);
     if( 0 != rc ) return rc;
@@ -325,12 +328,12 @@ whhash_insert(whhash_table *h, void *k, void *v)
     return 1;
 }
 
-void *
-whhash_search(whhash_table *h, void const *k)
+static whhash_entry * whhash_search_entry(whhash_table *h,
+					  void const *k)
 {
     if( !h || !k ) return 0;
     ++h->stats.searches;
-    whhash_entry *e;
+    whhash_entry * e = 0;
     whhash_val_t hashvalue, index;
     hashvalue = whhash_hash(h,k);
     index = whhash_index(h->tablelength,hashvalue);
@@ -340,7 +343,7 @@ whhash_search(whhash_table *h, void const *k)
         /* Check hash value to short circuit heavier comparison */
         if ((k == e->k) || ((hashvalue == e->h) && (h->eqfn(k, e->k))))
 	{
-	    return e->v;
+	    return e;
 	}
         e = e->next;
 	++h->stats.search_collisions;
@@ -348,8 +351,21 @@ whhash_search(whhash_table *h, void const *k)
     return NULL;
 }
 
+short whhash_contains(whhash_table *h, void const *k)
+{
+    whhash_entry * e = whhash_search_entry(h,k);
+    return e ? 1 : 0;
+}
+
 void *
-whhash_take(whhash_table *h, void *k)
+whhash_search(whhash_table *h, void const *k)
+{
+    if( !h || !k ) return 0;
+    whhash_entry * e = whhash_search_entry(h,k);
+    return e ? e->v : 0;
+}
+
+void * whhash_take(whhash_table *h, void const *k)
 {
     /* TODO: consider compacting the table when the load factor drops enough,
      *       or provide a 'compact' method. */
@@ -357,7 +373,7 @@ whhash_take(whhash_table *h, void *k)
     whhash_entry **pE;
     void *v;
     whhash_val_t hashvalue, index;
-
+    // Can we reimplement this using whhash_search_entry()?
     hashvalue = whhash_hash(h,k);
     index = whhash_index(h->tablelength,whhash_hash(h,k));
     pE = &(h->table[index]);
@@ -370,7 +386,7 @@ whhash_take(whhash_table *h, void *k)
              )
         {
             *pE = e->next;
-            h->entrycount--;
+            --h->entrycount;
             v = e->v;
 	    h->stats.alloced -= sizeof(whhash_entry);
             free(e);

@@ -233,12 +233,11 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
 /**
  whhash_insert() adds new entries to a hashtable.
 
- None of the parameters may be 0. Theoretically a value of 0 is okay
- but in practice it means we cannot differentiate between "not found"
- and "found value of 0", so this function doesn't allow it. The
- objects pointed to by the parameters must outlive this hashtable (or
- be managed/owned by it by assigning destructor functions, e.g. via
- whhash_set_dtors()).
+ Neither of the h or k parameters may be 0. A value of 0 is okay but
+ in practice it means a client cannot differentiate between "not
+ found" and "found value of 0". The objects pointed to by the
+ parameters must outlive this hashtable (or be managed/owned by it by
+ assigning destructor functions, e.g. via whhash_set_dtors()).
 
  When a key is re-inserted (already mapped to something) then this
  function operates like whhash_replace() and non-zero is
@@ -284,10 +283,7 @@ whhash_insert(whhash_table *h, void *k, void *v);
  Returns 0 if no match is found, -1 if a match is made and replaced,
  and 1 if (v == existingValue).
 
- None of the parameters may be 0. Theoretically a value of 0 is okay but
- in practice it means we cannot differentiate between "not found" and
- "found value of 0", so this function doesn't allow it.
-
+ Neither the h nor k parameters may be 0.
  */
 int
 whhash_replace(whhash_table *h, void *k, void *v);
@@ -303,9 +299,21 @@ int fnname (whhash_table *h, keytype *k, valuetype *v) \
   associated value (if found) or 0 (if not found). Ownership of the
   returned value is unchanged.
  */
-
 void *
 whhash_search(whhash_table *h, void const * k);
+
+/**
+   Works like whhash_search() but can differentiate between a found
+   value of 0 and no-such-element.
+
+   Returns 0 for if wh does not contain the given key and non-zero for
+   if wh does contain the key.
+
+   Maintainer's note: the wh parameter should be const, but its not
+   for internal reasons.
+ */
+short whhash_contains(whhash_table *wh, void const * k);
+
 
 #define DEFINE_WHHASH_SEARCH(fnname, keytype, valuetype) \
 valuetype * fnname (whhash_table *h, keytype const *k) \
@@ -327,7 +335,7 @@ valuetype * fnname (whhash_table *h, keytype const *k) \
  two cases.
 
  */
-void * whhash_take(whhash_table *h, void *k);
+void * whhash_take(whhash_table *h, void const *k);
 
 /**
    Works like whhash_take(h,k), but also calls the dtors registered
