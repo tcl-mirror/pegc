@@ -226,7 +226,7 @@ int main( int argc, char ** argv )
     }
     int rc = 0;
     if(!rc) rc = rc_test();
-    //if(!rc) rc = a_test();
+    if(!rc) rc = a_test();
     //if(!rc) rc = test_actions();
     if( 1 )
     {
