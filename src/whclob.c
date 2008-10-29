@@ -143,7 +143,7 @@ long whclob_reset( whclob * cb )
 #endif
 		if( cb->nAlloc )
 		{
-			memset( cb->aData, 0, cb->nAlloc );
+		    //crash? memset( cb->aData, 0, cb->nAlloc );
 			free( cb->aData );
                         cb->aData = 0;
 		}
