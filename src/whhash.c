@@ -180,7 +180,7 @@ whhash_create(whhash_val_t minsize,
     if (NULL == h) return NULL; /*oom*/
     h->stats.alloced = sizeof(whhash_table);
     *h = whhash_init;
-    h->freeKey = free;
+    h->freeKey = 0;
     h->freeVal = 0;
 #if 0
     h->table = (whhash_entry **)malloc(sizeof(whhash_entry*) * size);
