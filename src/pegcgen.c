@@ -650,7 +650,7 @@ int a_test()
     if( PGApp.argv && *PGApp.argv )
     {
 	cb = whclob_new();
-	if( whclobrc.IOError != whclob_importer_filename( cb, *PGApp.argv ) )
+	if( whclob_rc.IOError != whclob_importer_filename( cb, *PGApp.argv ) )
 	{
 	    src = whclob_bufferc(cb);
 	    MARKER;printf("Read in file [%s]\n",*PGApp.argv);

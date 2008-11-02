@@ -175,8 +175,7 @@ typedef unsigned long whhash_val_t;
    an error may do so by returning this value.
  */
 extern const whhash_val_t whhash_hash_val_err;
-/** @typedef whhash_table
-@typedef struct whhash_table
+/** @struct whhash_table
 
     whhash_table is an opaque handle to hashtable data. They are
     created using whhash_create() and destroyed using
@@ -489,11 +488,11 @@ whhash_val_t whhash_hash_cstring_rot( void const * str );
 whhash_val_t whhash_hash_cstring_sdbm( void const * str );
 
 
-struct whhash_iter;
-/*! @typedef whhash_iter
+/*! @struct whhash_iter
 
   Opaque handle for whhash_table interators.
 */
+struct whhash_iter;
 typedef struct whhash_iter whhash_iter;
 
 

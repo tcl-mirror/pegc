@@ -123,13 +123,14 @@ extern "C" {
        require a exclusive (read/write) access. whgc_create_context()
        is reentrant and does not need to be locked.
     */
-    struct whgc_context;
-    /** @typedef whgc_context
+
+    /** @struct whgc_context
 
        whgc_context is an opaque handle for use with the whgc_xxx()
        routines. They are created using whgc_create_context() and
        destroyed using whgc_destroy_context().
     */
+    struct whgc_context;
     typedef struct whgc_context whgc_context;
 
     /** @typedef void (*whgc_dtor_f)(void*)

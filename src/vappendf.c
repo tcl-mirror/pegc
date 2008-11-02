@@ -86,10 +86,10 @@ VAPPENDF_CHARARRAY is a helper to allocate variable-sized arrays.
 This exists mainly so this code can compile with the tcc compiler.
 */
 #if VAPPENDF_HAVE_VARARRAY
-#  define VAPPENDF_CHARARRAY(V,N) char V[N]
+#  define VAPPENDF_CHARARRAY(V,N) char V[N+1]; memset(V,0,N+1);
 #  define VAPPENDF_CHARARRAY_FREE(V)
 #else
-#  define VAPPENDF_CHARARRAY(V,N) char * V = (char *)malloc(N)
+#  define VAPPENDF_CHARARRAY(V,N) char * V = (char *)malloc(N+1); memset(V,0,N+1);
 #  define VAPPENDF_CHARARRAY_FREE(V) free(V)
 #endif
 
@@ -151,12 +151,26 @@ enum et_info_flags { FLAG_SIGNED = 1,    /* True if the value to convert is sign
 };
 
 /*
-   The following table is searched linearly, so it is good to put the
-   most frequently used conversion types first.
+  Historically, the following table was searched linearly, so the most
+  common conversions were kept at the front.
+
+  Change 2008 Oct 31 by Stephan Beal: we reserve an array or ordered
+  entries for all chars in the range [32..126]. Format character
+  checks can now be done in constant time by addressing that array
+  directly.  This takes more static memory, but reduces the time and
+  per-call overhead costs of vappendf().
 */
 static const char aDigits[] = "0123456789ABCDEF0123456789abcdef";
 static const char aPrefix[] = "-x0\000X0";
 static const et_info fmtinfo[] = {
+/**
+   If VAPPENDF_FMTINFO_FIXED is 1 then we use the original
+   implementation: a linear list of entries. Search time is linear. If
+   VAPPENDF_FMTINFO_FIXED is 0 then we use a fixed-size array which
+   we index directly using the format char as the key.
+*/
+#define VAPPENDF_FMTINFO_FIXED 0
+#if VAPPENDF_FMTINFO_FIXED
   {  'd', 10, FLAG_SIGNED, etRADIX,      0,  0 },
   {  's',  0, FLAG_STRING, etSTRING,     0,  0 },
   {  'g',  0, FLAG_SIGNED, etGENERIC,    30, 0 },
@@ -189,6 +203,107 @@ static const et_info fmtinfo[] = {
 #if !VAPPENDF_OMIT_SIZE
   {  'n',  0, 0, etSIZE,       0,  0 },
 #endif
+#else /* VAPPENDF_FMTINFO_FIXED */
+  /*
+    These entries MUST stay in ASCII order, sorted
+    on their fmttype member!
+  */
+  {' '/*32*/, 0, 0, 0, 0, 0 },
+  {'!'/*33*/, 0, 0, 0, 0, 0 },
+  {'"'/*34*/, 0, 0, 0, 0, 0 },
+  {'#'/*35*/, 0, 0, 0, 0, 0 },
+  {'$'/*36*/, 0, 0, 0, 0, 0 },
+  {'%'/*37*/, 0, 0, etPERCENT, 0, 0 },
+  {'&'/*38*/, 0, 0, 0, 0, 0 },
+  {'\''/*39*/, 0, 0, 0, 0, 0 },
+  {'('/*40*/, 0, 0, 0, 0, 0 },
+  {')'/*41*/, 0, 0, 0, 0, 0 },
+  {'*'/*42*/, 0, 0, 0, 0, 0 },
+  {'+'/*43*/, 0, 0, 0, 0, 0 },
+  {','/*44*/, 0, 0, 0, 0, 0 },
+  {'-'/*45*/, 0, 0, 0, 0, 0 },
+  {'.'/*46*/, 0, 0, 0, 0, 0 },
+  {'/'/*47*/, 0, 0, 0, 0, 0 },
+  {'0'/*48*/, 0, 0, 0, 0, 0 },
+  {'1'/*49*/, 0, 0, 0, 0, 0 },
+  {'2'/*50*/, 0, 0, 0, 0, 0 },
+  {'3'/*51*/, 0, 0, 0, 0, 0 },
+  {'4'/*52*/, 0, 0, 0, 0, 0 },
+  {'5'/*53*/, 0, 0, 0, 0, 0 },
+  {'6'/*54*/, 0, 0, 0, 0, 0 },
+  {'7'/*55*/, 0, 0, 0, 0, 0 },
+  {'8'/*56*/, 0, 0, 0, 0, 0 },
+  {'9'/*57*/, 0, 0, 0, 0, 0 },
+  {':'/*58*/, 0, 0, 0, 0, 0 },
+  {';'/*59*/, 0, 0, 0, 0, 0 },
+  {'<'/*60*/, 0, 0, 0, 0, 0 },
+  {'='/*61*/, 0, 0, 0, 0, 0 },
+  {'>'/*62*/, 0, 0, 0, 0, 0 },
+  {'?'/*63*/, 0, 0, 0, 0, 0 },
+  {'@'/*64*/, 0, 0, 0, 0, 0 },
+  {'A'/*65*/, 0, 0, 0, 0, 0 },
+  {'B'/*66*/, 0, 0, 0, 0, 0 },
+  {'C'/*67*/, 0, 0, 0, 0, 0 },
+  {'D'/*68*/, 0, 0, 0, 0, 0 },
+  {'E'/*69*/, 0, FLAG_SIGNED, etEXP, 14, 0 },
+  {'F'/*70*/, 0, 0, 0, 0, 0 },
+  {'G'/*71*/, 0, FLAG_SIGNED, etGENERIC, 14, 0 },
+  {'H'/*72*/, 0, 0, 0, 0, 0 },
+  {'I'/*73*/, 0, 0, 0, 0, 0 },
+  {'J'/*74*/, 0, 0, 0, 0, 0 },
+  {'K'/*75*/, 0, 0, 0, 0, 0 },
+  {'L'/*76*/, 0, 0, 0, 0, 0 },
+  {'M'/*77*/, 0, 0, 0, 0, 0 },
+  {'N'/*78*/, 0, 0, 0, 0, 0 },
+  {'O'/*79*/, 0, 0, 0, 0, 0 },
+  {'P'/*80*/, 0, 0, 0, 0, 0 },
+  {'Q'/*81*/, 0, FLAG_STRING, etSQLESCAPE2, 0, 0 },
+  {'R'/*82*/, 0, 0, 0, 0, 0 },
+  {'S'/*83*/, 0, 0, 0, 0, 0 },
+  {'T'/*84*/,  0, FLAG_STRING, etURLDECODE, 0, 0 },
+  {'U'/*85*/, 0, 0, 0, 0, 0 },
+  {'V'/*86*/, 0, 0, 0, 0, 0 },
+  {'W'/*87*/, 0, 0, 0, 0, 0 },
+  {'X'/*88*/, 16, 0, etRADIX,      0,  4 },
+  {'Y'/*89*/, 0, 0, 0, 0, 0 },
+  {'Z'/*90*/, 0, 0, 0, 0, 0 },
+  {'['/*91*/, 0, 0, 0, 0, 0 },
+  {'\\'/*92*/, 0, 0, 0, 0, 0 },
+  {']'/*93*/, 0, 0, 0, 0, 0 },
+  {'^'/*94*/, 0, 0, 0, 0, 0 },
+  {'_'/*95*/, 0, 0, 0, 0, 0 },
+  {'`'/*96*/, 0, 0, 0, 0, 0 },
+  {'a'/*97*/, 0, 0, 0, 0, 0 },
+  {'b'/*98*/, 0, 0, 0, 0, 0 },
+  {'c'/*99*/, 0, 0, etCHARX,      0,  0 },
+  {'d'/*100*/, 10, FLAG_SIGNED, etRADIX,      0,  0 },
+  {'e'/*101*/, 0, FLAG_SIGNED, etEXP,        30, 0 },
+  {'f'/*102*/, 0, FLAG_SIGNED, etFLOAT,      0,  0},
+  {'g'/*103*/, 0, FLAG_SIGNED, etGENERIC,    30, 0 },
+  {'h'/*104*/, 0, FLAG_STRING, etHTML, 0, 0 },
+  {'i'/*105*/, 10, FLAG_SIGNED, etRADIX,      0,  0},
+  {'j'/*106*/, 0, 0, 0, 0, 0 },
+  {'k'/*107*/, 0, 0, 0, 0, 0 },
+  {'l'/*108*/, 0, 0, 0, 0, 0 },
+  {'m'/*109*/, 0, 0, 0, 0, 0 },
+  {'n'/*110*/, 0, 0, etSIZE, 0, 0 },
+  {'o'/*111*/, 8, 0, etRADIX,      0,  2 },
+  {'p'/*112*/, 16, 0, etPOINTER, 0, 1 },
+  {'q'/*113*/, 0, FLAG_STRING, etSQLESCAPE,  0, 0 },
+  {'r'/*114*/, 10, (FLAG_EXTENDED|FLAG_SIGNED), etORDINAL,    0,  0},
+  {'s'/*115*/, 0, FLAG_STRING, etSTRING,     0,  0 },
+  {'t'/*116*/,  0, FLAG_STRING, etURLENCODE, 0, 0 },
+  {'u'/*117*/, 10, 0, etRADIX,      0,  0 },
+  {'v'/*118*/, 0, 0, 0, 0, 0 },
+  {'w'/*119*/, 0, FLAG_STRING, etSQLESCAPE3, 0, 0 },
+  {'x'/*120*/, 16, 0, etRADIX,      16, 1  },
+  {'y'/*121*/, 0, 0, 0, 0, 0 },
+  {'z'/*122*/, 0, FLAG_STRING, etDYNSTRING,  0,  0},
+  {'{'/*123*/, 0, 0, 0, 0, 0 },
+  {'|'/*124*/, 0, 0, 0, 0, 0 },
+  {'}'/*125*/, 0, 0, 0, 0, 0 },
+  {'~'/*126*/, 0, 0, 0, 0, 0 },
+#endif /* VAPPENDF_FMTINFO_FIXED */
 };
 #define etNINFO  (sizeof(fmtinfo)/sizeof(fmtinfo[0]))
 
@@ -219,12 +334,12 @@ static int et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
 #endif /* !VAPPENDF_OMIT_FLOATING_POINT */
 
 /*
-   On machines with a small stack size, you can redefine the
-   VAPPENDF_BUF_SIZE to be less than 350.  But beware - for
-   smaller values some %f conversions may go into an infinite loop.
+   On machines with a small(?) stack size, you can redefine the
+   VAPPENDF_BUF_SIZE to be less than 350.  But beware - for smaller
+   values some %f conversions may go into an infinite loop.
 */
 #ifndef VAPPENDF_BUF_SIZE
-#  define VAPPENDF_BUF_SIZE 350  /* Size of the output buffer */
+#  define VAPPENDF_BUF_SIZE 350  /* Size of the output buffer for numeric conversions */
 #endif
 
 #ifdef VAPPENDF_INT64_TYPE
@@ -302,7 +417,7 @@ typedef long (*vappendf_spec_handler)( vappendf_appender pf,
 
 
 /**
-  vappendf_spec_handler for etSTRING types.  It assumes that varg is a
+  vappendf_spec_handler for etSTRING types. It assumes that varg is a
   null-terminated (char [const] *)
 */
 static long spech_string( vappendf_appender pf,
@@ -562,40 +677,42 @@ static long spech_sqlstring3( vappendf_appender pf,
    The root printf program.  All variations call this core.  It
    implements most of the common printf behaviours plus (optionally)
    some extended ones.
-**
+
    INPUTS:
-**
+
      pfAppend : The is a vappendf_appender function which is responsible
      for accumulating the output. If pfAppend returns a negative integer
      then processing stops immediately.
-**
+
      pfAppendArg : is ignored by this function but passed as the first
      argument to pfAppend. pfAppend will presumably use it as a data
      store for accumulating its string.
-**
+
      fmt : This is the format string, as in the usual printf().
-**
+
      ap : This is a pointer to a list of arguments.  Same as in
      vprintf() and friends.
-**
+
    OUTPUTS:
-**
+
    The return value is the total number of characters sent to the
    function "func".  Returns -1 on a error.
-**
+
    Note that the order in which automatic variables are declared below
    seems to make a big difference in determining how fast this beast
    will run.
-**
+
    Much of this code dates back to the early 1980's, supposedly.
-**
+
    Known change history (most historic info has been lost):
-**
+
    10 Feb 2008 by Stephan Beal: refactored to remove the 'useExtended'
    flag (which is now always on). Added the vappendf_appender typedef to
    make this function generic enough to drop into other source trees
    without much work.
-   
+
+   31 Oct 2008 by Stephan Beal: refactored the et_info lookup to be
+   constant-time instead of linear.
 */
 long vappendf(
   vappendf_appender pfAppend,          /* Accumulate results here */
@@ -611,7 +728,9 @@ long vappendf(
        will run.
     */
 
+#if VAPPENDF_FMTINFO_FIXED
   const int useExtended = 1; /* Allow extended %-conversions */
+#endif
   long outCount = 0;          /* accumulated output count */
   int pfrc = 0;              /* result from calling pfAppend */
   int c;                     /* Next character in the format string */
@@ -647,22 +766,20 @@ long vappendf(
 #endif
 
 
-  /* VAPPENDF_RETURN, VAPPENDF_ACCUM, and VAPPENDF_SPACES
+  /* VAPPENDF_RETURN, VAPPENDF_CHECKERR, and VAPPENDF_SPACES
      are internal helpers.
   */
 #define VAPPENDF_RETURN if( zExtra ) free(zExtra); return outCount;
-#define VAPPENDF_ACCUM if( pfrc<0 ) { VAPPENDF_RETURN; } else outCount += pfrc;
+#define VAPPENDF_CHECKERR(FREEME) if( pfrc<0 ) { VAPPENDF_CHARARRAY_FREE(FREEME); VAPPENDF_RETURN; } else outCount += pfrc;
 #define VAPPENDF_SPACES(N) \
 if(1){				       \
     VAPPENDF_CHARARRAY(zSpaces,N);		      \
     memset( zSpaces,' ',N);			      \
     pfrc = pfAppend(pfAppendArg, zSpaces, N);	      \
-    VAPPENDF_ACCUM;				      \
+    VAPPENDF_CHECKERR(zSpaces);			      \
     VAPPENDF_CHARARRAY_FREE(zSpaces);		      \
 }
 
-/*   char const * zSpaces = " "; */
-/*   const int zSpacesLen = strlen( zSpaces ); */
   length = 0;
   bufpt = 0;
   for(; (c=(*fmt))!=0; ++fmt){
@@ -672,13 +789,13 @@ if(1){				       \
       amt = 1;
       while( (c=(*++fmt))!='%' && c!=0 ) amt++;
       pfrc = pfAppend( pfAppendArg, bufpt, amt);
-      VAPPENDF_ACCUM;
+      VAPPENDF_CHECKERR(0);
       if( c==0 ) break;
     }
     if( (c=(*++fmt))==0 ){
       errorflag = 1;
       pfrc = pfAppend( pfAppendArg, "%", 1);
-      VAPPENDF_ACCUM;
+      VAPPENDF_CHECKERR(0);
       break;
     }
     /* Find out what flags are present */
@@ -746,20 +863,32 @@ if(1){				       \
     }
     /* Fetch the info entry for the field */
     infop = 0;
+#if VAPPENDF_FMTINFO_FIXED
     for(idx=0; idx<etNINFO; idx++){
       if( c==fmtinfo[idx].fmttype ){
         infop = &fmtinfo[idx];
         if( useExtended || (infop->flags & FLAG_EXTENDED)==0 ){
           xtype = infop->type;
         }else{
-		VAPPENDF_RETURN;
+	    VAPPENDF_RETURN;
         }
         break;
       }
     }
+#else
+#define FMTNDX(N) (N - fmtinfo[0].fmttype)
+#define FMTINFO(N) (fmtinfo[ FMTNDX(N) ])
+    infop = ((c>=(fmtinfo[0].fmttype)) && (c<fmtinfo[etNINFO-1].fmttype))
+	? &FMTINFO(c)
+	: 0;
+    //fprintf(stderr,"char '%c'/%d @ %d,  type=%c/%d\n",c,c,FMTNDX(c),infop->fmttype,infop->type);
+    if( infop ) xtype = infop->type;
+#undef FMTINFO
+#undef FMTNDX
+#endif /* VAPPENDF_FMTINFO_FIXED */
     zExtra = 0;
-    if( infop==0 ){
-	    VAPPENDF_RETURN;
+    if( (!infop) || (!infop->type) ){
+	VAPPENDF_RETURN;
     }
 
 
@@ -822,6 +951,7 @@ if(1){				       \
         }
         bufpt = &buf[VAPPENDF_BUF_SIZE-1];
         if( xtype==etORDINAL ){
+	    /** i sure would like to shake the hand of whoever figured this out: */
           static const char zOrd[] = "thstndrd";
           int x = longvalue % 10;
           if( x>=4 || (longvalue/10)%10==1 ){
@@ -1045,7 +1175,7 @@ if(1){				       \
 	  vappendf_spec_handler spf = (xtype==etSTRING)
               ? spech_string : spech_dynstring;
 	  pfrc = spf( pfAppend, pfAppendArg, bufpt );
-	  VAPPENDF_ACCUM;
+	  VAPPENDF_CHECKERR(0);
 	  length = 0;
 	  if( precision>=0 && precision<length ) length = precision;
 	}
@@ -1054,19 +1184,19 @@ if(1){				       \
       case etHTML:
 	  bufpt = va_arg(ap,char*);
 	  pfrc = spech_string_to_html( pfAppend, pfAppendArg, bufpt );
-	  VAPPENDF_ACCUM;
+	  VAPPENDF_CHECKERR(0);
 	  length = 0;
         break;
       case etURLENCODE:
 	  bufpt = va_arg(ap,char*);
 	  pfrc = spech_urlencode( pfAppend, pfAppendArg, bufpt );
-	  VAPPENDF_ACCUM;
+	  VAPPENDF_CHECKERR(0);
 	  length = 0;
         break;
       case etURLDECODE:
           bufpt = va_arg(ap,char *);
 	  pfrc = spech_urldecode( pfAppend, pfAppendArg, bufpt );
-	  VAPPENDF_ACCUM;
+	  VAPPENDF_CHECKERR(0);
           length = 0;
           break;
 #endif /* VAPPENDIF_OMIT_HTML */
@@ -1083,7 +1213,7 @@ if(1){				       \
 			 );
 	      bufpt = va_arg(ap,char*);
 	      pfrc = spf( pfAppend, pfAppendArg, bufpt );
-	      VAPPENDF_ACCUM;
+	      VAPPENDF_CHECKERR(0);
 	      length = 0;
 	      if( precision>=0 && precision<length ) length = precision;
       }
@@ -1103,7 +1233,7 @@ if(1){				       \
     }
     if( length>0 ){
       pfrc = pfAppend( pfAppendArg, bufpt, length);
-      VAPPENDF_ACCUM;
+      VAPPENDF_CHECKERR(0);
     }
     if( flag_leftjustify ){
       int nspace;
@@ -1122,7 +1252,7 @@ if(1){				       \
 
 
 #undef VAPPENDF_SPACES
-#undef VAPPENDF_ACCUM
+#undef VAPPENDF_CHECKERR
 #undef VAPPENDF_RETURN
 #undef VAPPENDF_OMIT_FLOATING_POINT
 #undef VAPPENDF_OMIT_SIZE
@@ -1180,7 +1310,7 @@ typedef struct cstring_appender_t cstring_appender_t;
    A vappendf_appender implementation which writes out all data to the
    a pre-allocated string.
 
-   It required that dest be a pointer to an initialized
+   It requires that dest be a pointer to an initialized
    cstring_appender_t. If either s or n are 0 then 0 is returned.
 
    Returns:
@@ -1189,7 +1319,7 @@ typedef struct cstring_appender_t cstring_appender_t;
 
    If (!ap), -1.
    
-   If n bytes will not fit in the target string (according to a->len),
+   If n bytes will not fit in the target string (according to dest->len),
    then -2 is returned.
 */
 long vappendf_cstring_appender( void * dest, char const * s, long n )
@@ -1227,7 +1357,7 @@ char * vmnprintf( int len, char const *fmt, va_list vargs )
   }
   if( flen < reallen )
   {
-    ret = realloc( ret, flen + 1 );
+      ret = realloc( ret, flen + 1 );
   }
   ret[flen] = 0;
   return ret;

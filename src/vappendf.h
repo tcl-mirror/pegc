@@ -4,7 +4,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-/**@page vappendf_page_main vappendf: generic printf-like utilities.
+/**@page vappendf_page_main vappendf: generic printf-like utilities
 
    The vappendf API implements a printf-like implementation which supports
    aribtrary data destinations.
@@ -117,6 +117,8 @@ typedef long (*vappendf_appender)( void * arg,
  (The %%q and %%Q specifiers are options inherited from this printf
  implementation's sqlite3 genes.)
 
+ These extensions may be disabled by setting certain macros when
+ compiling vappendf.c (see that file for details).
 */
 long vappendf(
   vappendf_appender pfAppend,          /* Accumulate results here */
@@ -126,20 +128,23 @@ long vappendf(
   );
 
 /**
-   Identical to vappendf() but does not take a va_list.
+   Identical to vappendf() but takes a (...) ellipses list instead of a
+   va_list.
 */
 int appendf(vappendf_appender pfAppend,
 	    void * pfAppendArg,
 	    const char *fmt,
 	    ... );
 
-/**
+/** @implements vappendf_appender
+
    A vappendf_appender implementation which writes out all data to the
    (FILE*) fp argument.
 */
 long vappendf_FILE_appender( void * fp, char const * s, long n );
 
 struct FILE;
+
 /**
    Emulates fprintf() using vappendf().
 */
