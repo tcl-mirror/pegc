@@ -238,14 +238,15 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
  parameters must outlive this hashtable (or be managed/owned by it by
  assigning destructor functions, e.g. via whhash_set_dtors()).
 
- When a key is re-inserted (already mapped to something) then this
- function operates like whhash_replace() and non-zero is
- returned. As that may trigger a deallocation of the associated value,
- when in doubt you should use whhash_take() to remove the entry before
- re-adding it (but then freeing the old value becomes your responsibility).
+ When a key is re-inserted (already mapped to something) then results
+ are undefined. When in doubt you should use whhash_take() to remove
+ the entry before re-adding it (but then freeing the old value becomes
+ your responsibility). (Historical note: some versions of this code
+ automatically replaced existing items, but profiling shows it to
+ nearly double the insertion costs so this feature was removed.)
 
- This function will cause the table to expand if the insertion would take
- the ratio of entries to table size over the maximum load factor.
+ This function will cause the table to expand if the insertion would
+ take the ratio of entries to table size over the maximum load factor.
 
  Key/value ownership: By default a hashtable does not own its keys nor
  its values. You may set the ownership policy by using
@@ -263,8 +264,6 @@ void whhash_set_dtors( whhash_table * h, void (*keyDtor)( void * ), void (*valDt
  usage of this class ranges from general purpose lookup (without memory
  management) to garbage collector, and some of those uses cannot be achieved
  with a const key.
-
-
  */
 int 
 whhash_insert(whhash_table *h, void *k, void *v);

@@ -302,9 +302,15 @@ int
 whhash_insert(whhash_table *h, void *k, void *v)
 {
     if( ! h || !k ) return 0;
-    /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries. */
+#if 0
+    /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries.
+
+    A week or three later: profiling has shown that this nearly doubles the insertion
+    time. One app was spending almost 1% of its time in this code.
+    */
     int rc = whhash_replace(h, k, v);
     if( 0 != rc ) return rc;
+#endif
     whhash_val_t index;
     whhash_entry *e;
     if (++(h->entrycount) > h->loadlimit)
