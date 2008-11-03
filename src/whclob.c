@@ -60,22 +60,8 @@ struct whclob
 	  The current position marker for some read operations.
 	*/
 	unsigned long nCursor;
+    whclob_alloc_policy_t allocPolicy;
 };
-
-
-/*
-  Clob_empty is an empty whclob used for init purposes.
-*/
-static const whclob Clob_empty = {0, /* aData */
-				0, /* nAlloc */
-				0, /* nUsed */
-				0 /* nCursor */
-};
-
-/**
-  A debugging-only function. Do not use it in client code.
-*/
-void whclob_dump( whclob * cb, int doString );
 
 
 /**
@@ -85,6 +71,23 @@ static long whclob_default_alloc_policy( long n )
 {
 	return n;
 }
+
+/*
+  Clob_empty is an empty whclob used for init purposes.
+*/
+static const whclob Clob_empty = {0, /* aData */
+				  0, /* nAlloc */
+				  0, /* nUsed */
+				  0, /* nCursor */
+				  whclob_default_alloc_policy
+};
+
+/**
+  A debugging-only function. Do not use it in client code.
+*/
+void whclob_dump( whclob * cb, int doString );
+
+
 
 /**
    Alloc policy which returns n * 1.2.
@@ -97,13 +100,18 @@ long whclob_120_alloc_policy( long n )
 
 typedef whclob_alloc_policy_t RePol;
 static RePol whclob_current_alloc_policy = whclob_default_alloc_policy;
-RePol whclob_set_alloc_policy( RePol f )
+RePol whclob_set_default_alloc_policy( RePol f )
 {
 	RePol old = whclob_current_alloc_policy;
 	whclob_current_alloc_policy = f ? f : whclob_default_alloc_policy;
 	return old;
 }
-
+whclob_alloc_policy_t whclob_set_alloc_policy( whclob * cb, whclob_alloc_policy_t f )
+{
+    RePol old = cb ? cb->allocPolicy : 0;
+    if( cb ) cb->allocPolicy = f;
+    return old;
+}
 
 
 #define WHCLOB_DUMP(X,B) if(WHCLOB_DEBUG) { printf(X ": blob [%s]: ", # B ); whclob_dump(B,1); }
@@ -187,10 +195,20 @@ static long whclob_do_resize( whclob * cb,
     char const * zOld = cb->aData;
     long oldUsed = cb->nUsed;
     long oldAlloc = cb->nAlloc;
-    long allocsize = fudge +
-	(usePolicyHint && (0 != whclob_current_alloc_policy))
-	? (*whclob_current_alloc_policy)(sz)
-	: sz;
+    long allocsize = 0;
+    if( (usePolicyHint && (0 != cb->allocPolicy)) )
+    {
+	allocsize = cb->allocPolicy(sz);
+    }
+    else if( (usePolicyHint && (0 != whclob_current_alloc_policy)) )
+    {
+	allocsize = (*whclob_current_alloc_policy)(sz);
+    }
+    else
+    {
+	allocsize = sz;
+    }
+    allocsize += fudge;
     if( allocsize < (fudge + sz) ) allocsize = fudge + sz;
 #if 0
     char * pNew = cb->aData // oldAlloc

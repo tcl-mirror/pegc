@@ -228,7 +228,8 @@ whclob * whclob_new_n( size_t reserved );
 whclob * whclob_new();
 
 /**
-  See whclob_set_alloc_policy().
+  See whclob_set_alloc_policy() and
+  See whclob_set_default_alloc_policy().
 */
 typedef long (*whclob_alloc_policy_t)( long );
 
@@ -262,7 +263,14 @@ typedef long (*whclob_alloc_policy_t)( long );
    by passing 0 to this function, then passing that return value
    back to this function.
 */
-whclob_alloc_policy_t whclob_set_alloc_policy( whclob_alloc_policy_t );
+whclob_alloc_policy_t whclob_set_default_alloc_policy( whclob_alloc_policy_t );
+
+/**
+   Works just like whclob_set_default_alloc_policy() except that it
+   applies only to cb and takes precedence over
+   whclob_set_default_alloc_policy().
+*/
+whclob_alloc_policy_t whclob_set_alloc_policy( whclob * cb, whclob_alloc_policy_t );
 
 
 /**
@@ -321,7 +329,7 @@ void whclob_force_in_bounds( whclob * cb );
    On success it returns the number of bytes allocated to cb. The
    number may be larger than sz, due to internal details of this API
    and the implementation of the current allocation policy (see
-   whclob_set_alloc_policy()).
+   whclob_set_default_alloc_policy()).
 
    On error it returns one of the negative numbers specified
    by whclob_rc:
