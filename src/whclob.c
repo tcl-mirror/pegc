@@ -169,55 +169,61 @@ void whclob_force_in_bounds( whclob * cb )
 	if( cb->nCursor < 0 ) cb->nCursor = 0;
 }
 
+static long whclob_do_resize( whclob * cb, unsigned long sz )
+{
+    if( !cb ) return whclob_rc.UnexpectedNull;
+    static const int fudge = 1;
+    /* ^^^ over-allocate by 1 to ensure we have space for
+       a trailing 0. */
+    //const int shrinkage = 16; /* if we can save more than this much, then try to do so. */
+    if( 0 == sz )
+    {
+	whclob_reset( cb );
+    }
+    char const * zOld = cb->aData;
+    long oldUsed = cb->nUsed;
+    long oldAlloc = cb->nAlloc;
+    long allocsize = fudge + (*whclob_current_alloc_policy)(sz);
+    if( allocsize < (fudge + sz) ) allocsize = fudge + sz;
+    char * pNew = oldAlloc
+	? realloc( cb->aData, allocsize )
+	: malloc( fudge + allocsize );
+    if( ! pNew ) return whclob_rc.AllocError;
+    if( !oldAlloc )
+    { /** cb has/had no data */
+	if( zOld )
+	{ /* cb was pointing to shared data. Copy it. */
+	    memcpy( pNew, zOld, (oldUsed > allocsize) ? allocsize : oldUsed );
+	}
+	else
+	{ /* cb had no buffer - create one. */
+	    memset( pNew, 0, allocsize );
+	    cb->nUsed = cb->nCursor = 0;
+	}
+    }
+    else
+    { /** cb had data and we realloced. Zero out any new
+	  memory. */
+	if( oldAlloc && (oldAlloc < allocsize) )
+	{
+	    memset( pNew + oldAlloc, 0, allocsize - oldAlloc);
+	}
+    }
+    pNew[allocsize-fudge] = 0;
+    cb->aData = pNew;
+    cb->nAlloc = allocsize;
+    whclob_force_in_bounds( cb );
+    return cb->nAlloc;
+}
+
 long whclob_reserve( whclob * cb, unsigned long sz )
 {
-	static const int fudge = 1;
-	/* ^^^ over-allocate by 1 to ensure we have space for
-	   a trailing 0. */
-	const int shrinkage = 16; /* if we can save more than this much, then try to do so. */
-	if( 0 == sz )
-	{
-		whclob_reset( cb );
-	}
-	else if( (sz > cb->nAlloc) ||
-		 (sz < (cb->nAlloc - shrinkage))
-		 )
-	{
-		char const * zOld = cb->aData;
-		long oldUsed = cb->nUsed;
-		long oldAlloc = cb->nAlloc;
-		long allocsize = fudge + (*whclob_current_alloc_policy)(sz);
-		if( allocsize < (fudge + sz) ) allocsize = fudge + sz;
-		char * pNew = oldAlloc
-			? realloc( cb->aData, allocsize )
-			: malloc( fudge + allocsize );
-		if( ! pNew ) return whclob_rc.AllocError;
-		if( !oldAlloc )
-		{ /** cb has/had no data */
-			if( zOld )
-			{ /* cb was pointing to shared data. Copy it. */
-				memcpy( pNew, zOld, (oldUsed > allocsize) ? allocsize : oldUsed );
-			}
-			else
-			{ /* cb had no buffer - create one. */
-				memset( pNew, 0, allocsize );
-				cb->nUsed = cb->nCursor = 0;
-			}
-		}
-		else
-		{ /** cb had data and we realloced. Zero out any new
-		      memory. */
-			if( oldAlloc && (oldAlloc < allocsize) )
-			{
-				memset( pNew + oldAlloc, 0, allocsize - oldAlloc);
-			}
-		}
-		pNew[allocsize-fudge] = 0;
-		cb->aData = pNew;
-		cb->nAlloc = allocsize;
-		whclob_force_in_bounds( cb );
-	}
-	return cb->nAlloc;
+    long rc = cb->nAlloc;
+    if( (sz > cb->nAlloc) || (sz==0) )
+    {
+	rc = whclob_do_resize( cb, sz );
+    }
+    return rc;
 }
 
 long whclob_size( whclob const * cb ) { return cb ? cb->nUsed : whclob_rc.UnexpectedNull; }
@@ -227,7 +233,7 @@ char const * whclob_bufferc( whclob const * cb ) { return cb ? cb->aData : 0; }
 
 long whclob_resize( whclob * cb, unsigned long sz )
 {
-    unsigned long ret = whclob_reserve( cb, sz );
+    unsigned long ret = whclob_do_resize( cb, sz );
     if( ret >= sz )
     {
 	cb->nUsed = sz;
@@ -324,7 +330,7 @@ void whclob_rewind( whclob * cb )
 	cb->nCursor = 0;
 }
 
-long whclob_tell( whclob * cb )
+long whclob_tell( whclob const * cb )
 {
 	return cb->nCursor;
 }
@@ -425,8 +431,8 @@ long whclob_append( whclob * cb, char const * data, long dsize )
 
 long whclob_append_char_n( whclob * cb, char c, long n )
 {
-    if( n <= 0 ) return whclob_rc.RangeError;
-    long rc = whclob_reserve( cb, cb->nAlloc + n );
+    if( !cb || (n <= 0) ) return whclob_rc.RangeError;
+    long rc = whclob_reserve( cb, cb->nUsed + n );
     if( rc < 0 ) return rc;
     memset( cb->aData + cb->nUsed, c, n );
     cb->nUsed += n;

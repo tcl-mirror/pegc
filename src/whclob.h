@@ -4,6 +4,8 @@
 
 /*! @page whclob_page_main whclob: dynamic char array utilities
 
+@section whclob_sec_about About whclob
+
 The whclob API encapsulates behaviours related to creating, appending,
 reading, writing, and freeing C-style blobs (stored in memory as char
 arrays).
@@ -11,7 +13,7 @@ arrays).
 It is primarily intended to act as an output buffer for binary or
 string data. It provides, for example, printf-like functionality which
 makes use of the dynamic resize features blobs to simplify the
-creation of dynamic C-style strings.
+creation and ownership management of dynamic C-style strings.
 
 whclob is heavily inspired and influenced by code in the Fossil source
 tree (http://www.fossil-scm.org) written by D. Richard Hipp. In that
@@ -27,11 +29,12 @@ Much of the heavy lifting of this API is done by the vappendf API
 
 Author: Stephan Beal (http://wanderinghorse.net/home/stephan/)
 
-USAGE:
+@section whclob_sec_usage Usage
 
-A whclob object must be initialized via whclob_init() and finalized via
-whclob_finalize(). Between those two calls, any number of other clob-API
-functions may be used (unless documented otherwise). As an example:
+A whclob object must be initialized via whclob_init() (or equivalent)
+and finalized via whclob_finalize(). Between those two calls, any
+number of other clob-API functions may be used (unless documented
+otherwise). As an example:
 
 @code
 whclob * c;
@@ -47,9 +50,16 @@ whclob_export( c, stdout, whclob_exporter_FILE );
 
 But doing so with binary data is not recommended.
 
-TODO:
+Some example uses for clobs are:
 
-- The read/write API is not complete.
+- Copying strings.
+- Buffering input or output.
+- Easily reading a whole file (or other input source) into memory.
+
+@section whclob_sec_todo TODOs
+
+- The read/write API is not complete. (Can't quite remember what's
+missing, though.)
 
 ************************************************************************/
 
@@ -288,9 +298,9 @@ void whclob_force_in_bounds( whclob * cb );
 
 /**
    Tries to reserve at least sz bytes of memory for the native blob
-   associated with cb.
-
-   If sz is 0 then the effect is the same as whclob_reset().
+   associated with cb. It will not shrink the blob, only grow it or
+   leave it alone, with one exception: if sz is 0 then the effect is
+   the same as whclob_reset().
 
    This function may invalidate any old pointers obtained via
    whclob_buffer().
@@ -312,6 +322,8 @@ void whclob_force_in_bounds( whclob * cb );
    by whclob_rc:
 
    - whclob_rc.AllocError = (re)allocation failed.
+
+   - whclob_rc.UnexpectedNull = cb parameter was 0.
 
 */
 long whclob_reserve( whclob * cb, unsigned long sz );
@@ -556,7 +568,7 @@ long whclob_read( whclob * src, whclob * dest, long n );
    Returns the current position of cb's internal cursor, analogous to
    the standard ftell() function.
 */
-long whclob_tell( whclob * cb );
+long whclob_tell( whclob const * cb );
 
 /**
    This function is just like whclob_append() but it starts writing
@@ -825,7 +837,7 @@ long whclob_export_filename( whclob const * cb, char const * dest );
 
 /**
    The read counterpart of whclob_export_FILE(), appends all data
-   from src to cb.
+   from src to cb. Return value is as for whclob_import().
 */
 long whclob_import_FILE( whclob * cb, FILE * src );
 

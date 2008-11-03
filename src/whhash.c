@@ -445,7 +445,7 @@ static whhash_entry * whhash_free_entry( whhash_table * h, whhash_entry * e )
 
 void whhash_clear(whhash_table *h)
 {
-    if( ! h || !h->table || !h->entrycount ) return;
+    if( ! h || !h->table ) return;
     //printf("whhash_clear(): alloced=%u\n",h->stats.alloced);
     whhash_val_t i;
     whhash_entry *e;
@@ -753,7 +753,7 @@ int
 whhash_iter_remove(whhash_iter *itr)
 {
     whhash_entry *remember_e, *remember_parent;
-    int ret;
+    int ret = 0;
 
     /* Do the removal */
     if (NULL == (itr->parent))
@@ -828,6 +828,7 @@ whhash_table * whhash_sh_create()
 int whhash_sh_insert(whhash_table * h, char const * key, void * val)
 {
     WHHASH_SH(h,0);
+    // FIXME: we need to copy this string and see free() to the dtor!
     return whhash_insert(h,(char *) key, val);
     /**
        i don't like that (char*) cast at all :(
