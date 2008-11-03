@@ -217,8 +217,13 @@ long whclob_init( whclob ** cb, char const * data, long n );
 
 /**
    A simplified form of whclob_init() which allocates a new, empty whclob
-   object and returns it. The caller owns it and must finalize it with
-   whclob_finalize().
+   of the given size and returns it. The caller owns it and must finalize it with
+   whclob_finalize(). On error (out of memory) it returns 0.
+*/
+whclob * whclob_new_n( size_t reserved );
+
+/**
+   Equivalent to whclob_new_n(0).
 */
 whclob * whclob_new();
 
