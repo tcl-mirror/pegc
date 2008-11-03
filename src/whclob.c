@@ -10,7 +10,7 @@
 #  include <zlib.h>
 #endif
 
-#define MARKER printf("MARKER: %s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__)
+#define MARKER if(1) printf("MARKER: %s:%d:%s() ",__FILE__,__LINE__,__func__);if(1)printf
 
 #define WHCLOB_DEBUG 0
 
@@ -169,9 +169,12 @@ void whclob_force_in_bounds( whclob * cb )
 	if( cb->nCursor < 0 ) cb->nCursor = 0;
 }
 
-static long whclob_do_resize( whclob * cb, unsigned long sz )
+static long whclob_do_resize( whclob * cb,
+			      unsigned long sz,
+			      short usePolicyHint)
 {
     if( !cb ) return whclob_rc.UnexpectedNull;
+    if( cb->nAlloc == sz ) return cb->nAlloc;
     static const int fudge = 1;
     /* ^^^ over-allocate by 1 to ensure we have space for
        a trailing 0. */
@@ -179,17 +182,26 @@ static long whclob_do_resize( whclob * cb, unsigned long sz )
     if( 0 == sz )
     {
 	whclob_reset( cb );
+	return 0;
     }
     char const * zOld = cb->aData;
     long oldUsed = cb->nUsed;
     long oldAlloc = cb->nAlloc;
-    long allocsize = fudge + (*whclob_current_alloc_policy)(sz);
+    long allocsize = fudge +
+	(usePolicyHint && (0 != whclob_current_alloc_policy))
+	? (*whclob_current_alloc_policy)(sz)
+	: sz;
     if( allocsize < (fudge + sz) ) allocsize = fudge + sz;
-    char * pNew = oldAlloc
+#if 0
+    char * pNew = cb->aData // oldAlloc
 	? realloc( cb->aData, allocsize )
 	: malloc( fudge + allocsize );
+#else
+    char * pNew = realloc( cb->aData, allocsize );
+#endif
     if( ! pNew ) return whclob_rc.AllocError;
-    if( !oldAlloc )
+    //if( !oldAlloc )
+    if( ! cb->aData )
     { /** cb has/had no data */
 	if( zOld )
 	{ /* cb was pointing to shared data. Copy it. */
@@ -221,7 +233,7 @@ long whclob_reserve( whclob * cb, unsigned long sz )
     long rc = cb->nAlloc;
     if( (sz > cb->nAlloc) || (sz==0) )
     {
-	rc = whclob_do_resize( cb, sz );
+	rc = whclob_do_resize( cb, sz, 1 );
     }
     return rc;
 }
@@ -233,7 +245,7 @@ char const * whclob_bufferc( whclob const * cb ) { return cb ? cb->aData : 0; }
 
 long whclob_resize( whclob * cb, unsigned long sz )
 {
-    unsigned long ret = whclob_do_resize( cb, sz );
+    unsigned long ret = whclob_do_resize( cb, sz, 1 );
     if( ret >= sz )
     {
 	cb->nUsed = sz;
@@ -260,12 +272,17 @@ static long whclob_set_used_size( whclob * cb, long sz )
 }
 #endif // 0|1
 
-whclob * whclob_new()
+whclob * whclob_new_n( size_t reserved )
 {
     whclob * c = 0;
-    whclob_init(&c,0,0);
+    whclob_init( &c, 0, (long)reserved );
     return c;
 }
+whclob * whclob_new()
+{
+    return whclob_new_n(0);
+}
+
 
 long whclob_init( whclob ** cb, char const * data, long n )
 {
@@ -488,9 +505,9 @@ long whclob_read( whclob * src, whclob * dest, long n )
 long whclob_truncate( whclob * cb, long pos, int memPolicy )
 {
 	if( ! cb ) return whclob_rc.UnexpectedNull;
-	if( cb->nUsed <= pos ) return whclob_rc.OK;
+	//if( cb->nUsed <= pos ) return whclob_rc.OK;
+	if( cb->nAlloc <= pos ) return whclob_rc.OK;
 	cb->nUsed = pos;
-	whclob_null_terminate( cb );
 	long rc = whclob_rc.OK;
 	if( memPolicy > 0 )
 	{
@@ -498,20 +515,29 @@ long whclob_truncate( whclob * cb, long pos, int memPolicy )
 	}
 	else if( memPolicy < 0 )
 	{
+#if 1
 		/* try a simple heuristic to calculate whether a
 		   realloc is worth it... */
 		const long diff = (cb->nAlloc - pos);
-		const int rel = 5; /* ((diff*rel) >= cb->nAlloc) = do realloc */
+		const int rel = 4; /* ((diff) >= (cb->nAlloc/rel)) = do realloc */
 		const int abs = 512; /* (diff >= abs) = do realloc */
 		if(
-		   ( diff  > abs )
+		   ( diff >= abs )
 		   ||
-		   ((diff * rel) >= cb->nAlloc )
+		   ((diff) >= (cb->nAlloc/rel) )
 		   )
 		{
-			rc = whclob_reserve( cb, cb->nUsed );
+		    //rc = whclob_resize( cb, cb->nUsed );
+		    rc = whclob_do_resize( cb, cb->nUsed, 0 );
 		}
+#else
+		MARKER("TRUNCATE alloc=%ld len=%ld\n", cb->nAlloc, cb->nUsed );
+		rc = whclob_resize( cb, cb->nUsed );
+		//rc = whclob_do_resize( cb, cb->nUsed, 0 );
+		MARKER("TRUNCATED: alloc=%ld len=%ld, rc=%ld\n", cb->nAlloc, cb->nUsed, rc );
+#endif
 	}
+	whclob_null_terminate( cb );
 	return rc;
 }
 
@@ -722,7 +748,7 @@ static int whclob_write_zheader( whclob * cIn, unsigned int srcSize, unsigned lo
 	oBuf[i++] = crc>>8 & 0xff;
 	oBuf[i++] = crc & 0xff;
 	//MARKER; printf( "Writing zsize header at pos %d-%d: %u\n", whclob_zheader_prefix_len, i, srcSize );
-	MARKER; printf( "Writing zsize header: version=%c uSize=%u  adler32=%lx\n", whclob_zheader_version, srcSize, crc );
+	MARKER( "Writing zsize header: version=%c uSize=%u  adler32=%lx\n", whclob_zheader_version, srcSize, crc );
     }
     return whclob_zheader_size;
 }
@@ -756,9 +782,9 @@ static int whclob_confirm_zheader( whclob const * cIn, unsigned int * sz, unsign
 	{
 	    return whclob_rc.ArgError;
 	}
-	//MARKER; printf( "confirm header: %c\n", *inBuf );
+	//MARKER( "confirm header: %c\n", *inBuf );
     }
-    //MARKER; printf( "confirm header: %d\n", *inBuf );
+    //MARKER( "confirm header: %d\n", *inBuf );
     inBuf = (unsigned const char *) whclob_bufferc(cIn) + (whclob_zheader_prefix_len - 1);
     ver = *inBuf;
     if( ver != whclob_zheader_version )
@@ -766,11 +792,11 @@ static int whclob_confirm_zheader( whclob const * cIn, unsigned int * sz, unsign
 	return whclob_rc.RangeError;
     }
     ++inBuf;
-    //MARKER; printf( "confirm header: %d\n", *inBuf );
+    //MARKER( "confirm header: %d\n", *inBuf );
     *sz = (inBuf[0]<<24) + (inBuf[1]<<16) + (inBuf[2]<<8) + inBuf[3];
     *crc = (inBuf[4]<<24) + (inBuf[5]<<16) + (inBuf[6]<<8) + inBuf[7];
-    //MARKER; printf( "header says zsize == %u\n", *sz );
-    //MARKER; printf( "header says adler32 == %lx\n", *crc );
+    //MARKER( "header says zsize == %u\n", *sz );
+    //MARKER( "header says adler32 == %lx\n", *crc );
     return whclob_rc.OK;
 }
 
@@ -791,7 +817,7 @@ int whclob_compress( whclob * cIn, whclob * cOut )
 
     adler = adler32(0L, Z_NULL, 0);
     adler = adler32( adler, (const Byte *) whclob_bufferc(cIn), szIn );
-    //MARKER; printf( "adler=%lx\n", adler );
+    //MARKER( "adler=%lx\n", adler );
     whclob_write_zheader( tmp, szIn, adler );
     rc = compress( (unsigned char *)(whclob_buffer(tmp) + whclob_zheader_size),
 		   &nOut,
@@ -837,8 +863,8 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
     if( pOut != pIn ) whclob_reset(pOut);
 
     rc = whclob_confirm_zheader( pIn, &unzSize, &adlerExp );
-    //MARKER; printf( "zsize = %u\n", unzSize );
-    //MARKER; printf( "zsize = %u, adlerExp=%lx\n", unzSize, adlerExp );
+    //MARKER( "zsize = %u\n", unzSize );
+    //MARKER( "zsize = %u, adlerExp=%lx\n", unzSize, adlerExp );
     if( whclob_rc.OK > rc)
     {
 	//MARKER;
@@ -855,10 +881,10 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
 	unsigned char *inBuf;
 	inBuf = (unsigned char*) (whclob_buffer(pIn) + whclob_zheader_size);
 	nOut2 = whclob_size( temp );
-	//MARKER; printf( "nOut2 = %ld\n", nOut2 );
-	//MARKER; printf( "input length = %u\n", nIn - whclob_zheader_size );
-	//MARKER; printf( "zsize = %u\n", unzSize );
-	//MARKER; printf( "zblob size = %u\n",nIn );
+	//MARKER( "nOut2 = %ld\n", nOut2 );
+	//MARKER( "input length = %u\n", nIn - whclob_zheader_size );
+	//MARKER( "zsize = %u\n", unzSize );
+	//MARKER( "zblob size = %u\n",nIn );
 	rc = uncompress((unsigned char*)whclob_buffer(temp), &nOut2, 
 			inBuf, nIn - whclob_zheader_size);
     }
@@ -872,7 +898,7 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
     adlerGot = adler32( adlerGot, (Bytef const *) whclob_bufferc(temp), nOut2 );
     if( adlerGot != adlerExp )
     {
-	//MARKER; printf( "adler32 mismatch: %lx != %lx\n", adlerExp, adlerGot );
+	//MARKER( "adler32 mismatch: %lx != %lx\n", adlerExp, adlerGot );
 	return whclob_rc.RangeError;
     }
 
