@@ -272,7 +272,9 @@ whhash_count(whhash_table const * h)
 int
 whhash_replace(whhash_table *h, void *k, void *v)
 {
-    if( !h || !k ) return 0;
+    if( !h || !k
+	|| !h->tablelength /* avoid a possible /-by-0 in whhash_index()*/
+	) return 0;
     whhash_entry *e;
     whhash_val_t hashvalue, index;
     hashvalue = whhash_hash(h,k);
@@ -301,7 +303,9 @@ whhash_replace(whhash_table *h, void *k, void *v)
 int
 whhash_insert(whhash_table *h, void *k, void *v)
 {
-    if( ! h || !k ) return 0;
+    if( ! h || !k
+	|| !h->tablelength /* avoid a possible /-by-0 in whhash_index()*/
+	) return 0;
 #if 0
     /* Stephan Beal, 13 Feb 2008: now simply replaces the value of existing entries.
 
@@ -337,7 +341,9 @@ whhash_insert(whhash_table *h, void *k, void *v)
 static whhash_entry * whhash_search_entry(whhash_table *h,
 					  void const *k)
 {
-    if( !h || !k ) return 0;
+    if( !h || !k
+	|| !h->tablelength /* avoid a possible /-by-0 in whhash_index()*/
+	) return 0;
     ++h->stats.searches;
     whhash_entry * e = 0;
     whhash_val_t hashvalue, index;
@@ -373,6 +379,10 @@ whhash_search(whhash_table *h, void const *k)
 
 void * whhash_take(whhash_table *h, void const *k)
 {
+    if( !h || !k
+	|| !h->tablelength /* avoid a possible /-by-0 in whhash_index()*/
+	) return 0;
+	
     /* TODO: consider compacting the table when the load factor drops enough,
      *       or provide a 'compact' method. */
     whhash_entry *e;
@@ -783,7 +793,9 @@ int
 whhash_iter_search(whhash_iter *itr,
 		   void *k)
 {
-    if( ! itr  || !itr->h || !k ) return 0;
+    if( ! itr  || !itr->h || !k
+	|| !itr->h->tablelength /* avoid a possible /-by-0 in whhash_index()*/
+	) return 0;
     whhash_entry *e, *parent;
     unsigned int hashvalue, index;
     whhash_table *h = itr->h;
