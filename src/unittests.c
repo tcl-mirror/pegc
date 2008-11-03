@@ -184,6 +184,7 @@ int a_test()
 static void free_string(void*p)
 {
     MARKER;printf("free_string(@%p[%s])\n",p,(char const *)p);
+    free(p);
 }
 
 int rc_test()
