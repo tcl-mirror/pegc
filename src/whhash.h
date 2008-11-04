@@ -604,45 +604,6 @@ typedef struct whhash_stats whhash_stats;
 */
 whhash_stats whhash_get_stats( whhash_table const * h );
 
-/**
-   Creates a new hashtable which is specialized for use with
-   (char const *) keys. It is not intended to own the keys,
-   and due to constness rules results are undefined if you
-   set a destructor for the keys.
-
-   The other functions in this API named whhash_sh_something()
-   are intended only to be used with hashes created by this function,
-   and in fact check their hashtable argument to see if it was created
-   by this function. If a hashtable created using whhash_create() is
-   passed to them, they will return an error result (e.g. a null pointer
-   or a false value).
-*/
-whhash_table * whhash_sh_create();
-
-/**
-   Functionally identical to whhash_insert(), but only works with hashtables
-   created by whhash_sh_create().
- */
-int whhash_sh_insert(whhash_table *h, char const * key, void * val);
-
-/**
-   Functionally identical to whhash_search(), but only works with hashtables
-   created by whhash_sh_create().
- */
-void * whhash_sh_search(whhash_table *h, char const * key);
-
-/**
-   Functionally identical to whhash_take(), but only works with hashtables
-   created by whhash_sh_create().
- */
-void * whhash_sh_take(whhash_table *h, char const * key);
-
-/**
-   Functionally identical to whhash_remove(), but only works with hashtables
-   created by whhash_sh_create().
- */
-int whhash_sh_remove(whhash_table *h, char const * key);
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

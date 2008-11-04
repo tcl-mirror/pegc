@@ -823,48 +823,6 @@ whhash_iter_search(whhash_iter *itr,
     return 0;
 }
 
-whhash_table * whhash_sh_create()
-{
-    whhash_table * h = whhash_create(16,
-				     whhash_hash_cstring_djb2m,
-				     whhash_cmp_cstring );
-    h->flags |= whhash_flags.SH_API;
-    return h;
-}
-/**
-   WHHASH_SH ensures that whhash_table H is compatible with
-   whhash_sh_create()'s table. If it's not then return RV is called.
-*/
-#define WHHASH_SH(H,RV) if( !h || !(h->flags & whhash_flags.SH_API) ) return RV;
-
-int whhash_sh_insert(whhash_table * h, char const * key, void * val)
-{
-    WHHASH_SH(h,0);
-    // FIXME: we need to copy this string and see free() to the dtor!
-    return whhash_insert(h,(char *) key, val);
-    /**
-       i don't like that (char*) cast at all :(
-     */
-}
-
-void * whhash_sh_search(whhash_table * h, char const * key)
-{
-    WHHASH_SH(h,0);
-    return whhash_search( h, key );
-}
-void * whhash_sh_take(whhash_table * h, char const * key)
-{
-    WHHASH_SH(h,0);
-    return whhash_take( h, (char *)key );
-}
-int whhash_sh_remove(whhash_table * h, char const * key)
-{
-    WHHASH_SH(h,0);
-    return whhash_remove( h, (char *)key );
-}
-
-#undef WHHASH_SH
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
