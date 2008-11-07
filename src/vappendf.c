@@ -448,8 +448,9 @@ static long spech_string_to_html( vappendf_appender pf,
                                   void * varg )
 {
     char const * ch = (char const *) varg;
-    if( ! ch ) return 0;
     long ret = 0;
+    if( ! ch ) return 0;
+    ret = 0;
     for( ; *ch; ++ch )
     {
         switch( *ch )
@@ -496,14 +497,17 @@ static long spech_urlencode( vappendf_appender pf,
                              void * varg )
 {
     char const * str = (char const *) varg;
-    if( ! str ) return 0;
     long ret = 0;
-    char ch = *str;
+    char ch = 0;
     char const * hex = "0123456789ABCDEF";
 #define xbufsz 10
     char xbuf[xbufsz];
-    memset( xbuf, 0, xbufsz );
     int slen = 0;
+    if( ! str ) return 0;
+    memset( xbuf, 0, xbufsz );
+    ch = *str;
+#define xbufsz 10
+    slen = 0;
     for( ; ch; ch = *(++str) )
     {
         if( ! httpurl_needs_escape( ch ) )
@@ -633,7 +637,7 @@ static long spech_sqlstring_main( int xtype,
         }
         needQuote = !isnull && xtype==etSQLESCAPE2;
         n += i + 1 + needQuote*2;
-	bufpt = malloc( n );
+	bufpt = (char *)malloc( n );
 	if( ! bufpt ) return -1;
         j = 0;
         if( needQuote ) bufpt[j++] = q;
@@ -1260,14 +1264,14 @@ if(1){				       \
 #undef VAPPENDF_BUF_SIZE
 #undef VAPPENDIF_OMIT_HTML
 
-int appendf(vappendf_appender pfAppend,          /* Accumulate results here */
+long appendf(vappendf_appender pfAppend,          /* Accumulate results here */
 	    void * pfAppendArg,                /* Passed as first arg to pfAppend. */
 	    const char *fmt,                   /* Format string */
 	    ... )
 {
 	va_list vargs;
 	va_start( vargs, fmt );
-	int ret = vappendf( pfAppend, pfAppendArg, fmt, vargs );
+	long ret = vappendf( pfAppend, pfAppendArg, fmt, vargs );
 	va_end(vargs);
 	return ret;
 }
@@ -1357,7 +1361,7 @@ char * vmnprintf( int len, char const *fmt, va_list vargs )
   }
   if( flen < reallen )
   {
-      ret = realloc( ret, flen + 1 );
+      ret = (char *)realloc( ret, flen + 1 );
   }
   ret[flen] = 0;
   return ret;

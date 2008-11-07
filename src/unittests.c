@@ -11,11 +11,8 @@
 #include "pegc.h"
 #include "whgc.h"
 #include "whclob.h"
-#if 1
-#define MARKER printf("******** MARKER: %s:%d:%s():\n",__FILE__,__LINE__,__func__);
-#else
-#define MARKER printf("******** MARKER: %s:%d:\n",__FILE__,__LINE__);
-#endif
+
+#define MARKER if(1) printf("MARKER: %s:%d:%s() ",__FILE__,__LINE__,__func__);if(1)printf
 
 
 static struct ThisApp
@@ -32,7 +29,7 @@ bool pg_test_action( pegc_parser * st,
 {
 #if 1
     char * c = pegc_cursor_tostring(*match);
-    MARKER; printf( "%s() got a match: %s [%s]\n",
+    MARKER( "%s() got a match: %s [%s]\n",
 		    __func__,
 		    msg ? (char const *)msg : "",
 		    c ? c : "<EMPTY>");
@@ -48,7 +45,7 @@ bool run_test( pegc_parser * P,
 	       char const *expect,
 	       bool shouldFail )
 {
-    MARKER;printf("Testing rule [%s]\n",name);
+    MARKER("Testing rule [%s]\n",name);
     pegc_parser * p = P ? P : ThisApp.P;
     pegc_set_input( P, input, -1 );
     pegc_const_iterator orig = pegc_pos(p);
@@ -183,7 +180,7 @@ int a_test()
 #include "whclob.h"
 static void free_string(void*p)
 {
-    MARKER;printf("free_string(@%p[%s])\n",p,(char const *)p);
+    MARKER("free_string(@%p[%s])\n",p,(char const *)p);
     free(p);
 }
 
@@ -203,9 +200,9 @@ int rc_test()
     assert( (rc == 1) && "Unexpected ref count!");
     rc = whrc_rmref(cx,str);
     assert( (rc == 0) && "Unexpected ref count!");
-    MARKER;
+    MARKER("about to destroy cx");
     whrc_destroy_context(cx,true);
-    MARKER;
+    MARKER("destroyed cx");
     return 0;
 }
 
@@ -216,7 +213,7 @@ int main( int argc, char ** argv )
     ThisApp.P = pegc_create_parser( 0, 0 );
     if( ! ThisApp.P || !ThisApp.gc )
     {
-	MARKER;printf("%s: ERROR: could not allocate parser and/or GC context!\n",argv[0]);
+	MARKER("%s: ERROR: could not allocate parser and/or GC context!\n",argv[0]);
 	return 1;
     }
     int i = 0;
@@ -232,7 +229,7 @@ int main( int argc, char ** argv )
     if( 1 )
     {
 	whgc_stats const st = whgc_get_stats( ThisApp.gc );
-	MARKER;printf("Approx memory allocated by ThisApp.gc context: %u\n", st.alloced);
+	MARKER("Approx memory allocated by ThisApp.gc context: %u\n", st.alloced);
 	printf("GC entry/add/take count: %u/%u/%u\n", st.entry_count, st.reg_count, st.unreg_count);
 	pegc_stats const pst = pegc_get_stats( ThisApp.P );
 	printf("APPROXIMATE allocated parser memory: parser=%u gc=%u\n", pst.alloced, pst.gc_internals_alloced);

@@ -3,7 +3,7 @@
 
 #include "whhash.h"
 #include <stdlib.h>
-#include <stdio.h>
+//#include <stdio.h>
 #include <string.h>
 
 #ifdef __cplusplus
@@ -533,7 +533,7 @@ whhash_val_t whhash_hash_void_ptr( void const * k )
     whhash_val_t h = 0;
     kludge_t const x = (kludge_t const) k;
     unsigned char const * c = (unsigned char const *)&x;
-    int i = 0;
+    size_t i = 0;
     for( i = 0; i < (sizeof(kludge_t) / sizeof(char)); ++i )
     {
 	h = 33 * h ^ c[i];

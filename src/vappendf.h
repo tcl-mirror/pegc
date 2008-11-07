@@ -131,10 +131,10 @@ long vappendf(
    Identical to vappendf() but takes a (...) ellipses list instead of a
    va_list.
 */
-int appendf(vappendf_appender pfAppend,
-	    void * pfAppendArg,
-	    const char *fmt,
-	    ... );
+long appendf(vappendf_appender pfAppend,
+	     void * pfAppendArg,
+	     const char *fmt,
+	     ... );
 
 /** @implements vappendf_appender
 
@@ -180,4 +180,4 @@ char * mprintf( char const *fmt, ... );
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif // VAPPENDF_H_INCLUDED_
+#endif /* VAPPENDF_H_INCLUDED_ */

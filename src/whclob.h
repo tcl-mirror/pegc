@@ -1,6 +1,7 @@
 #ifndef WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_
 #define WANDERINGHORSE_NET_WHCLOB_H_INCLUDED_ 1
 #include <stdarg.h>
+#include <stddef.h>
 
 /*! @page whclob_page_main whclob: dynamic char array utilities
 
@@ -339,7 +340,7 @@ void whclob_force_in_bounds( whclob * cb );
    - whclob_rc.UnexpectedNull = cb parameter was 0.
 
 */
-long whclob_reserve( whclob * cb, unsigned long sz );
+long whclob_reserve( whclob * cb, unsigned int sz );
 
 /**
    Works like whclob_reserve(), but marks all memory
@@ -348,7 +349,7 @@ long whclob_reserve( whclob * cb, unsigned long sz );
    the end previously was. It returns the same values
    as whclob_reserve().
 */
-long whclob_resize( whclob * cb, unsigned long sz );
+long whclob_resize( whclob * cb, unsigned int sz );
 
 /**
    Returns the number of "used" bytes in cb. Appending to a clob will
@@ -632,7 +633,7 @@ long whclob_null_terminate( whclob * cb );
 */
 long whclob_truncate( whclob * cb, long pos, int allocPolicy );
 
-// TODO???: whclob_trim()
+/* TODO???: whclob_trim() */
 
 
 /**

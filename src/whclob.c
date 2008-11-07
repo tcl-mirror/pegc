@@ -50,16 +50,16 @@ struct whclob
 	  long nAlloc = the number of contiguous bytes allocated to
 	  aData.  See below for more info.
 	*/
-	unsigned long nAlloc;
+	long nAlloc;
 	/*
 	  long nUsed = the number of contiguous bytes "used" in the
 	  aData array.
 	*/
-	unsigned long nUsed;
+	long nUsed;
 	/*
 	  The current position marker for some read operations.
 	*/
-	unsigned long nCursor;
+	long nCursor;
     whclob_alloc_policy_t allocPolicy;
 };
 
@@ -87,17 +87,6 @@ static const whclob Clob_empty = {0, /* aData */
 */
 void whclob_dump( whclob * cb, int doString );
 
-
-
-/**
-   Alloc policy which returns n * 1.2.
-*/
-long whclob_120_alloc_policy( long n )
-{
-	return (long) (n * 1.2);
-}
-
-
 typedef whclob_alloc_policy_t RePol;
 static RePol whclob_current_alloc_policy = whclob_default_alloc_policy;
 RePol whclob_set_default_alloc_policy( RePol f )
@@ -122,7 +111,6 @@ void whclob_dump( whclob * cb, int doString )
     whclob_appendf( dest,
 		    "whclob@%p[nUsed=%d, nAlloc=%d, nCursor=%d][data@%p]",
 		    cb, cb->nUsed, cb->nAlloc, cb->nCursor, cb->aData
-		    //,(doString ? (cb->nUsed ? cb->aData : "NULL") : "...")
 		    );
     if( doString )
     {
@@ -146,11 +134,11 @@ long whclob_reset( whclob * cb )
 	{
 #if WHCLOB_DEBUG
 		printf( "Freeing clob @ [%p], bytes=%ld\n", cb, cb->nAlloc );
-		// endless loop: whclob_dump(cb,1);
+		/* endless loop: whclob_dump(cb,1); */
 #endif
 		if( cb->nAlloc )
 		{
-		    //crash? memset( cb->aData, 0, cb->nAlloc );
+		    /* crash? memset( cb->aData, 0, cb->nAlloc ); */
 			free( cb->aData );
                         cb->aData = 0;
 		}
@@ -170,32 +158,35 @@ long whclob_finalize( whclob * cb )
 
 void whclob_force_in_bounds( whclob * cb )
 {
-	if( cb->nUsed >= cb->nAlloc ) cb->nUsed = cb->nAlloc - 1;
-	if( cb->nUsed < 0 ) cb->nUsed = 0;
-	//if( cb->nCursor > cb->nAlloc ) cb->nCursor = cb->nAlloc - 1;
-	if( cb->nCursor > cb->nUsed ) cb->nCursor = cb->nUsed;
-	if( cb->nCursor < 0 ) cb->nCursor = 0;
+    if( cb->nUsed > cb->nAlloc ) cb->nUsed = (cb->nAlloc ? (cb->nAlloc - 1) : 0);
+    if( cb->nCursor > cb->nUsed ) cb->nCursor = cb->nUsed;
 }
 
 static long whclob_do_resize( whclob * cb,
-			      unsigned long sz,
+			      unsigned int sz,
 			      short usePolicyHint)
 {
-    if( !cb ) return whclob_rc.UnexpectedNull;
-    if( cb->nAlloc == sz ) return cb->nAlloc;
     static const int fudge = 1;
+    char const * zOld = 0;
+    long oldUsed = 0;
+    long oldAlloc = 0;
+    long allocsize = 0;
+    char * pNew = 0;
+    if( !cb ) return whclob_rc.UnexpectedNull;
+    if( cb->nAlloc == (long)sz ) return cb->nAlloc;
     /* ^^^ over-allocate by 1 to ensure we have space for
        a trailing 0. */
-    //const int shrinkage = 16; /* if we can save more than this much, then try to do so. */
+    /* const int shrinkage = 16; */
+    /* if we can save more than this much, then try to do so. */
     if( 0 == sz )
     {
 	whclob_reset( cb );
 	return 0;
     }
-    char const * zOld = cb->aData;
-    long oldUsed = cb->nUsed;
-    long oldAlloc = cb->nAlloc;
-    long allocsize = 0;
+    zOld = cb->aData;
+    oldUsed = cb->nUsed;
+    oldAlloc = cb->nAlloc;
+    allocsize = 0;
     if( (usePolicyHint && (0 != cb->allocPolicy)) )
     {
 	allocsize = cb->allocPolicy(sz);
@@ -206,19 +197,19 @@ static long whclob_do_resize( whclob * cb,
     }
     else
     {
-	allocsize = sz;
+	allocsize = (long)sz;
     }
     allocsize += fudge;
-    if( allocsize < (fudge + sz) ) allocsize = fudge + sz;
+    if( allocsize < (fudge + (long)sz) ) allocsize = fudge + sz;
 #if 0
-    char * pNew = cb->aData // oldAlloc
+    pNew = cb->aData /*  oldAlloc */
 	? realloc( cb->aData, allocsize )
 	: malloc( fudge + allocsize );
 #else
-    char * pNew = realloc( cb->aData, allocsize );
+    pNew = realloc( cb->aData, allocsize );
 #endif
     if( ! pNew ) return whclob_rc.AllocError;
-    //if( !oldAlloc )
+    /* if( !oldAlloc ) */
     if( ! cb->aData )
     { /** cb has/had no data */
 	if( zOld )
@@ -246,10 +237,10 @@ static long whclob_do_resize( whclob * cb,
     return cb->nAlloc;
 }
 
-long whclob_reserve( whclob * cb, unsigned long sz )
+long whclob_reserve( whclob * cb, unsigned int sz )
 {
     long rc = cb->nAlloc;
-    if( (sz > cb->nAlloc) || (sz==0) )
+    if( ((long)sz > cb->nAlloc) || (sz==0) )
     {
 	rc = whclob_do_resize( cb, sz, 1 );
     }
@@ -261,7 +252,7 @@ long whclob_capacity( whclob const * cb ) { return cb ? cb->nAlloc : whclob_rc.U
 char * whclob_buffer( whclob * cb ) { return cb ? cb->aData : 0; }
 char const * whclob_bufferc( whclob const * cb ) { return cb ? cb->aData : 0; }
 
-long whclob_resize( whclob * cb, unsigned long sz )
+long whclob_resize( whclob * cb, unsigned int sz )
 {
     unsigned long ret = whclob_do_resize( cb, sz, 1 );
     if( ret >= sz )
@@ -288,7 +279,7 @@ static long whclob_set_used_size( whclob * cb, long sz )
     cb->aData[sz] = 0;
     return sz;
 }
-#endif // 0|1
+#endif /*  0|1 */
 
 whclob * whclob_new_n( size_t reserved )
 {
@@ -304,37 +295,38 @@ whclob * whclob_new()
 
 long whclob_init( whclob ** cb, char const * data, long n )
 {
-	if( ! cb )
-	{
-		return whclob_rc.UnexpectedNull;
-	}
-	*cb = (whclob *) malloc( sizeof(whclob) );
-	if( ! *cb )
-	{
-		return whclob_rc.AllocError;
-	}
-	*(*cb) = Clob_empty;
-	if( !data )
-	{
-		if( n < 1 ) return whclob_rc.OK;
-	}
-	else
-	{
-		if( !n ) return whclob_rc.OK;
-	}
-	if( data && (n < 0) ) n = strlen( data );
-	long rc = whclob_reserve( *cb, n );
-	if( rc < whclob_rc.OK )
-	{
-		free( *cb );
-		*cb = 0;
-		return rc;
-	}
-	if( data )
-	{
-		memcpy( (*cb)->aData, data, n );
-	}
-	return whclob_rc.OK;
+    long rc = 0;
+    if( ! cb )
+    {
+	return whclob_rc.UnexpectedNull;
+    }
+    *cb = (whclob *) malloc( sizeof(whclob) );
+    if( ! *cb )
+    {
+	return whclob_rc.AllocError;
+    }
+    *(*cb) = Clob_empty;
+    if( !data )
+    {
+	if( n < 1 ) return whclob_rc.OK;
+    }
+    else
+    {
+	if( !n ) return whclob_rc.OK;
+    }
+    if( data && (n < 0) ) n = strlen( data );
+    rc = whclob_reserve( *cb, n );
+    if( rc < whclob_rc.OK )
+    {
+	free( *cb );
+	*cb = 0;
+	return rc;
+    }
+    if( data )
+    {
+	memcpy( (*cb)->aData, data, n );
+    }
+    return whclob_rc.OK;
 }
 
 
@@ -379,14 +371,15 @@ long whclob_pos_in_bounds( whclob * cb, long pos )
 
 long whclob_char_filln( whclob * cb, char ch, long startPos, long n )
 {
-	if( ! cb->nAlloc ) return whclob_rc.Err;
-	if( n <= 0 ) return whclob_rc.RangeError;
-	long rc = whclob_pos_in_bounds(cb,startPos);
-	if( whclob_rc.OK !=  rc ) return rc;
-	//if( whclob_rc.OK ==  rc ) rc = whclob_is_in_bounds(cb,startPos + n);
-	if( (startPos + n) > cb->nAlloc ) n = cb->nAlloc - startPos;
-	memset( cb->aData + startPos, ch, n );
-	return n;
+    long rc = 0;
+    if( ! cb->nAlloc ) return whclob_rc.Err;
+    if( n <= 0 ) return whclob_rc.RangeError;
+    rc = whclob_pos_in_bounds(cb,startPos);
+    if( whclob_rc.OK !=  rc ) return rc;
+    /* if( whclob_rc.OK ==  rc ) rc = whclob_is_in_bounds(cb,startPos + n); */
+    if( (startPos + n) > cb->nAlloc ) n = cb->nAlloc - startPos;
+    memset( cb->aData + startPos, ch, n );
+    return n;
 }
 
 long whclob_zero_fill( whclob * cb )
@@ -406,7 +399,7 @@ long whclob_zero_fill( whclob * cb )
 */
 long whclob_null_terminate( whclob * cb )
 {
-	if( ! cb->nAlloc ) return whclob_rc.Err; // do not modify a data obj we don't own.
+    if( ! cb->nAlloc ) return whclob_rc.Err; /*  do not modify a data obj we don't own. */
 	if( (cb->nUsed + 1) >= cb->nAlloc )
 	{
 		long rc = whclob_reserve( cb, cb->nUsed + 1 );
@@ -466,8 +459,9 @@ long whclob_append( whclob * cb, char const * data, long dsize )
 
 long whclob_append_char_n( whclob * cb, char c, long n )
 {
+    long rc = 0;
     if( !cb || (n <= 0) ) return whclob_rc.RangeError;
-    long rc = whclob_reserve( cb, cb->nUsed + n );
+    rc = whclob_reserve( cb, cb->nUsed + n );
     if( rc < 0 ) return rc;
     memset( cb->aData + cb->nUsed, c, n );
     cb->nUsed += n;
@@ -477,56 +471,64 @@ long whclob_append_char_n( whclob * cb, char c, long n )
 
 long whclob_copy( whclob * src, whclob * dest )
 {
-	if( src == dest ) return whclob_rc.RangeError;
-	if( src->aData == dest->aData ) return whclob_rc.RangeError;
-	long allocsz = src->nAlloc;
-	WHCLOB_DUMP( "copy src before",src );
-	WHCLOB_DUMP( "copy dest before",dest );
-	whclob_reset( dest );
-	long rc = whclob_reserve( dest, allocsz );
-	if( rc < whclob_rc.OK ) return rc;
-	dest->nUsed = src->nUsed;
-	dest->nAlloc = allocsz;
-	dest->nCursor = src->nCursor;
-	memcpy( dest->aData, src->aData, allocsz );
-	
-	WHCLOB_DUMP( "copy src after",src );
-	WHCLOB_DUMP( "copy dest after",dest );
-	return whclob_rc.OK;
+    long allocsz = 0;
+    long rc = 0;
+    if( src == dest ) return whclob_rc.RangeError;
+    if( src->aData == dest->aData ) return whclob_rc.RangeError;
+    allocsz = src->nAlloc;
+    WHCLOB_DUMP( "copy src before",src );
+    WHCLOB_DUMP( "copy dest before",dest );
+    whclob_reset( dest );
+    rc = whclob_reserve( dest, allocsz );
+    if( rc < whclob_rc.OK ) return rc;
+    dest->nUsed = src->nUsed;
+    dest->nAlloc = allocsz;
+    dest->nCursor = src->nCursor;
+    memcpy( dest->aData, src->aData, allocsz );
+    WHCLOB_DUMP( "copy src after",src );
+    WHCLOB_DUMP( "copy dest after",dest );
+    return whclob_rc.OK;
 }
 
 long whclob_copy_slice( whclob * src, whclob * dest, long startPos, long n )
 {
-	if( ! src || !dest ) return whclob_rc.UnexpectedNull;
-	if( n<1 ) return whclob_rc.RangeError;
-	if( whclob_rc.OK != whclob_pos_in_bounds( src, startPos ) ) return whclob_rc.RangeError;
-	long bpos = startPos;
-	if( bpos >= src->nUsed ) return 0;
-	long epos = bpos + n; /* 1-past-end marker */
-	if( epos > src->nUsed ) epos = src->nUsed;
-	long ret = whclob_append( dest, src->aData + bpos, epos - bpos );
-	return ret;
+    long bpos = 0;
+    long epos = 0;
+    long ret = 0;
+    if( ! src || !dest ) return whclob_rc.UnexpectedNull;
+    if( n<1 ) return whclob_rc.RangeError;
+    if( whclob_rc.OK != whclob_pos_in_bounds( src, startPos ) ) return whclob_rc.RangeError;
+    bpos = startPos;
+    if( bpos >= src->nUsed ) return 0;
+    epos = bpos + n; /* 1-past-end marker */
+    if( epos > src->nUsed ) epos = src->nUsed;
+    ret = whclob_append( dest, src->aData + bpos, epos - bpos );
+    return ret;
 }
 
 long whclob_read( whclob * src, whclob * dest, long n )
 {
-	if( ! src || !dest || n<1 ) return 0;
-	long bpos = src->nCursor;
-	if( bpos == src->nUsed ) return 0;
-	long epos = bpos + n; /* 1-past-end marker */
-	if( epos > src->nUsed ) epos = src->nUsed;
-	long ret = whclob_append( dest, src->aData + bpos, epos - bpos );
-	src->nCursor += ret;
-	return ret;
+    long bpos = 0;
+    long epos = 0;
+    long ret = 0;
+    if( ! src || !dest || n<1 ) return 0;
+    bpos = src->nCursor;
+    if( bpos == src->nUsed ) return 0;
+    epos = bpos + n; /* 1-past-end marker */
+    if( epos > src->nUsed ) epos = src->nUsed;
+    ret = whclob_append( dest, src->aData + bpos, epos - bpos );
+    src->nCursor += ret;
+    return ret;
 }
 
 long whclob_truncate( whclob * cb, long pos, int memPolicy )
 {
-	if( ! cb ) return whclob_rc.UnexpectedNull;
-	//if( cb->nUsed <= pos ) return whclob_rc.OK;
-	if( cb->nAlloc <= pos ) return whclob_rc.OK;
-	cb->nUsed = pos;
-	long rc = whclob_rc.OK;
+    long rc = 0;
+    if( ! cb ) return whclob_rc.UnexpectedNull;
+    /* if( cb->nUsed <= pos ) return whclob_rc.OK; */
+    if( cb->nAlloc <= pos ) return whclob_rc.OK;
+    cb->nUsed = pos;
+	rc = whclob_rc.OK;
 	if( memPolicy > 0 )
 	{
 		rc = whclob_reserve( cb, cb->nUsed );
@@ -545,13 +547,13 @@ long whclob_truncate( whclob * cb, long pos, int memPolicy )
 		   ((diff) >= (cb->nAlloc/rel) )
 		   )
 		{
-		    //rc = whclob_resize( cb, cb->nUsed );
+		    /* rc = whclob_resize( cb, cb->nUsed ); */
 		    rc = whclob_do_resize( cb, cb->nUsed, 0 );
 		}
 #else
 		MARKER("TRUNCATE alloc=%ld len=%ld\n", cb->nAlloc, cb->nUsed );
 		rc = whclob_resize( cb, cb->nUsed );
-		//rc = whclob_do_resize( cb, cb->nUsed, 0 );
+		/* rc = whclob_do_resize( cb, cb->nUsed, 0 ); */
 		MARKER("TRUNCATED: alloc=%ld len=%ld, rc=%ld\n", cb->nAlloc, cb->nUsed, rc );
 #endif
 	}
@@ -566,30 +568,33 @@ long whclob_memmove( whclob * cb, int start1, int n, int start2 )
 }
 long whclob_memmove_fill( whclob * cb, char const filler, int start1, int n, int start2 )
 {
-	if( ! cb ) return whclob_rc.UnexpectedNull;
-	if(
-	   ( (n<1) || (start2 == start1) )
-	   ||
-	   (whclob_rc.OK != whclob_pos_in_bounds(cb,start1))
-	   ||
-	   (whclob_rc.OK != whclob_pos_in_bounds(cb,start1+n))
-	   ||
-	   (whclob_rc.OK != whclob_pos_in_bounds(cb,start2))
-	   ||
-	   (whclob_rc.OK != whclob_pos_in_bounds(cb,start2+n))
-	   )
-	{
-		return whclob_rc.RangeError;
-	}
-	char * src = cb->aData + start1;
-	char * dest = cb->aData + start2;
-	long pos = 0; /* here we'll take a long "pos" ... */
-	while( pos < n )
-	{
-		dest[start2++] = src[pos];
-		src[pos++] = filler;
-	}
-	return n;
+    char * src = 0;
+    char * dest = 0;
+    long pos = 0;  /* here we'll take a long "pos" ... */
+    if( ! cb ) return whclob_rc.UnexpectedNull;
+    if(
+       ( (n<1) || (start2 == start1) )
+       ||
+       (whclob_rc.OK != whclob_pos_in_bounds(cb,start1))
+       ||
+       (whclob_rc.OK != whclob_pos_in_bounds(cb,start1+n))
+       ||
+       (whclob_rc.OK != whclob_pos_in_bounds(cb,start2))
+       ||
+       (whclob_rc.OK != whclob_pos_in_bounds(cb,start2+n))
+       )
+    {
+	return whclob_rc.RangeError;
+    }
+    src = cb->aData + start1;
+    dest = cb->aData + start2;
+    pos = 0;
+    while( pos < n )
+    {
+	dest[start2++] = src[pos];
+	src[pos++] = filler;
+    }
+    return n;
 }
 
 /**
@@ -635,22 +640,24 @@ long whclob_memswap( whclob * c1, int start1, int n, whclob * c2, int start2 )
 
 long whclob_swap( whclob * c1, whclob * c2 )
 {
-	if( ! c1 || ! c2 ) return whclob_rc.UnexpectedNull;
-	whclob x = *c1;
-	*c1 = *c2;
-	*c2 = x;
-	return whclob_rc.OK;
+    whclob x;
+    if( ! c1 || ! c2 ) return whclob_rc.UnexpectedNull;
+    x = *c1;
+    *c1 = *c2;
+    *c2 = x;
+    return whclob_rc.OK;
 }
 
 long whclob_clone( whclob * src, whclob ** dest )
 {
-	if( ! src ) return whclob_rc.UnexpectedNull;
-	long rc = whclob_init( dest, src->aData, src->nUsed );
-	if( whclob_rc.OK != rc ) return rc;
-	memcpy( (*dest)->aData, src->aData, src->nUsed );
-	(*dest)->nUsed = src->nUsed;
-	(*dest)->nCursor = src->nCursor;
-	return whclob_rc.OK;
+    long rc = 0;
+    if( ! src ) return whclob_rc.UnexpectedNull;
+    rc = whclob_init( dest, src->aData, src->nUsed );
+    if( whclob_rc.OK != rc ) return rc;
+    memcpy( (*dest)->aData, src->aData, src->nUsed );
+    (*dest)->nUsed = src->nUsed;
+    (*dest)->nCursor = src->nCursor;
+    return whclob_rc.OK;
 }
 
 /**
@@ -677,8 +684,9 @@ long whclob_vappendf( whclob * cb, char const * fmt, va_list vargs )
 long whclob_appendf( whclob * cb, const char * fmt, ... )
 {
 	va_list vargs;
+	long ret = 0;
 	va_start( vargs, fmt );
-	long ret = whclob_vappendf( cb, fmt, vargs );
+	ret = whclob_vappendf( cb, fmt, vargs );
 	va_end(vargs);
 	return ret;
 }
@@ -700,10 +708,11 @@ long whclob_import( whclob * dest, void * arg, whclob_importer pf )
 
 char * whclob_vmprintf( char const * fmt, va_list vargs )
 {
-    whclob * buf;
+    whclob * buf = 0;
+    char * ret = 0;
     if( whclob_rc.OK != whclob_init(&buf,0,0) ) return 0;
     whclob_vappendf( buf, fmt, vargs );
-    char * ret = buf->aData;
+    ret = buf->aData;
     *buf = Clob_empty;
     whclob_finalize( buf );
     return ret;
@@ -711,8 +720,9 @@ char * whclob_vmprintf( char const * fmt, va_list vargs )
 char * whclob_mprintf( char const * fmt, ... )
 {
     va_list vargs;
+    char * ret = 0;
     va_start( vargs, fmt );
-    char * ret = whclob_vmprintf( fmt, vargs );
+    ret = whclob_vmprintf( fmt, vargs );
     va_end(vargs);
     return ret;
 }
@@ -727,13 +737,13 @@ char * whclob_take_buffer( whclob * cb )
 
 
 #if WHCLOB_USE_ZLIB
-//! whclob_zheader_prefix == magic cookie for our compressed whclob.header
+/* ! whclob_zheader_prefix == magic cookie for our compressed whclob.header */
 static char const whclob_zheader_version = '1';
 static char const * whclob_zheader_prefix = "clob32";
 static int const whclob_zheader_prefix_len = 7; /* ^^^^ must be 1 + strlen(whclob_zheader_prefix)! */
-//! whclob_zheader_lensize == number of bytes used to store size in compressed data
+/* ! whclob_zheader_lensize == number of bytes used to store size in compressed data */
 static short const whclob_zheader_lensize = 4;
-//! whclob_zheader_crcsize == number of bytes used to store size in compressed data
+/* ! whclob_zheader_crcsize == number of bytes used to store size in compressed data */
 static short const whclob_zheader_crcsize = 4;
 static int const whclob_zheader_size = 15; /* 1 + prefix_len + lensize + whclob_zheader_crcsize */
 
@@ -765,7 +775,7 @@ static int whclob_write_zheader( whclob * cIn, unsigned int srcSize, unsigned lo
 	oBuf[i++] = crc>>16 & 0xff;
 	oBuf[i++] = crc>>8 & 0xff;
 	oBuf[i++] = crc & 0xff;
-	//MARKER; printf( "Writing zsize header at pos %d-%d: %u\n", whclob_zheader_prefix_len, i, srcSize );
+	/* MARKER; printf( "Writing zsize header at pos %d-%d: %u\n", whclob_zheader_prefix_len, i, srcSize ); */
 	MARKER( "Writing zsize header: version=%c uSize=%u  adler32=%lx\n", whclob_zheader_version, srcSize, crc );
     }
     return whclob_zheader_size;
@@ -800,9 +810,9 @@ static int whclob_confirm_zheader( whclob const * cIn, unsigned int * sz, unsign
 	{
 	    return whclob_rc.ArgError;
 	}
-	//MARKER( "confirm header: %c\n", *inBuf );
+	/* MARKER( "confirm header: %c\n", *inBuf ); */
     }
-    //MARKER( "confirm header: %d\n", *inBuf );
+    /* MARKER( "confirm header: %d\n", *inBuf ); */
     inBuf = (unsigned const char *) whclob_bufferc(cIn) + (whclob_zheader_prefix_len - 1);
     ver = *inBuf;
     if( ver != whclob_zheader_version )
@@ -810,11 +820,11 @@ static int whclob_confirm_zheader( whclob const * cIn, unsigned int * sz, unsign
 	return whclob_rc.RangeError;
     }
     ++inBuf;
-    //MARKER( "confirm header: %d\n", *inBuf );
+    /* MARKER( "confirm header: %d\n", *inBuf ); */
     *sz = (inBuf[0]<<24) + (inBuf[1]<<16) + (inBuf[2]<<8) + inBuf[3];
     *crc = (inBuf[4]<<24) + (inBuf[5]<<16) + (inBuf[6]<<8) + inBuf[7];
-    //MARKER( "header says zsize == %u\n", *sz );
-    //MARKER( "header says adler32 == %lx\n", *crc );
+    /* MARKER( "header says zsize == %u\n", *sz ); */
+    /* MARKER( "header says adler32 == %lx\n", *crc ); */
     return whclob_rc.OK;
 }
 
@@ -835,7 +845,7 @@ int whclob_compress( whclob * cIn, whclob * cOut )
 
     adler = adler32(0L, Z_NULL, 0);
     adler = adler32( adler, (const Byte *) whclob_bufferc(cIn), szIn );
-    //MARKER( "adler=%lx\n", adler );
+    /* MARKER( "adler=%lx\n", adler ); */
     whclob_write_zheader( tmp, szIn, adler );
     rc = compress( (unsigned char *)(whclob_buffer(tmp) + whclob_zheader_size),
 		   &nOut,
@@ -875,23 +885,23 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
     unsigned long adlerGot;
     if( nIn<=4 )
     {
-	//MARKER;
+	/* MARKER; */
 	return whclob_rc.Err;
     }
     if( pOut != pIn ) whclob_reset(pOut);
 
     rc = whclob_confirm_zheader( pIn, &unzSize, &adlerExp );
-    //MARKER( "zsize = %u\n", unzSize );
-    //MARKER( "zsize = %u, adlerExp=%lx\n", unzSize, adlerExp );
+    /* MARKER( "zsize = %u\n", unzSize ); */
+    /* MARKER( "zsize = %u, adlerExp=%lx\n", unzSize, adlerExp ); */
     if( whclob_rc.OK > rc)
     {
-	//MARKER;
+	/* MARKER; */
 	return rc;
     }
     rc = whclob_init(&temp,0,unzSize+1);
     if( whclob_rc.OK != rc )
     {
-	//MARKER;
+	/* MARKER; */
 	return rc;
     }
 
@@ -899,16 +909,16 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
 	unsigned char *inBuf;
 	inBuf = (unsigned char*) (whclob_buffer(pIn) + whclob_zheader_size);
 	nOut2 = whclob_size( temp );
-	//MARKER( "nOut2 = %ld\n", nOut2 );
-	//MARKER( "input length = %u\n", nIn - whclob_zheader_size );
-	//MARKER( "zsize = %u\n", unzSize );
-	//MARKER( "zblob size = %u\n",nIn );
+	/* MARKER( "nOut2 = %ld\n", nOut2 ); */
+	/* MARKER( "input length = %u\n", nIn - whclob_zheader_size ); */
+	/* MARKER( "zsize = %u\n", unzSize ); */
+	/* MARKER( "zblob size = %u\n",nIn ); */
 	rc = uncompress((unsigned char*)whclob_buffer(temp), &nOut2, 
 			inBuf, nIn - whclob_zheader_size);
     }
     if( rc!=Z_OK )
     {
-	//MARKER;
+	/* MARKER; */
 	whclob_finalize(temp);
 	return whclob_rc.IOError;
     }
@@ -916,14 +926,14 @@ int whclob_uncompress(whclob *pIn, whclob *pOut)
     adlerGot = adler32( adlerGot, (Bytef const *) whclob_bufferc(temp), nOut2 );
     if( adlerGot != adlerExp )
     {
-	//MARKER( "adler32 mismatch: %lx != %lx\n", adlerExp, adlerGot );
+	/* MARKER( "adler32 mismatch: %lx != %lx\n", adlerExp, adlerGot ); */
 	return whclob_rc.RangeError;
     }
 
     rc = whclob_resize(temp, nOut2);
     if( rc < nOut2 )
     {
-	//MARKER;
+	/* MARKER; */
 	whclob_finalize(temp);
 	return rc;
     }
@@ -972,16 +982,16 @@ int whclob_deflate( whclob *cIn, whclob *cOut )
 	return whclob_rc.IOError;
     }
 
-    //printf("sizes: in=%d out=%d\n", zS.avail_in, zS.avail_out );
+    /* printf("sizes: in=%d out=%d\n", zS.avail_in, zS.avail_out ); */
 
     rc = deflate( &zS, Z_FINISH );
     szOut = szOut - zS.avail_out;
     deflateEnd( &zS );
-    //printf("deflate() rc == %d\n", rc );
-    //printf("sizes: in=%d out=%d\n", zS.avail_in, zS.avail_out );
+    /* printf("deflate() rc == %d\n", rc ); */
+    /* printf("sizes: in=%d out=%d\n", zS.avail_in, zS.avail_out ); */
     if( Z_STREAM_END != rc )
     {
-	//printf("deflate() rc == %d\n", rc );
+	/* printf("deflate() rc == %d\n", rc ); */
 	whclob_finalize(tmp);
 	return whclob_rc.IOError;
     }
@@ -1030,18 +1040,18 @@ int whclob_inflate(whclob *cIn, whclob *cOut)
     {
 	return rc;
     }
-    //fprintf(stderr,"uSize = %u, whclob_capacity(temp) = %ld\n", uSize, whclob_capacity(temp) );
+    /* fprintf(stderr,"uSize = %u, whclob_capacity(temp) = %ld\n", uSize, whclob_capacity(temp) ); */
     zS.avail_out = whclob_capacity(temp);
     zS.next_out = (Bytef*) whclob_buffer(temp);
     zS.next_in = (Bytef*) (whclob_buffer(cIn) + kludge);
     zS.avail_in = whclob_size(cIn) - kludge;
 
-    //fprintf(stderr,"avail_in == %d avail_out == %d\n", zS.avail_in, zS.avail_out );
+    /* fprintf(stderr,"avail_in == %d avail_out == %d\n", zS.avail_in, zS.avail_out ); */
 
     rc = inflateInit( &zS );
     if( Z_OK != rc )
     {
-	//fprintf(stderr,"inflateInit() failed. rc == %d\n", rc );
+	/* fprintf(stderr,"inflateInit() failed. rc == %d\n", rc ); */
 	whclob_finalize(temp);
 	return whclob_rc.IOError;
     }
@@ -1050,14 +1060,14 @@ int whclob_inflate(whclob *cIn, whclob *cOut)
 	correct.
     */
     rc = inflate( &zS, Z_FINISH );
-    //fprintf(stderr,"inflate() rc == %d\n", rc );
+    /* fprintf(stderr,"inflate() rc == %d\n", rc ); */
     infSize = whclob_capacity(temp) - zS.avail_out;
-    //fprintf(stderr,"post: infSize == %d uSize == %d\n", infSize, uSize );
-    //fprintf(stderr,"post: avail_in == %d avail_out == %d\n", zS.avail_in, zS.avail_out );
+    /* fprintf(stderr,"post: infSize == %d uSize == %d\n", infSize, uSize ); */
+    /* fprintf(stderr,"post: avail_in == %d avail_out == %d\n", zS.avail_in, zS.avail_out ); */
     rc = inflateEnd( &zS );
-    if( rc != Z_OK ) // STREAM_END )
+    if( rc != Z_OK ) /*  STREAM_END ) */
     {
-	//fprintf(stderr, "inflate() rc == %d\n",rc);
+	/* fprintf(stderr, "inflate() rc == %d\n",rc); */
 	whclob_finalize(temp);
 	return whclob_rc.IOError;
     }
@@ -1079,7 +1089,7 @@ long whclob_exporter_FILE( void * arg, char const * data, long n )
 {
 	FILE * fp = (FILE *) arg;
 	if( ! fp ) return whclob_rc.UnexpectedNull;
-	return (n == fwrite( data, 1, n, fp ))
+	return (n == (long)fwrite( data, 1, n, fp ))
 		? n
 		: whclob_rc.IOError;
 }
@@ -1092,10 +1102,12 @@ long whclob_export_FILE( whclob const * cb, FILE * dest )
 long whclob_exporter_filename( void * arg, char const * data, long n )
 {
 	char const * fname = (char const *)arg;
+	FILE * fp = 0;
+	long ret = 0;
 	if( ! fname ) return whclob_rc.UnexpectedNull;
-	FILE * fp = fopen( fname, "wb" );
+	fp = fopen( fname, "wb" );
 	if( ! fp ) return whclob_rc.IOError;
-	long ret = whclob_exporter_FILE( fp, data, n );
+	ret = whclob_exporter_FILE( fp, data, n );
 	fclose( fp );
 	return ret;
 }
@@ -1108,13 +1120,13 @@ long whclob_export_filename( whclob const * cb, char const * dest )
 long whclob_importer_FILE( whclob * dest, void * arg )
 {
 	FILE * fp = (FILE *) arg;
-	if( ! fp ) return whclob_rc.ArgError;
 	long oldUsed = whclob_size(dest);
 	/*const long blocksize = 4096;*/
 #define blocksize 4096
 	long rdsz = 0;
 	char * bcbuf[blocksize];
 	int rc;
+	if( ! fp ) return whclob_rc.ArgError;
 	while( ! feof(fp) )
 	{
 		rdsz = fread( bcbuf, sizeof(char), blocksize, fp );
@@ -1132,10 +1144,12 @@ long whclob_importer_FILE( whclob * dest, void * arg )
 long whclob_importer_filename( whclob * dest, void * arg )
 {
 	char const * fname = (char *)arg;
+	FILE * fh = 0;
+	long ret = 0;
 	if( ! fname ) return whclob_rc.ArgError;
-	FILE * fh = fopen( fname, "rb" );
+	fh = fopen( fname, "rb" );
 	if( !fh ) return whclob_rc.IOError;
-	long ret = whclob_import( dest, fh, whclob_importer_FILE );
+	ret = whclob_import( dest, fh, whclob_importer_FILE );
 	fclose( fh );
 	return ret;
 }
