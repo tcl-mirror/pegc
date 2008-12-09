@@ -42,6 +42,7 @@ whclob * c;
 whclob_init( &c, 0, 0 );
 whclob_appendf( c, "Hello, %s!", "world");
 ...
+printf("%s\n",whclob_bufferc(c));
 whclob_finalize( c );
 @endcode
 
@@ -53,7 +54,7 @@ But doing so with binary data is not recommended.
 
 Some example uses for clobs are:
 
-- Copying strings.
+- Creating and copying strings.
 - Buffering input or output.
 - Easily reading a whole file (or other input source) into memory.
 
@@ -61,6 +62,10 @@ Some example uses for clobs are:
 
 - The read/write API is not complete. (Can't quite remember what's
 missing, though.)
+
+- We really need to move from using 'long' to 'size_t' in many places.
+In some places that's not practical because we need to have room for
+negative error codes.
 
 ************************************************************************/
 
@@ -74,6 +79,9 @@ missing, though.)
 #if !defined(WHCLOB_USE_FILE)
 #define WHCLOB_USE_FILE 1
 #endif
+#if WHCLOB_USE_FILE
+#include <stdio.h>
+#endif
 
 /** @def WHCLOB_USE_ZLIB
 
@@ -86,9 +94,16 @@ missing, though.)
 #define WHCLOB_USE_ZLIB 0
 #endif
 
-#if WHCLOB_USE_FILE
-#include <stdio.h>
+/** @def WHCLOB_USE_BASE64
+
+    If whclob is built with WHCLOB_USE_BASE64 set to a true value then
+    an import/export API is included for importing/export whclob
+    objects from/to FILE handles.
+*/
+#if !defined(WHCLOB_USE_BASE64)
+#define WHCLOB_USE_BASE64 0
 #endif
+
 
 
 #ifdef __cplusplus
@@ -618,18 +633,34 @@ long whclob_write( whclob * cb, char const * data, long dsize );
 long whclob_null_terminate( whclob * cb );
 
 /**
-   If whclob_size(cb) "used space" is currently less than pos then this
-   function does nothing, otherwise cb is truncated to that length.
+   "Chops" cb off at a given length. If the current used space is
+   smaller than pos then it will be padded with NULLs to make it fit.
+   It is is longer than pos then the clob will be reallocated (if
+   necessary) to fit the new space and any old data which is now
+   outside the used range will be zeroed out (this is necessary for
+   sane behaviour in some use cases). In any case, on success the new
+   position of the clob will be the given position.
 
    If allocPolicy is 0 then the amount of memory allocated by cb is
-   not adjusted. If it is >0, whclob_reserve() will be called to try to
-   shrink the allocated buffer (but this does not guaranty that the
-   allocated memory will actually be reduced). If (allocPolicy<0) then
-   a simple heuristic is used to determine if a reallocation might
-   release a useful amount of memory.
+   not adjusted (unless (pos>whclob_size(cb)), in which case we have
+   to expand the clob). If it is >0, whclob_reserve() will be called
+   to try to reserve at least pos bytes. If (allocPolicy<0) then the
+   allocated memory is shrunk to fit (if possible). If pos is past the
+   current end-of-data position then allocPolicy is forced to 1 so
+   that the buffer can be expanded (if needed).
 
-   Returns whclob_rc.OK on success or another value from whclob_rc
-   on error.
+   Returns whclob_rc.OK or a positive value on success or a negative
+   value from whclob_rc on error.
+
+   The two most common uses for this function:
+
+   - "Shrink-wrapping" the value (eliminating extra allocated space)
+
+   - Re-using a clob's buffer as a target for, e.g. fread(), by
+   reserving a certain amount of space then truncating it at position
+   0 but with an allocPolicy of >=0. This can save on allocations compared
+   to using, e.g. whclob_reset().
+
 */
 long whclob_truncate( whclob * cb, long pos, int allocPolicy );
 
@@ -918,6 +949,30 @@ int whclob_deflate( whclob *cIn, whclob *cOut );
 */
 int whclob_inflate( whclob *cIn, whclob *cOut );
 #endif /* WHCLOB_USE_ZLIB */
+
+#if WHCLOB_USE_BASE64
+/**
+   Encodes cIn's contents in base64 and sends it to cOut.
+   cIn may be the same as cOut. If cOut is not cIn then
+   it is cleared before encoding begins. On success, cOut is populated with
+   the encoded data and whclob_rc.OK is returned. On error:
+
+   - If (!cIn, !cOut, or !whclob_size(cIn)) then whclob_rc.ArgError
+   is returned and cOut is unmodified.
+
+   - On any other error, if (cIn!=cOut) then cOut will contain no
+   data, otherwise cIn/cOut will be unmodified. In these cases some
+   other error code from whclob_rc will be returned.
+*/
+long whclob_base64_enc( whclob const *cIn, whclob *cOut );
+
+/**
+   The converse of whclob_base64_enc(), with the same
+   conventions.
+*/
+long whclob_base64_dec( whclob const *cIn, whclob *cOut );
+#endif /* WHCLOB_USE_BASE64 */
+
 
 #ifdef __cplusplus
 } /* extern "C" */

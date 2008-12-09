@@ -123,7 +123,7 @@ void whclob_dump( whclob * cb, int doString )
 	    whclob_appendf( dest, "=[NULL]", cb );
 	}
     }
-    fappendf( stdout, "%s\n", whclob_buffer( dest ) );
+    fappendf( stderr, "%s\n", whclob_buffer( dest ) );
     whclob_finalize( dest );
 }
 
@@ -166,7 +166,7 @@ static long whclob_do_resize( whclob * cb,
 			      unsigned int sz,
 			      short usePolicyHint)
 {
-    static const int fudge = 1;
+    static const int fudge = 2;
     char const * zOld = 0;
     long oldUsed = 0;
     long oldAlloc = 0;
@@ -255,7 +255,7 @@ char const * whclob_bufferc( whclob const * cb ) { return cb ? cb->aData : 0; }
 long whclob_resize( whclob * cb, unsigned int sz )
 {
     unsigned long ret = whclob_do_resize( cb, sz, 1 );
-    if( ret >= sz )
+    if( sz && (ret >= sz) )
     {
 	cb->nUsed = sz;
 	cb->aData[sz] = 0;
@@ -315,7 +315,9 @@ long whclob_init( whclob ** cb, char const * data, long n )
 	if( !n ) return whclob_rc.OK;
     }
     if( data && (n < 0) ) n = strlen( data );
+#if 1
     rc = whclob_reserve( *cb, n );
+    //rc = whclob_resize( *cb, n );
     if( rc < whclob_rc.OK )
     {
 	free( *cb );
@@ -326,6 +328,15 @@ long whclob_init( whclob ** cb, char const * data, long n )
     {
 	memcpy( (*cb)->aData, data, n );
     }
+#else
+    rc = whclob_append( *cb, data, n );
+    if( rc < whclob_rc.OK )
+    {
+	free( *cb );
+	*cb = 0;
+	return rc;
+    }
+#endif
     return whclob_rc.OK;
 }
 
@@ -453,7 +464,11 @@ long whclob_write( whclob * cb, char const * data, long dsize )
 long whclob_append( whclob * cb, char const * data, long dsize )
 {
 	long old = cb->nUsed;
-	cb->nUsed += whclob_writeat( cb, cb->nUsed, data, dsize );
+	long rc = whclob_writeat( cb, cb->nUsed, data, dsize );
+	if( rc < whclob_rc.OK ) return rc;
+	cb->nUsed += rc;
+	//cb->aData[cb->nUsed] = 0;
+	whclob_null_terminate(cb);
 	return cb->nUsed - old;
 }
 
@@ -465,6 +480,8 @@ long whclob_append_char_n( whclob * cb, char c, long n )
     if( rc < 0 ) return rc;
     memset( cb->aData + cb->nUsed, c, n );
     cb->nUsed += n;
+    /* do we want to do a whclob_null_terminate() here? */
+    /* whclob_null_terminate(cb); */
     return n;
 }
 
@@ -526,39 +543,49 @@ long whclob_truncate( whclob * cb, long pos, int memPolicy )
     long rc = 0;
     if( ! cb ) return whclob_rc.UnexpectedNull;
     /* if( cb->nUsed <= pos ) return whclob_rc.OK; */
-    if( cb->nAlloc <= pos ) return whclob_rc.OK;
-    cb->nUsed = pos;
-	rc = whclob_rc.OK;
-	if( memPolicy > 0 )
+
+    if( pos < cb->nAlloc )
+    { /* adding a single \0 to the data isn't sufficient here. */
+	memset( cb->aData + pos, 0, (cb->nAlloc-pos));
+    }
+
+    if( cb->nAlloc <= pos )
+    {
+	//return whclob_rc.OK;
+	memPolicy = 1;
+    }
+    rc = whclob_rc.OK;
+    if( memPolicy > 0 )
+    {
+	rc = whclob_reserve( cb, pos );
+    }
+    else if( memPolicy < 0 )
+    {
+#if 0
+	/* try a simple heuristic to calculate whether a
+	   realloc is worth it... */
+	const long diff = (cb->nAlloc - pos);
+	const int rel = 4; /* ((diff) >= (cb->nAlloc/rel)) = do realloc */
+	const int abs = 512; /* (diff >= abs) = do realloc */
+	if(
+	   ( diff >= abs )
+	   ||
+	   ((diff) >= (cb->nAlloc/rel) )
+	   )
 	{
-		rc = whclob_reserve( cb, cb->nUsed );
+	    /* rc = whclob_resize( cb, cb->nUsed ); */
+	    rc = whclob_do_resize( cb, pos, 0 );
 	}
-	else if( memPolicy < 0 )
-	{
-#if 1
-		/* try a simple heuristic to calculate whether a
-		   realloc is worth it... */
-		const long diff = (cb->nAlloc - pos);
-		const int rel = 4; /* ((diff) >= (cb->nAlloc/rel)) = do realloc */
-		const int abs = 512; /* (diff >= abs) = do realloc */
-		if(
-		   ( diff >= abs )
-		   ||
-		   ((diff) >= (cb->nAlloc/rel) )
-		   )
-		{
-		    /* rc = whclob_resize( cb, cb->nUsed ); */
-		    rc = whclob_do_resize( cb, cb->nUsed, 0 );
-		}
 #else
-		MARKER("TRUNCATE alloc=%ld len=%ld\n", cb->nAlloc, cb->nUsed );
-		rc = whclob_resize( cb, cb->nUsed );
-		/* rc = whclob_do_resize( cb, cb->nUsed, 0 ); */
-		MARKER("TRUNCATED: alloc=%ld len=%ld, rc=%ld\n", cb->nAlloc, cb->nUsed, rc );
+	//MARKER("TRUNCATE alloc=%ld len=%ld\n", cb->nAlloc, cb->nUsed );
+	rc = whclob_resize( cb, pos );
+	/* rc = whclob_do_resize( cb, cb->nUsed, 0 ); */
+	//MARKER("TRUNCATED: alloc=%ld len=%ld, rc=%ld\n", cb->nAlloc, cb->nUsed, rc );
 #endif
-	}
-	whclob_null_terminate( cb );
-	return rc;
+    }
+    cb->nUsed = pos;
+    //whclob_null_terminate( cb );
+    return rc;
 }
 
 
@@ -1143,14 +1170,20 @@ long whclob_importer_FILE( whclob * dest, void * arg )
 
 long whclob_importer_filename( whclob * dest, void * arg )
 {
-	char const * fname = (char *)arg;
+	char const * fname = (char const *)arg;
 	FILE * fh = 0;
 	long ret = 0;
 	if( ! fname ) return whclob_rc.ArgError;
 	fh = fopen( fname, "rb" );
-	if( !fh ) return whclob_rc.IOError;
-	ret = whclob_import( dest, fh, whclob_importer_FILE );
-	fclose( fh );
+	if( !fh )
+	{
+	    ret = whclob_rc.IOError;
+	}
+	else
+	{
+	    ret = whclob_import( dest, fh, whclob_importer_FILE );
+	    fclose( fh );
+	}
 	return ret;
 }
 
@@ -1166,5 +1199,58 @@ long whclob_import_filename( whclob * dest, char const * fn )
 }
 #endif /* WHCLOB_USE_FILE */
 
-#undef WHCLOB_USE_ZLIB
+#if WHCLOB_USE_BASE64
+#include "s11n.net/c11n/detail/b64/cencode.h"
+#include "s11n.net/c11n/detail/b64/cdecode.h"
+long whclob_base64_enc( whclob const *cIn, whclob *cOut )
+{
+    unsigned int szIn = whclob_size(cIn);
+    unsigned int szOut = (unsigned int) ((szIn+1) * 1.4);
+    long rc = 0;
+    whclob * tmp = 0;
+    if( ! cIn || !cOut || !szIn ) return whclob_rc.ArgError;
+    if( szOut < (szIn-5) ) szOut = szIn + 5;
+    if( cOut != cIn ) whclob_reset( cOut );
+    rc = whclob_init( &tmp, 0, szOut );
+    if( whclob_rc.OK != rc )
+    {
+	return rc;
+    }
+    base64_encodestate state;
+    base64_init_encodestate( &state );
+    char * outBuf = whclob_buffer(tmp);
+    rc = base64_encode_block( whclob_bufferc(cIn), whclob_size(cIn), outBuf, &state );
+    //MARKER("enc inSize=%ld, rc=%ld\n",whclob_size(cIn), rc);
+    rc += base64_encode_blockend( outBuf+rc, &state);
+    //MARKER("enc rc=%ld\n",rc);
+    whclob_resize( tmp, rc );
+    whclob_swap( cOut, tmp );
+    whclob_finalize( tmp );
+    return whclob_rc.OK;
+}
+
+long whclob_base64_dec( whclob const *cIn, whclob *cOut )
+{
+    unsigned int szIn = whclob_size(cIn);
+    unsigned int szOut = szIn;
+    long rc = 0;
+    whclob * tmp = 0;
+    if( ! cIn || !cOut || !szIn ) return whclob_rc.ArgError;
+    if( cOut != cIn ) whclob_reset( cOut );
+    rc = whclob_init( &tmp, 0, szOut );
+    if( whclob_rc.OK != rc )
+    {
+	return rc;
+    }
+    base64_decodestate state;
+    base64_init_decodestate( &state );
+    rc = base64_decode_block( whclob_bufferc(cIn), whclob_size(cIn), whclob_buffer(tmp), &state );
+    whclob_resize( tmp, rc );
+    //MARKER("dec inSize=%ld, outSize=%ld, rc=%ld\n",whclob_size(cIn), whclob_size(tmp), rc);
+    whclob_swap( cOut, tmp );
+    whclob_finalize( tmp );
+    return whclob_rc.OK;
+}
+#endif /* WHCLOB_USE_BASE64 */
+
 #undef WHCLOB_DEBUG
