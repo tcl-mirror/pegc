@@ -198,13 +198,13 @@ function overloading, we have to add suffixes to functions which have
 the same functionality but take different argument types. The
 conventions are:
 
-	- _a = the argument is a pointer to a null-terminated list. e.g. pegc_r_list_a()
+	- _a = the argument is a pointer to a null-terminated array. e.g. pegc_r_list_a()
 	- _p = the argument is a non-null pointer. e.g. pegc_copy_r_p()
 	- _v = the argument is a va_list. e.g. pegc_set_error_v()
-	- _e = the argument is an elipse list. e.g. pegc_set_error_v()
+	- _e = the argument is an elipse list. e.g. pegc_set_error_e()
 	- _vv = the argument is a va_list containing full-fledged VALUES of
 	the type documented for the function. e.g. pegc_r_list_vv().
-	- _vp = the argument is a va_list containing POINTERS to object of
+	- _vp = the argument is a va_list containing POINTERS to objects of
 	the type documented for the function. e.g. pegc_r_list_vp()
 	- _ev = as _vv but an elipse list instead of a va_list. e.g. pegc_r_or_ev().
 	- _ep = as _vp but an elipse list instead of a va_list. e.g. pegc_r_and_ep().
@@ -366,7 +366,7 @@ extern "C" {
        Example:
 
        \code
-       pegc_parser * p = pegc_create_parser( &p, "...", -1 );
+       pegc_parser * p = pegc_create_parser( "...", -1 );
        if( ! p ) { ... error... }
        ...
        pegc_destroy_parser(p);
@@ -404,10 +404,6 @@ extern "C" {
 
        If (!st) then false is returned. null input is legal (but not
        parseable).
-
-       When re-mapping a parser to a different input source than
-       previously used, be sure to call pegc_set_error_e() to clear the
-       error state, or most parse operations will fail.
     */
     bool pegc_set_input( pegc_parser * st, pegc_const_iterator begin, long length );
 
@@ -432,7 +428,6 @@ extern "C" {
        Returns the length of c, stopping when a literal null or a null
        character, or n characters have been traversed. A value of 0 for n
        means "unlimited" (i.e. only stop at a null).
-
     */
     size_t pegc_strnlen( size_t n, pegc_const_iterator c );
 
@@ -505,8 +500,7 @@ extern "C" {
 
     /**
        Gets the current error string (which may be 0), line, and
-       column. The string is owned by the parser and will be invalided
-       the next time pegc_set_error_e() is called.
+       column.
 
        Any of the integer pointers may be 0.
 
@@ -528,9 +522,6 @@ extern "C" {
        Copies the given null-terminated string as the current error
        message for the parser. Also sets the line/column position.
        The error can be fetched with pegc_get_error().
-
-       The clientNumber parameter is a client-determined number which
-       is not used by this library but is returned by pegc_get_error().
 
        If msg if NULL then the error state is cleared.
 
@@ -653,7 +644,7 @@ extern "C" {
        is no match or there is a length-zero match. The caller is
        responsible for deallocating the returned string using free().
     */
-    char * pegc_cursor_tostring( pegc_cursor const curs );
+    pegc_iterator pegc_cursor_tostring( pegc_cursor const curs );
 
 
     /**
@@ -731,20 +722,21 @@ extern "C" {
     struct PegcRule;
     /*! @typedef bool (*PegcRule_mf) ( struct PegcRule const * self, pegc_parser * state )
 
-       A typedef for "member functions" of PegcRule objects.
+       A typedef for "member functions" of PegcRule objects. These represent
+       the implementations of parsing rules.
 
        Conventions:
 
        If the rule can match then true is returned and st is advanced
-       to one place after the last consumed token.  It is legal to not
-       consume even on a match, but this is best reserved for certain
-       cases, and it should be well documented in the API docs.
+       to one place after the last consumed token.
 
        If the rule cannot match it must not consume input. That is, if
        it doesn't match then it must ensure that pegc_pos(st) returns
        the same value after this call as it does before this call. It
        should use pegc_set_pos() to force the position back to the
-       pre-call starting point if needed.
+       pre-call starting point if needed. It is legal to not consume
+       even on a match, but this is best reserved for certain cases
+       and it must be well documented in the API docs.
 
        The self pointer is the "this" object - the object context in
        which this function is called. Implementations may (and
@@ -757,8 +749,11 @@ extern "C" {
 
     /**
        PegcRule objects hold data used for implement parsing rules.
+       These are the core objects for implementing grammars. Each Rule
+       can be as "small" or as "big" as necessary, and rules can be
+       combined to form grammars of arbitrary complexity.
 
-       Each object holds an PegcRule_mf "member function" and a void
+       Each object holds a PegcRule_mf "member function" and a void
        data pointer. The data pointer holds information used by the
        member function. Some rules hold a (char const *) here and
        match against a string or the characters in the string.
@@ -779,7 +774,7 @@ extern "C" {
        might be tempting to use a rule's address as the key, this is
        only useful if the rule is created on the heap (and then
        (rule->data=rule) should be set so that copies of the object
-       get the same key address.
+       get the same key address).
 
 
        PegcRules must comply with a few guidelines if they want to
@@ -800,7 +795,7 @@ extern "C" {
        outlives all copies of the rule. Again, see the code for some
        of the core rules, and this will become clear.
 
-       - Rules should considered const after creation. Ideally they
+       - Rules should be considered const after creation. Ideally they
        are only configurable via factory functions (e.g. the
        pegc_r_xxx() functions). Once the factory is done configuring
        them, clients must not change any state in the rule (with the
@@ -815,9 +810,10 @@ extern "C" {
     struct PegcRule
     {
 	/**
-	   This object's rule function. An object with a rule of 0
-	   is said to be "invalid" (several API routines use this
-	   term).
+	   This object's rule function. An object with a rule of 0 is
+	   said to be "invalid" (several API routines use this
+	   term). All invalid rules are considered equal for
+	   comparison purposes.
 	*/
 	PegcRule_mf rule;
 
@@ -874,14 +870,13 @@ extern "C" {
      /* client */ { 0/* flags */,0 /* data */},	\
      N					\
 }
+/** See PEGCRULE_INIT3(). */
 #define PEGCRULE_INIT2(RF,D) PEGCRULE_INIT3(RF,D,# RF)
-    /**
-       A rule using RF as its rule function.
-     */
+/** See PEGCRULE_INIT3(). */
 #define PEGCRULE_INIT1(RF) PEGCRULE_INIT2(RF,0)
-    /**
-       An invalid rule.
-     */
+/**
+   Initializer for an empty/invalid rule.
+*/
 #define PEGCRULE_INIT PEGCRULE_INIT3(0,0,"invalid")
 
     /**
@@ -890,7 +885,6 @@ extern "C" {
        copy this over the object. It is an invalid rule.
     */
     extern const PegcRule PegcRule_init;
-
 
     /**
        Always returns false and does nothing.
@@ -1070,7 +1064,8 @@ extern "C" {
 
     /**
        Creates a rule which will match the given string. The string
-       must outlive the rule, as it is not copied.
+       must outlive the rule, as it is not copied. If caseSensitive is
+       false then a case-insensitive check is done.
     */
     PegcRule pegc_r_string( pegc_const_iterator input, bool caseSensitive );
 
@@ -1145,13 +1140,13 @@ extern "C" {
     */
     PegcRule pegc_r_char_spec( pegc_parser * st, char const * spec );
 
-
     /**
        Creates a rule which matches if proxy matches, but does not
        consume. proxy must not be 0 and must outlive the returned
        object.
     */
     PegcRule pegc_r_at_p( PegcRule const * proxy );
+
     /**
        Functionally equivalent to pegc_r_at_p() except that it must
        allocate a (shallow) copy of the proxy rule.
@@ -1164,6 +1159,7 @@ extern "C" {
        consumes.
     */
     PegcRule pegc_r_notat_p( PegcRule const * proxy );
+
     /**
        Functionally equivalent to pegc_r_noat_p() except that it must
        allocate a (shallow) copy of the proxy rule.
@@ -1188,22 +1184,16 @@ extern "C" {
      */
     PegcRule pegc_r_until_v( pegc_parser * st, PegcRule const proxy );
 
-
     /**
        Creates a rule which performs either an OR operation (if orOp
        is true) or an AND operation (if orOp is false) on the given
        list of rules. The list MUST be terminated with either NULL, or
-       an entry where entry->rule is 0 (i.e. an invalid rule), or
+       an entry where entry->rule is 0 (i.e. an invalid rule) or
        results are undefined (almost certainly an overflow).
 
        All rules in li must outlive the returned object.
-       (BUG: all rules in li are currently copied (shallowly) instead
-       of pointed to.)
 
-       This routine allocates resources for the returned rule which
-       belong to this API and are freed when st is destroyed.
-
-       If st or li are null then an invalid rule is returned.
+       If li is null then an invalid rule is returned.
 
        The null-termination approach was chosen over the client
        explicitly providing the length of the list because when
@@ -1213,9 +1203,6 @@ extern "C" {
        once). Alternately, you can use an invalid rule to mark the
        end of the list.
 
-       The objects pointed to in the list must outlive the rule,
-       though the implementation currently copies them (that's a bug).
-
        Pneumonic: the 'a' suffix refers to the 'a'rray parameter.
 
        Of the various pegc_r_list_X() implementations, this one is
@@ -1223,7 +1210,7 @@ extern "C" {
        extra allocations, and call this routine).
     */
     PegcRule pegc_r_list_a( bool orOp, PegcRule const * li );
-    //PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
+    //older impl: PegcRule pegc_r_list_a( pegc_parser * st, bool orOp, PegcRule const * li );
 
     /**
        Works like pegc_r_list_a() but requires a NULL-terminated list of
@@ -1248,6 +1235,7 @@ extern "C" {
        Pneumonic: the 'v' suffix refers to the 'v'a_list parameters.
     */
     PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap );
+
     /**
        Works like pegc_r_list_a(), but requires a list of PegcRule
 	objects (NOT pointers) which is termined by an invalid
@@ -1270,6 +1258,7 @@ extern "C" {
        Convenience form of pegc_r_list_ep( st, true, ... );
     */
     PegcRule pegc_r_or_ep( pegc_parser * st, ... );
+
     /**
        Convenience form of pegc_r_list_ev(st,true,...).
     */
@@ -1279,14 +1268,18 @@ extern "C" {
        Convenience form of pegc_r_list_ep(st,false,...);
     */
     PegcRule pegc_r_and_ep( pegc_parser * st, ... );
+
     /**
        Convenience form of pegc_r_list_ev(st,false,...).
     */
     PegcRule pegc_r_and_ev( pegc_parser * st, ... );
+
     /**
        A callback type for semantic actions - functions which are
-       called when their proxy rule matches. "Immediate" actions, created with pegc_r_action_i(), are triggered
-       as soon as a match is found.
+       called when their proxy rule matches.
+
+       "Immediate" actions, created with pegc_r_action_i(), are
+       triggered as soon as a match is found.
 
        "Delayed" rules, generated with pegc_r_action_d(), are queued
        on every match and executed with pegc_trigger_actions() (presumably
@@ -1313,7 +1306,7 @@ extern "C" {
        pegc_r_action_d() or pegc_r_action_i().
 
        If an action returns false then the effect is the same as a rule
-       returning false
+       returning false.
 
        Actions can act on client-side data in two ways:
 
@@ -1324,13 +1317,25 @@ extern "C" {
        - By calling pegc_set_client_data() and accessing it from the
        action. If all actions access the same shared state, this is
        the simplest approach.
+
+       If you need to pass const clientData, don't cast away the const, but
+       use a wrapper instead. For example:
+
+       @code
+       typedef struct mydata { char const * string; } mydata;
+       ...
+       mydata m;
+       m.string = "...";
+       @endcode
+
+       Then pass (&m) to the action.
     */
     typedef bool (*pegc_action_f)( pegc_parser * st,
 				   pegc_cursor const *match,
 				   void * clientData );
 
     /*
-      Creates rule which, when it matches, triggers an action
+      Creates a rule which, when it matches, triggers an action
       immediately. If rule matches then onMatch(st,clientData) is
       called. onMatch can fetch the matched string using
       the pegc_cursor argument to the callback or via
@@ -1391,7 +1396,7 @@ extern "C" {
 			       void * clientData );
     
     /**
-       Causes queued actions to be activated, in the order they were
+       Causes queued actions to be activated in the order they were
        queued. This function returns true if there are no queued
        actions or if all queued actions return true. If an action
        returns false then this function stops processing actions and
@@ -1417,10 +1422,12 @@ extern "C" {
        is cleared, even if processing stops due to a failed action.
     */
     bool PegcRule_mf_flush_actions( PegcRule const * self, pegc_parser * st );
+
     /**
-       A rule for PegcRule_mf_flush_actions().
+       Returns a Rule object wrapping PegcRule_mf_flush_actions().
     */
     extern const PegcRule PegcRule_flush_actions;
+
     /**
        Returns PegcRule_flush_actions.
     */
@@ -1442,8 +1449,8 @@ extern "C" {
        be valid so that we can allocate the resources needed for the
        rule mapping.
 
-       On error ((max<min), st or rule are null, or eof), an invalid
-       rule is returned.
+       On error ((max<min), st or rule are null), an invalid rule is
+       returned.
     */
     PegcRule pegc_r_repeat( pegc_parser * st,
 			    PegcRule const * rule,
@@ -1457,7 +1464,7 @@ extern "C" {
 
        This is normally used to match leading or trailing spaces.
 
-       Either or both of leftRule and rightRule to be 0, but both st
+       Either or both of leftRule and rightRule may be 0, but both st
        and mainRule must be valid.  As a special case, if both
        leftRule and leftRule are 0 then the returned rule is a bitwise
        copy of mainRule and no extra resources need to be allocated.
@@ -1495,6 +1502,10 @@ extern "C" {
 			   PegcRule const * mainRule,
 			   PegcRule const * rightRule,
 			   bool discardLeftRight);
+    /**
+       Equivalent to pegc_r_pad_p() but takes rule objects instead of
+       pointers.
+    */
     PegcRule pegc_r_pad_v( pegc_parser * st,
 			   PegcRule const leftRule,
 			   PegcRule const mainRule,
@@ -1614,7 +1625,7 @@ extern "C" {
        This rule requires a "relatively" large amount of dynamic
        resources (for several sub-rules), but they are not allocated
        until the parsing starts, and it caches the rules on a
-       per-parser basis. This subsequent calls with the same parser
+       per-parser basis. Thus subsequent calls with the same parser
        argument re-use the same object.
     */
     bool PegcRule_mf_int_dec_strict( PegcRule const * self, pegc_parser * st );
@@ -1711,8 +1722,8 @@ extern "C" {
     /**
        Creates a rule which always returns false, never consumes, and
        sets the parser error string to the printf-style formated
-       string. In contrast to pegc_r_error(), the string is copied
-       when the rule is created.
+       string. In contrast to pegc_r_error(), the string must be
+       copied when the rule is created.
     */
     PegcRule pegc_r_error_v( pegc_parser * st, char const * fmt, va_list );
 
@@ -1757,7 +1768,8 @@ extern "C" {
     /**
        Allocates a new printf-style string on the heap. If st is not
        null then the string is owned by st, otherwise the caller owns
-       it. Returns 0 if fmt is 0 or the result string is 0 bytes.
+       it and must free it using free(). Returns 0 if fmt is 0 or the
+       result string is 0 bytes.
     */
     char * pegc_vmprintf( pegc_parser * st, char const * fmt, va_list args );
 
@@ -1875,7 +1887,7 @@ extern "C" {
 
        a) When this rule successfully matches, any previous match is
        free()d and replaced with a new string. A failed attempt to
-       match match will not clear the previous successful match.
+       match will not clear the previous successful match.
 
        b) When pegc_destroy_parser() is called, all underlying
        metadata is freed (which includes the previous match string).

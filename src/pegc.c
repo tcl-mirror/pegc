@@ -24,7 +24,6 @@ extern "C" {
 #include "whgc.h"
 
 
-
 const pegc_cursor pegc_cursor_init = PEGC_CURSOR_INIT;
 const PegcRule PegcRule_init = PEGCRULE_INIT;
 const PegcRule PegcRule_invalid = PEGCRULE_INIT;
@@ -57,6 +56,9 @@ struct pegc_match_listener_data
     struct pegc_match_listener_data * next;
 };
 typedef struct pegc_match_listener_data pegc_match_listener_data;
+/**
+   Empty initializer for pegc_match_listener_data.
+*/
 const static pegc_match_listener_data pegc_match_listener_data_init = {0,0,0};
 
 
@@ -581,7 +583,7 @@ pegc_cursor pegc_cursor_trimmed( pegc_cursor const cur )
     return r;
 }
 
-char * pegc_cursor_tostring( pegc_cursor const cur )
+pegc_iterator pegc_cursor_tostring( pegc_cursor const cur )
 {
     if( !cur.begin
 	||!*(cur.begin)
