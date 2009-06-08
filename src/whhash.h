@@ -22,7 +22,7 @@ extern "C" {
    The hashtables described here map (void*) to (void*) by using a
    client-supplied hash algorithm on the key pointers. The hashtable
    can optionally take over ownership of its keys or values, via
-   whhash_set_key_dtor() and whhash_set_key_dtor(). The ownership
+   whhash_set_key_dtor() and whhash_set_val_dtor(). The ownership
    management option makes this type useful as a simple garbage
    collector.
 
@@ -296,6 +296,9 @@ int fnname (whhash_table *h, keytype *k, valuetype *v) \
   whhash_search() searches for the given key and returns the
   associated value (if found) or 0 (if not found). Ownership of the
   returned value is unchanged.
+
+   Maintainer's note: the h parameter should be const, but its not
+   for internal reasons.
  */
 void *
 whhash_search(whhash_table *h, void const * k);
@@ -406,7 +409,7 @@ int whhash_cmp_long( void const * k1, void const * k2 );
 /**
    An int/long hashing function for use with whhash_create().  It
    requires that n point to a long integer, and it simply returns the
-   value of n, or whhash_hash_val_err on error (n is NULL).
+   value of *n, or whhash_hash_val_err on error (n is NULL).
  */
 whhash_val_t whhash_hash_long( void const * n );
 
