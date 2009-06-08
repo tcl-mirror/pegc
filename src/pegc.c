@@ -1282,7 +1282,7 @@ PegcRule pegc_r_list_vp( pegc_parser * st, bool orOp, va_list ap )
       simplifies those implementations.
     */
     if( !st ) return PegcRule_invalid;
-    const size_t blockSize = 3; /* number of rules to allocate at a time. */
+    enum { blockSize = 5 }; /* number of rules to allocate at a time. */
     int count = 1;
     PegcRule * li = 0;
     int pos = 0;
