@@ -259,7 +259,7 @@ bool pegc_gc_register( pegc_parser * st,
     {
         st->gc = whgc_create_context(st);
 	if( ! st->gc ) return false;
-	whgc_add_listener( st->gc, pegc_gc_test_listener );
+	//whgc_add_listener( st->gc, pegc_gc_test_listener );
     }
     if( ! whgc_register( st->gc, key, keyDtor, value, valDtor ) )
     {
