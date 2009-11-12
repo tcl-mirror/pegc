@@ -1,10 +1,54 @@
-/* Copyright (C) 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
-/* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
-/**
-   License: as of 2009, this code is Public Domain in jurisdictions which
-   recognize Public Domain, and New BSD in all other jurisdictions.
-*/
-#include "whhash.h"
+/* Copyright (C) 2002, 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
+/* Copyright (C) 2008, 2009 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
+ /*
+   On 17 June 2009, i (Stephan Beal) got permission from the original author
+   (Christopher Clark) to dual-license this code under the following terms:
+
+   - If the code is used in a jurisdiction where Public Domain
+   property is regonized, then this code may be considered to be
+   in the Public Domain. Its author expressly disclaims copyright
+   in jurisdictions where such a disclaimer is allowed.
+
+   - If the code is used in a jurisdiction which does not recognize
+   Public Domain, the code must be used in terms with the MIT license,
+   as described clearly and concisely at:
+
+   http://en.wikipedia.org/wiki/MIT_License
+
+   and reproduced in full below.
+
+   - If the code is used in a jurisdiction which recognizes Public
+   Domain, the user may use the code without limits, as for Public
+   Domain property, or may instead opt to use the code under the terms
+   of the MIT license.
+
+   The MIT licensing terms follow:
+   ========================================================================
+   Copyright (C) 2002, 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk>
+   Copyright (c) 2008, 2009 Stephan Beal (http://wanderinghorse.net/home/stephan/)
+
+   Permission is hereby granted, free of charge, to any person
+   obtaining a copy of this software and associated documentation
+   files (the "Software"), to deal in the Software without
+   restriction, including without limitation the rights to use, copy,
+   modify, merge, publish, distribute, sublicense, and/or sell copies
+   of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+   ========================================================================
+
+#include "s11n.net/c11n/detail/whhash.h"
 #include <stdlib.h>
 //#include <stdio.h>
 #include <string.h>

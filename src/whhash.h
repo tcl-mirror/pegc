@@ -1,11 +1,61 @@
-/* Copyright (C) 2002 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
-/* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
+/* Copyright (C) 2002, 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
+/* Copyright (C) 2008, 2009 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
 /* Code originally taken from: http://www.cl.cam.ac.uk/~cwc22/hashtable/ */
- /**
-    In 2009 Stephan Beal got permission from Christopher Clark to
-    re-license this code as Public Domain. Thus this code is now
-    Public Domain in jurisdictions which recognize Public Domain, and
-    the New BSD License in all other jurisdictions.
+ /*
+   On 17 June 2009, i (Stephan Beal) got permission from the original author
+   (Christopher Clark) to dual-license this code under the following terms:
+
+   - If the code is used in a jurisdiction where Public Domain
+   property is regonized, then this code may be considered to be
+   in the Public Domain. Its author expressly disclaims copyright
+   in jurisdictions where such a disclaimer is allowed.
+
+   - If the code is used in a jurisdiction which does not recognize
+   Public Domain, the code must be used in terms with the MIT license,
+   as described clearly and concisely at:
+
+   http://en.wikipedia.org/wiki/MIT_License
+
+   and reproduced in full below.
+
+   - If the code is used in a jurisdiction which recognizes Public
+   Domain, the user may use the code without limits, as for Public
+   Domain property, or may instead opt to use the code under the terms
+   of the MIT license.
+
+   The MIT licensing terms follow:
+   ========================================================================
+   Copyright (C) 2002, 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk>
+   Copyright (c) 2008, 2009 Stephan Beal (http://wanderinghorse.net/home/stephan/)
+
+   Permission is hereby granted, free of charge, to any person
+   obtaining a copy of this software and associated documentation
+   files (the "Software"), to deal in the Software without
+   restriction, including without limitation the rights to use, copy,
+   modify, merge, publish, distribute, sublicense, and/or sell copies
+   of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+   ========================================================================
+   (END LICENSE TEXT)
+
+   The MIT license is compatible with both the GPL and commercial
+   software, affording one all of the rights of Public Domain with the
+   minor nuisance of being required to keep the above copyright notice
+   and license text in the source code. Note also that by accepting the
+   Public Domain "license" you can re-license your copy using whatever
+   license you like.
  */
 #ifndef WANDERINGHORSE_NET_WHHASH_H_INCLUDED
 #define WANDERINGHORSE_NET_WHHASH_H_INCLUDED
@@ -21,15 +71,15 @@ extern "C" {
    implementation based on code by Christopher Clark,
    adopted, extended, and changed somewhat by yours truly.
 
-   License: Public Domain in jurisdictions which allow it, otherwise
-   New BSD License.
+   License: Dual: Public Domain in jurisdictions which allow it,
+   or optionally the MIT license.
 
    Maintainer: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
    The hashtables described here map (void*) to (void*) by using a
    client-supplied hash algorithm on the key pointers. The hashtable
    can optionally take over ownership of its keys or values, via
-   whhash_set_key_dtor() and whhash_set_val_dtor(). The ownership
+   whhash_set_key_dtor() and whhash_set_key_dtor(). The ownership
    management option makes this type useful as a simple garbage
    collector.
 
@@ -151,7 +201,7 @@ extern "C" {
     e.g., a hashtable does not own its entries, one needs to make sure
     that if the entry is deleted from somewhere else, that it's
     removed from the hashtable (or ensure that that entry cannot be
-    referenced again, otherwise you'll get a dangling pointer back).
+    references again, otherwise you'll get a dangling pointer back).
 
 
    @section whhash_sec_links Other resources
@@ -303,9 +353,6 @@ int fnname (whhash_table *h, keytype *k, valuetype *v) \
   whhash_search() searches for the given key and returns the
   associated value (if found) or 0 (if not found). Ownership of the
   returned value is unchanged.
-
-   Maintainer's note: the h parameter should be const, but its not
-   for internal reasons.
  */
 void *
 whhash_search(whhash_table *h, void const * k);
@@ -416,7 +463,7 @@ int whhash_cmp_long( void const * k1, void const * k2 );
 /**
    An int/long hashing function for use with whhash_create().  It
    requires that n point to a long integer, and it simply returns the
-   value of *n, or whhash_hash_val_err on error (n is NULL).
+   value of n, or whhash_hash_val_err on error (n is NULL).
  */
 whhash_val_t whhash_hash_long( void const * n );
 
