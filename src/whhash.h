@@ -1,6 +1,12 @@
 /* Copyright (C) 2002 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
 /* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
 /* Code originally taken from: http://www.cl.cam.ac.uk/~cwc22/hashtable/ */
+ /**
+    In 2009 Stephan Beal got permission from Christopher Clark to
+    re-license this code as Public Domain. Thus this code is now
+    Public Domain in jurisdictions which recognize Public Domain, and
+    the New BSD License in all other jurisdictions.
+ */
 #ifndef WANDERINGHORSE_NET_WHHASH_H_INCLUDED
 #define WANDERINGHORSE_NET_WHHASH_H_INCLUDED
 #include <stddef.h> /* size_t */
@@ -15,7 +21,8 @@ extern "C" {
    implementation based on code by Christopher Clark,
    adopted, extended, and changed somewhat by yours truly.
 
-   License: New BSD License
+   License: Public Domain in jurisdictions which allow it, otherwise
+   New BSD License.
 
    Maintainer: Stephan Beal (http://wanderinghorse.net/home/stephan)
 
@@ -144,7 +151,7 @@ extern "C" {
     e.g., a hashtable does not own its entries, one needs to make sure
     that if the entry is deleted from somewhere else, that it's
     removed from the hashtable (or ensure that that entry cannot be
-    references again, otherwise you'll get a dangling pointer back).
+    referenced again, otherwise you'll get a dangling pointer back).
 
 
    @section whhash_sec_links Other resources

@@ -1,6 +1,9 @@
 /* Copyright (C) 2004 Christopher Clark <firstname.lastname@cl.cam.ac.uk> */
 /* Copyright (C) 2008 Stephan Beal (http://wanderinghorse.net/home/stephan/) */
-
+/**
+   License: as of 2009, this code is Public Domain in jurisdictions which
+   recognize Public Domain, and New BSD in all other jurisdictions.
+*/
 #include "whhash.h"
 #include <stdlib.h>
 //#include <stdio.h>
