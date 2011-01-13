@@ -349,7 +349,9 @@ static int et_getdigit(LONGDOUBLE_TYPE *val, int *cnt){
   typedef __int64 int64_t;
   typedef unsigned __int64 uint64_t;
 #else
+#if __WORDSIZE < 64
   typedef long long int int64_t;
+#endif
   typedef unsigned long long int uint64_t;
 #endif
 
