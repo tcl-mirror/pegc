@@ -98,7 +98,8 @@ negative error codes.
 
     If whclob is built with WHCLOB_USE_BASE64 set to a true value then
     an import/export API is included for importing/export whclob
-    objects from/to FILE handles.
+    objects from/to base64 encoding. This required additional 3rd-party code
+    (sold separately).
 */
 #if !defined(WHCLOB_USE_BASE64)
 #define WHCLOB_USE_BASE64 0
@@ -122,6 +123,8 @@ extern "C" {
    unconventional, but the intention is so that debuggers can get an
    actual symbol name. It also provides a namespace for
    our enum-like values.
+
+   TODO: change these codes to int instead of long.
 */
 struct whclob_rc_t
 {
